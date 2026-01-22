@@ -27,7 +27,7 @@ from sekai.lib.events import (
     spawn_fever_start_particle,
 )
 from sekai.lib.options import Options
-from sekai.lib.skin import SkillEffects
+from sekai.lib.skin import ActiveSkin, SkillEffects
 from sekai.lib.streams import Streams
 from sekai.play import initialization
 
@@ -51,7 +51,7 @@ class Skill(PlayArchetype):
     @callback(order=-2)
     def preprocess(self):
         self.start_time = beat_to_time(self.beat)
-        if Options.hide_ui != 3 and Options.skill_effect:
+        if Options.hide_ui != 3 and Options.skill_effect and ActiveSkin.skill_bar_score.is_available:
             Effects.skill.schedule(self.start_time)
         if self.effect == SkillEffects.HEAL:
             add_life_scheduled(250, self.start_time)
