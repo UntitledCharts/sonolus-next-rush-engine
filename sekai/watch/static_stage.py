@@ -33,6 +33,9 @@ class WatchStaticStage(WatchArchetype):
     z_layer_stage_cover: float = entity_memory()
     z_layer_score: float = entity_memory()
     z_layer_score_glow: float = entity_memory()
+    z_layer_score_bar: float = entity_memory()
+    z_layer_score_bar_mask: float = entity_memory()
+    z_layer_score_bar_rate: float = entity_memory()
     z_layer_background: float = entity_memory()
 
     def spawn_time(self) -> float:
@@ -40,6 +43,22 @@ class WatchStaticStage(WatchArchetype):
 
     def despawn_time(self) -> float:
         return 1e8
+
+    def initialize(self):
+        self.z_layer_stage_lane = get_z(LAYER_STAGE_LANE)
+        self.z_layer_cover = get_z(LAYER_COVER)
+        self.z_layer_cover_line = get_z(LAYER_COVER_LINE)
+        self.z_layer_judgment = get_z(LAYER_JUDGMENT)
+        self.z_layer_judgment_line = get_z(LAYER_JUDGMENT_LINE)
+        self.z_layer_background_cover = get_z(LAYER_BACKGROUND_COVER)
+        self.z_layer_stage = get_z(LAYER_STAGE)
+        self.z_layer_stage_cover = get_z(LAYER_STAGE_COVER)
+        self.z_layer_score = get_z(layer=LAYER_JUDGMENT)
+        self.z_layer_score_glow = get_z(layer=LAYER_JUDGMENT, etc=1)
+        self.z_layer_score_bar = get_z(layer=LAYER_JUDGMENT, etc=2)
+        self.z_layer_score_bar_mask = get_z(layer=LAYER_JUDGMENT, etc=3)
+        self.z_layer_score_bar_rate = get_z(layer=LAYER_JUDGMENT, etc=4)
+        self.z_layer_background = get_z(layer=LAYER_BACKGROUND)
 
     @callback(order=-2)
     def update_sequential(self):
@@ -49,9 +68,10 @@ class WatchStaticStage(WatchArchetype):
         )
         if is_skip() and time() < custom_elements.ScoreIndicator.first:
             if Options.custom_score == 2:
-                custom_elements.ScoreIndicator.score = 100
+                custom_elements.ScoreIndicator.percentage = 100
             else:
-                custom_elements.ScoreIndicator.score = 0
+                custom_elements.ScoreIndicator.percentage = 0
+            custom_elements.ScoreIndicator.score = 0
             custom_elements.ScoreIndicator.ap = False
 
     def update_parallel(self):
@@ -66,13 +86,18 @@ class WatchStaticStage(WatchArchetype):
             self.z_layer_background_cover,
             self.z_layer_score,
             self.z_layer_score_glow,
+            self.z_layer_score_bar,
+            self.z_layer_score_bar_mask,
+            self.z_layer_score_bar_rate,
             self.z_layer_background,
             custom_elements.ScoreIndicator.ap,
             custom_elements.ScoreIndicator.score,
+            custom_elements.ScoreIndicator.note_score,
+            custom_elements.ScoreIndicator.note_time,
+            custom_elements.ScoreIndicator.percentage,
             custom_elements.LifeManager.life,
             initialization.LastNote.last_time,
         )
-
 
 class WatchScheduledLaneEffect(WatchArchetype):
     name = archetype_names.SCHEDULED_LANE_EFFECT

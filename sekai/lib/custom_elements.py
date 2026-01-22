@@ -2,7 +2,7 @@ from enum import IntEnum
 from math import cos, floor, pi
 
 from sonolus.script.bucket import Judgment, JudgmentWindow
-from sonolus.script.interval import Interval, unlerp, unlerp_clamped
+from sonolus.script.interval import Interval, clamp, unlerp, unlerp_clamped
 from sonolus.script.record import Record
 from sonolus.script.runtime import aspect_ratio, is_replay, is_watch, runtime_ui, screen, time
 from sonolus.script.vec import Vec2
@@ -503,6 +503,105 @@ def draw_life_number(number: int, z: float):
     drawing_ui.draw_number(z=z)
 
 
+def draw_score_bar_number(number: int, z: float):
+    if Options.hide_ui >= 2:
+        return
+    if not ActiveSkin.ui_number.available:
+        return
+    if not Options.custom_score_bar:
+        return
+
+    ui = runtime_ui()
+
+    if number == 0:
+        digit_count = 1
+    else:
+        digit_count = 0
+        temp_n = number
+        while temp_n > 0:
+            temp_n = temp_n // 10
+            digit_count += 1
+
+    scale_ratio = min(1, aspect_ratio() / (16 / 9))
+    MARGIN = 0.3  # noqa: N806
+    margin_offset = 1.02
+    bar_base_w = 0.27 * 4.6
+    final_scale = ui.primary_metric_config.scale * scale_ratio
+    current_bar_w = bar_base_w * final_scale
+
+    bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
+    number_center_x = bar_center_x - (margin_offset * final_scale)
+
+    screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=0.775)
+
+    h = 0.09141 * ui.primary_metric_config.scale * scale_ratio
+    w = h * 0.705
+
+    digit_gap = w * (-0.04 + Options.combo_distance)
+
+    drawing_ui = UILayout(
+        core=UICoreConfig(number, digit_count, mode=UIMode.SCORE_BAR),
+        common=CommonConfig(
+            center_x=screen_center.x,
+            center_y=screen_center.y,
+        ),
+        layout=UILayoutConfig(width=w, gap=digit_gap, height=h, start_x=screen_center.x, alignment=UIAlignment.LEFT),
+    )
+    drawing_ui.draw_number(z=z)
+
+
+def draw_score_bar_raw_number(number: int, z: float, time: float):
+    if Options.hide_ui >= 2:
+        return
+    if not ActiveSkin.ui_number.available:
+        return
+    if not Options.custom_score_bar:
+        return
+    if time > 1:
+        return
+    if number == 0:
+        return
+
+    ui = runtime_ui()
+
+    if number == 0:
+        digit_count = 1
+    else:
+        digit_count = 0
+        temp_n = number
+        while temp_n > 0:
+            temp_n = temp_n // 10
+            digit_count += 1
+
+    scale_ratio = min(1, aspect_ratio() / (16 / 9))
+    MARGIN = 0.3  # noqa: N806
+    margin_offset = 0.56 + (0.492 - 0.56) * clamp(time / 0.2, 0, 1)
+    bar_base_w = 0.27 * 4.6
+    final_scale = ui.primary_metric_config.scale * scale_ratio
+    current_bar_w = bar_base_w * final_scale
+
+    bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
+    number_center_x = bar_center_x - (margin_offset * final_scale)
+
+    screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=0.763)
+
+    h = 0.06 * ui.primary_metric_config.scale * scale_ratio
+    w = h * 0.705
+
+    digit_gap = w * (-0.04 + Options.combo_distance)
+
+    drawing_ui = UILayout(
+        core=UICoreConfig(number, digit_count, mode=UIMode.SCORE_ADD),
+        common=CommonConfig(
+            center_x=screen_center.x,
+            center_y=screen_center.y,
+        ),
+        layout=UILayoutConfig(width=w, gap=digit_gap, height=h, start_x=screen_center.x, alignment=UIAlignment.LEFT),
+    )
+    a = clamp(time / 0.2, 0, 1)
+    drawing_ui.draw_number(z=z, a=a)
+
+
 class UIMode(IntEnum):
     LIFE = 0
     SCORE_BAR = 1
@@ -542,12 +641,12 @@ class UILayout(Record):
             tr=Vec2(r, t),
         )
 
-    def draw_number(self, z):
+    def draw_number(self, z, a=1):
         s_inv = 0
 
         item_count = self.core.digit_count
         if self.core.mode == UIMode.SCORE_BAR:
-            item_count = 7
+            item_count = 8
         elif self.core.mode == UIMode.SCORE_ADD:
             item_count = self.core.digit_count + 1
 
@@ -566,9 +665,9 @@ class UILayout(Record):
             digit = 0
 
             if self.core.mode == UIMode.SCORE_BAR:
-                power_of_ten = 10 ** (6 - i)
+                power_of_ten = 10 ** (7 - i)
 
-                if self.core.number < power_of_ten and i < 6:
+                if self.core.number < power_of_ten and i < 7:
                     digit = 10  # 'special 0'
                 else:
                     digit = floor(self.core.number / power_of_ten) % 10
@@ -597,4 +696,4 @@ class UILayout(Record):
 
             digit_layout = self.layout_combo_number(l=l, r=r, t=t, b=b)
 
-            ActiveSkin.ui_number.get_sprite(number=digit).draw(quad=digit_layout, z=z, a=1)
+            ActiveSkin.ui_number.get_sprite(number=digit).draw(quad=digit_layout, z=z, a=a)
