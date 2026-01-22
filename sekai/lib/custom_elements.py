@@ -8,6 +8,8 @@ from sonolus.script.runtime import aspect_ratio, is_replay, is_watch, runtime_ui
 from sonolus.script.vec import Vec2
 
 from sekai.lib.layout import (
+    LIFE_BAR_BASE_Y,
+    SCORE_BAR_BASE_Y,
     ComboType,
     Quad,
     layout_combo_label,
@@ -485,7 +487,10 @@ def draw_life_number(number: int, z: float):
     bar_center_x = screen().r - MARGIN - (current_bar_w / 2)
     number_center_x = bar_center_x + (margin_offset * final_scale)
 
-    screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=0.93014)
+    y_offset = 0.04314
+    center_y = LIFE_BAR_BASE_Y + (y_offset * final_scale)
+
+    screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=center_y)
 
     h = 0.06141 * ui.secondary_metric_config.scale * scale_ratio
     w = h * 0.714
@@ -532,7 +537,10 @@ def draw_score_bar_number(number: int, z: float):
     bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
-    screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=0.775)
+    y_offset = -0.09
+    center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
+
+    screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
 
     h = 0.09141 * ui.primary_metric_config.scale * scale_ratio
     w = h * 0.705
@@ -583,7 +591,10 @@ def draw_score_bar_raw_number(number: int, z: float, time: float):
     bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
-    screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=0.763)
+    y_offset = -0.102
+    center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
+
+    screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
 
     h = 0.06 * ui.primary_metric_config.scale * scale_ratio
     w = h * 0.705
