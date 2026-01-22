@@ -33,6 +33,13 @@ from sekai.lib.connector import (
     update_linear_connector_particle,
 )
 from sekai.lib.ease import EaseType, ease
+from sekai.lib.layer import (
+    LAYER_JUDGMENT_LINE,
+    LAYER_STAGE,
+    LAYER_STAGE_COVER,
+    LAYER_STAGE_LANE,
+    get_z,
+)
 from sekai.lib.layout import FlickDirection, transformed_vec_at
 from sekai.lib.note import (
     NoteKind,
@@ -64,7 +71,7 @@ class SlideEffectHandles(Record):
 def update_start():
     PhaseState.slide_is_active = False
     clear_instruction()
-    draw_basic_stage()
+    draw_basic_stage(get_z(LAYER_STAGE_LANE), get_z(LAYER_STAGE_COVER), get_z(LAYER_STAGE), get_z(LAYER_JUDGMENT_LINE))
     reset_zoom()
 
 

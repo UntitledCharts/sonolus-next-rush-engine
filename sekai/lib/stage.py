@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import IntEnum
-from math import ceil, floor
+from math import ceil, cos, floor, pi
 from typing import Protocol, assert_never, cast
 
 from sonolus.script import runtime
@@ -9,10 +9,12 @@ from sonolus.script.archetype import EntityRef, get_archetype_by_name
 from sonolus.script.interval import clamp, lerp
 from sonolus.script.quad import Quad
 from sonolus.script.record import Record
+from sonolus.script.runtime import is_multiplayer, is_play, is_replay, is_watch, time
 from sonolus.script.vec import Vec2
 
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import get_event_as, query_event_list
+from sekai.lib.custom_elements import draw_life_number, draw_score_number
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.effect import SFX_DISTANCE, Effects
 from sekai.lib.layer import LAYER_COVER, LAYER_STAGE, get_z, get_z_alt
@@ -20,10 +22,14 @@ from sekai.lib.layout import (
     DynamicLayout,
     approach,
     current_stage_tilt,
+    layout_background_cover,
+    layout_custom_tag,
     layout_full_width_stage_cover,
     layout_hidden_cover,
     layout_lane,
     layout_lane_by_edges,
+    layout_life_bar,
+    layout_life_gauge,
     layout_sekai_stage,
     layout_stage_cover,
     layout_stage_cover_and_line,
@@ -374,10 +380,36 @@ def get_stage_props(stage: DynamicStageLike, target_time: float | None = None, l
     return result
 
 
-def draw_stage_and_accessories():
+def draw_stage_and_accessories(
+    z_stage_lane,
+    z_stage_cover,
+    z_stage,
+    z_judgment_line,
+    z_cover,
+    z_cover_line,
+    z_judgment,
+    z_background_cover,
+    z_layer_score,
+    z_layer_score_glow,
+    z_layer_background,
+    ap,
+    score,
+    life=1000,
+    last_time=1e8,
+):
     if not LevelConfig.skip_default_stage:
-        draw_basic_stage()
-    draw_stage_cover()
+        draw_basic_stage(z_stage_lane, z_stage_cover, z_stage, z_judgment_line)
+    draw_stage_cover(z_cover, z_cover_line)
+    draw_auto_play(z_judgment)
+    draw_background_cover(z_background_cover)
+    draw_dead(z_layer_background, life)
+    draw_score_number(
+        ap=ap,
+        score=round(score, 4),
+        z1=z_layer_score,
+        z2=z_layer_score_glow,
+    )
+    draw_life_bar(life, z_layer_score, z_layer_score_glow, last_time)
 
 
 def normalize_transition[T](value: Transition[T] | T) -> Transition[T]:
@@ -386,11 +418,17 @@ def normalize_transition[T](value: Transition[T] | T) -> Transition[T]:
     return Transition(start=value, end=value, progress=0)
 
 
-def draw_basic_stage():
+def draw_basic_stage(z_stage_lane, z_stage_cover, z_stage, z_judgment_line):
     if not Options.show_lane:
         return
-    if ActiveSkin.sekai_stage.is_available and not LevelConfig.dynamic_stages:
-        draw_sekai_stage()
+    if (
+        ActiveSkin.sekai_stage_lane.is_available
+        and ActiveSkin.sekai_stage_cover.is_available
+        and not LevelConfig.dynamic_stages
+    ):
+        draw_sekai_divided_stage(z_stage_lane, z_stage_cover)
+    elif ActiveSkin.sekai_stage.is_available and not LevelConfig.dynamic_stages:
+        draw_sekai_stage(z_stage)
     else:
         draw_dynamic_stage(
             lane=0,
@@ -405,9 +443,15 @@ def draw_basic_stage():
         )
 
 
-def draw_sekai_stage():
+def draw_sekai_stage(z_stage):
     layout = layout_sekai_stage()
-    ActiveSkin.sekai_stage.draw(layout, z=get_z(LAYER_STAGE))
+    ActiveSkin.sekai_stage.draw(layout, z=z_stage)
+
+
+def draw_sekai_divided_stage(z_stage_lane, z_stage_cover):
+    layout = layout_sekai_stage()
+    ActiveSkin.sekai_stage_lane.draw(layout, z=z_stage_lane)
+    ActiveSkin.sekai_stage_cover.draw(layout, z=z_stage_cover, a=Options.lane_alpha)
 
 
 def get_judgment_sprites(judge_line_color: JudgeLineColor) -> JudgmentSpriteSet:
@@ -832,26 +876,69 @@ def draw_per_stage_cover(l: float, r: float, a: float, lane_alpha: float, order:
         ActiveSkin.cover.draw(layout, z=z_hidden, a=ca)
 
 
-def draw_stage_cover():
+def draw_stage_cover(z_cover, z_cover_line):
     if Options.stage_cover > 0:
         match Options.stage_cover_mode:
             case StageCoverMode.STAGE:
                 if not LevelConfig.dynamic_stages:
                     layout = layout_stage_cover()
-                    ActiveSkin.cover.draw(layout, z=get_z(LAYER_COVER), a=Options.stage_cover_alpha)
+                    ActiveSkin.cover.draw(layout, z=z_cover, a=Options.stage_cover_alpha)
             case StageCoverMode.STAGE_AND_LINE:
                 if not LevelConfig.dynamic_stages:
                     cover_layout, line_layout = layout_stage_cover_and_line()
-                    ActiveSkin.cover.draw(cover_layout, z=get_z(LAYER_COVER), a=Options.stage_cover_alpha)
-                    ActiveSkin.guide_neutral.draw(line_layout, z=get_z(LAYER_COVER, etc=1), a=0.75)
+                    ActiveSkin.cover.draw(cover_layout, z=z_cover, a=Options.stage_cover_alpha)
+                    ActiveSkin.guide_neutral.draw(line_layout, z=z_cover_line, a=0.75)
             case StageCoverMode.FULL_WIDTH:
                 layout = layout_full_width_stage_cover()
-                ActiveSkin.cover.draw(layout, z=get_z(LAYER_COVER), a=Options.stage_cover_alpha)
+                ActiveSkin.cover.draw(layout, z=z_cover, a=Options.stage_cover_alpha)
             case _:
                 assert_never(Options.stage_cover_mode)
     if Options.hidden > 0 and not LevelConfig.dynamic_stages:
         layout = layout_hidden_cover()
-        ActiveSkin.cover.draw(layout, z=get_z(LAYER_COVER), a=1)
+        ActiveSkin.cover.draw(layout, z=z_cover, a=1)
+
+
+def draw_background_cover(z_background_cover):
+    if Options.background_alpha != 1:
+        layout = layout_background_cover()
+        ActiveSkin.background.draw(layout, z=z_background_cover, a=1 - Options.background_alpha)
+
+
+def draw_dead(z_background, life):
+    if life == 0:
+        layout = layout_background_cover()
+        ActiveSkin.background.draw(layout, z=z_background, a=0.3)
+
+
+def draw_auto_play(z_judgment):
+    if Options.custom_tag and is_watch() and not is_replay() and Options.hide_ui < 2:
+        layout = layout_custom_tag()
+        a = 0.8 * (cos(time() * pi) + 1) / 2
+        ActiveSkin.auto_live.draw(layout, z=z_judgment, a=a)
+
+
+def draw_life_bar(life, z_layer_score, z_layer_score_glow, last_time):
+    if Options.hide_ui >= 2:
+        return
+    if not ActiveSkin.ui_number.available:
+        return
+    if not Options.custom_life_bar:
+        return
+    if not ActiveSkin.life.bar.available:
+        return
+    draw_life_number(
+        life,
+        z_layer_score_glow,
+    )
+    bar_layout = layout_life_bar()
+    if is_multiplayer():
+        ActiveSkin.life.bar.disable.draw(bar_layout, z=z_layer_score)
+    elif last_time < time() and is_play():
+        ActiveSkin.life.bar.skip.draw(bar_layout, z=z_layer_score)
+    else:
+        ActiveSkin.life.bar.pause.draw(bar_layout, z=z_layer_score)
+    gauge_layout = layout_life_gauge(life)
+    ActiveSkin.life.gauge.get_sprite(life).draw(gauge_layout, z_layer_score_glow)
 
 
 def play_lane_hit_effects(lane: float, sfx: bool = True):

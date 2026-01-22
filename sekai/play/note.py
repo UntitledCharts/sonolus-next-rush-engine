@@ -27,7 +27,15 @@ from sekai.lib import archetype_names
 from sekai.lib.buckets import WINDOW_SCALE, SekaiWindow
 from sekai.lib.connector import ActiveConnectorInfo, ConnectorKind, ConnectorLayer
 from sekai.lib.ease import EaseType, ease
-from sekai.lib.layout import DynamicLayout, FlickDirection, Hitbox, Layout, compute_hitbox_at_time, progress_to
+from sekai.lib.layout import (
+    DynamicLayout,
+    FlickDirection,
+    Hitbox,
+    Layout,
+    compute_hitbox_at_time,
+    layout_lane,
+    progress_to,
+)
 from sekai.lib.note import (
     NoteEffectKind,
     NoteKind,
@@ -38,6 +46,7 @@ from sekai.lib.note import (
     get_note_bucket,
     get_note_effect_kind,
     get_note_haptic_feedback,
+    get_note_particles,
     get_note_window,
     get_visual_spawn_time,
     has_release_input,
@@ -49,6 +58,7 @@ from sekai.lib.note import (
     schedule_note_auto_sfx,
 )
 from sekai.lib.options import Options
+from sekai.lib.particle import BaseParticles
 from sekai.lib.stage import DivisionParity, get_stage_props
 from sekai.lib.timescale import (
     CompositeTime,
@@ -60,7 +70,9 @@ from sekai.lib.timescale import (
 )
 from sekai.play import input_manager
 from sekai.play.common import PlayLevelMemory
+from sekai.play.custom_elements import spawn_custom
 from sekai.play.dynamic_stage import DynamicStage
+from sekai.play.particle_manager import ParticleManager
 
 DEFAULT_BEST_TOUCH_TIME = -1e8
 HITBOX_DRAW_MIN_EARLY_WINDOW = 0.050
@@ -103,8 +115,12 @@ class BaseNote(PlayArchetype):
     # This is set by the input manager rather than the note itself.
     captured_touch_id: int = shared_memory()
     captured_touch_time: float = shared_memory()
+    tick_head_ref: EntityRef[BaseNote] = shared_memory()
+    tick_tail_ref: EntityRef[BaseNote] = shared_memory()
 
     active_connector_info: ActiveConnectorInfo = shared_memory()
+
+    count: int = shared_memory()
 
     # For trace early touches
     best_touch_time: float = entity_memory()
@@ -113,6 +129,10 @@ class BaseNote(PlayArchetype):
     should_play_hit_effects: bool = entity_memory()
 
     hitbox: Hitbox = shared_memory()
+
+    # Check wrong way
+    wrong_way: bool = entity_memory()
+    wrong_way_check: bool = exported()
 
     end_time: float = exported()
     played_hit_effects: bool = exported()
@@ -206,6 +226,30 @@ class BaseNote(PlayArchetype):
             stage.start_time = min(stage.start_time, self.start_time - 1.0)
             stage.end_time = max(stage.end_time, self.target_time + 1.0)
 
+        # caching
+        leniency = get_leniency(self.kind)
+        self.hitbox = layout_hitbox(self.lane - self.size - leniency, self.lane + self.size + leniency)
+
+        match self.direction:
+            case FlickDirection.UP_OMNI | FlickDirection.DOWN_OMNI:
+                self.direction_check_needed = False
+                self.target_angle = 0
+            case FlickDirection.UP_LEFT:
+                self.direction_check_needed = True
+                self.target_angle = pi / 2 + 1
+            case FlickDirection.UP_RIGHT:
+                self.direction_check_needed = True
+                self.target_angle = pi / 2 - 1
+            case FlickDirection.DOWN_LEFT:
+                self.direction_check_needed = True
+                self.target_angle = -pi / 2 - 1
+            case FlickDirection.DOWN_RIGHT:
+                self.direction_check_needed = True
+                self.target_angle = -pi / 2 + 1
+            case _:
+                self.direction_check_needed = False
+                self.target_angle = 0
+
     def spawn_order(self) -> float:
         if DISABLE_NOTES or self.kind == NoteKind.ANCHOR:
             return 1e8
@@ -215,6 +259,10 @@ class BaseNote(PlayArchetype):
         if DISABLE_NOTES or self.kind == NoteKind.ANCHOR:
             return False
         return time() >= self.start_time
+
+    @property
+    def calc_time(self) -> float:
+        return self.target_time
 
     def update_sequential(self):
         if self.despawn:
@@ -273,7 +321,10 @@ class BaseNote(PlayArchetype):
                 | NoteKind.CRIT_TRACE_FLICK
                 | NoteKind.NORM_HEAD_TRACE_FLICK
                 | NoteKind.CRIT_HEAD_TRACE_FLICK
-                | NoteKind.NORM_TAIL_FLICK
+            ):
+                self.handle_trace_flick_input()
+            case (
+                NoteKind.NORM_TAIL_FLICK
                 | NoteKind.CRIT_TAIL_FLICK
                 | NoteKind.NORM_TAIL_TRACE_FLICK
                 | NoteKind.CRIT_TAIL_TRACE_FLICK
@@ -331,6 +382,57 @@ class BaseNote(PlayArchetype):
                     unlerp_clamped(draw_start, self.target_time, time()),
                 )
 
+    def tick_trigger(self):
+        return (
+            self.kind in (NoteKind.NORM_TICK, NoteKind.CRIT_TICK)
+            and (
+                (
+                    not self.is_attached
+                    and (
+                        (
+                            self.tick_head_ref.index > 0
+                            and (
+                                self.tick_head_ref.get().active_connector_info.is_active
+                                and time() >= self.input_interval.start
+                            )
+                        )
+                        or (self.tick_tail_ref.index > 0 and self.tick_tail_ref.get().is_despawned)
+                    )
+                )
+                or (
+                    self.is_attached
+                    and (
+                        (
+                            self.attach_head_ref.get().tick_head_ref.index > 0
+                            and (
+                                self.attach_head_ref.get().tick_head_ref.get().active_connector_info.is_active
+                                and time() >= self.input_interval.start
+                            )
+                        )
+                        or (
+                            self.attach_head_ref.get().tick_tail_ref.index > 0
+                            and self.attach_head_ref.get().tick_tail_ref.get().is_despawned
+                        )
+                    )
+                )
+            )
+        ) or (
+            self.kind == NoteKind.HIDE_TICK
+            and self.attach_head_ref.index > 0
+            and self.attach_head_ref.get().tick_tail_ref.index > 0
+            and (
+                self.attach_head_ref.get().tick_tail_ref.get().is_despawned
+                or (
+                    self.attach_head_ref.get().tick_tail_ref.get().kind == NoteKind.ANCHOR
+                    and time() >= self.attach_head_ref.get().tick_tail_ref.get().target_time
+                )
+                or (
+                    self.attach_head_ref.get().tick_head_ref.get().active_connector_info.is_active
+                    and time() >= self.input_interval.start
+                )
+            )
+        )
+
     def should_do_delayed_trigger(self) -> bool:
         # Don't trigger if the previous frame was before the target time.
         # This gives the regular touch handling a chance to trigger on time the first time we pass the target time.
@@ -376,14 +478,41 @@ class BaseNote(PlayArchetype):
                 pivot_lane=self.visual_pivot_lane,
                 half_offset=self.visual_half_offset,
             )
+            if Options.lane_effect_enabled:
+                particles = get_note_particles(self.kind, self.direction)
+                if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
+                    layout = layout_lane(self.lane, self.size)
+                    ParticleManager.spawn(
+                        particle=particles.lane.spawn(layout, duration=1 * Options.note_effect_duration),
+                        lane=self.lane,
+                        spawn_time=time(),
+                    )
         if self.is_scored:
             self.result.haptic = get_note_haptic_feedback(self.kind, self.result.judgment)
         self.end_time = offset_adjusted_time()
         self.played_hit_effects = self.should_play_hit_effects
+        if self.is_scored:
+            self.wrong_way_check = self.wrong_way
+            spawn_custom(
+                judgment=self.result.judgment,
+                accuracy=self.result.accuracy,
+                windows=self.judgment_window,
+                windows_bad=self.judgment_window_bad,
+                check_pass=self.should_play_hit_effects,
+                wrong_way=self.wrong_way,
+                target_time=self.target_time,
+                index=self.index,
+            )
 
     def handle_tap_input(self):
         if time() > self.input_interval.end:
             return
+
+        hitbox = self.get_full_hitbox()
+        for empty_touch in touches():
+            if hitbox.contains_point(empty_touch.position) and empty_touch.started:
+                input_manager.disallow_empty(empty_touch)
+
         if self.captured_touch_id == 0:
             return
         touch = next(tap for tap in touches() if tap.id == self.captured_touch_id)
@@ -407,17 +536,17 @@ class BaseNote(PlayArchetype):
         # so we don't care which touch matched the tap id, just that the tap id is set.
 
         for touch in touches():
-            if not self.check_touch_touch_is_eligible_for_flick(touch):
+            if self.check_touch_is_eligible_for_trace(touch) and touch.started:
+                input_manager.disallow_empty(touch)
+            if not self.check_touch_is_eligible_for_flick(touch):
                 continue
             if not self.check_direction_matches(touch.angle):
                 continue
-            input_manager.disallow_empty(touch)
             self.judge(touch.time)
             return
         for touch in touches():
-            if not self.check_touch_touch_is_eligible_for_flick(touch):
+            if not self.check_touch_is_eligible_for_flick(touch):
                 continue
-            input_manager.disallow_empty(touch)
             self.judge_wrong_way(touch.time)
             return
 
@@ -555,7 +684,7 @@ class BaseNote(PlayArchetype):
             case _:
                 assert_never(kind)
 
-    def check_touch_touch_is_eligible_for_flick(self, touch: Touch) -> bool:
+    def check_touch_is_eligible_for_flick(self, touch: Touch) -> bool:
         return (
             touch.start_time >= self.captured_touch_time
             and touch.speed >= Layout.flick_speed_threshold
@@ -580,21 +709,11 @@ class BaseNote(PlayArchetype):
         )
 
     def check_direction_matches(self, angle: float) -> bool:
+        if not self.direction_check_needed:
+            return True
+
         leniency = pi / 2
-        match self.direction:
-            case FlickDirection.UP_OMNI | FlickDirection.DOWN_OMNI:
-                return True
-            case FlickDirection.UP_LEFT:
-                target_angle = pi / 2 + 1
-            case FlickDirection.UP_RIGHT:
-                target_angle = pi / 2 - 1
-            case FlickDirection.DOWN_LEFT:
-                target_angle = -pi / 2 - 1
-            case FlickDirection.DOWN_RIGHT:
-                target_angle = -pi / 2 + 1
-            case _:
-                assert_never(self.direction)
-        angle_diff = abs((angle + DynamicLayout.rotate - target_angle + pi) % (2 * pi) - pi)
+        angle_diff = abs((angle + DynamicLayout.rotate - self.target_angle + pi) % (2 * pi) - pi)
         return angle_diff <= leniency
 
     def judge(self, actual_time: float):
@@ -605,7 +724,7 @@ class BaseNote(PlayArchetype):
         if self.result.bucket.id != -1:
             self.result.bucket_value = error * WINDOW_SCALE
         self.despawn = True
-        self.should_play_hit_effects = judgment != Judgment.MISS
+        self.should_play_hit_effects = True
         self.post_judge()
 
     def judge_wrong_way(self, actual_time: float):
@@ -621,7 +740,8 @@ class BaseNote(PlayArchetype):
         if self.result.bucket.id != -1:
             self.result.bucket_value = error * WINDOW_SCALE
         self.despawn = True
-        self.should_play_hit_effects = judgment != Judgment.MISS
+        self.should_play_hit_effects = True
+        self.wrong_way = True
         self.post_judge()
 
     def complete(self):
@@ -686,7 +806,7 @@ class BaseNote(PlayArchetype):
                 else unlerp_clamped(attach_head.target_time, attach_tail.target_time, time())
             )
             tail_frac = 1.0
-            frac = unlerp_clamped(attach_head.target_time, attach_tail.target_time, self.target_time)
+            frac = self.attach_frac
             return remap_clamped(head_frac, tail_frac, head_progress, tail_progress, frac)
         else:
             return progress_to(
@@ -785,18 +905,14 @@ class BaseNote(PlayArchetype):
     @property
     def head_ease_frac(self) -> float:
         if self.is_attached:
-            return unlerp_clamped(
-                self.attach_head_ref.get().target_time, self.attach_tail_ref.get().target_time, self.target_time
-            )
+            return self.attach_frac
         else:
             return 0.0
 
     @property
     def tail_ease_frac(self) -> float:
         if self.is_attached:
-            return unlerp_clamped(
-                self.attach_head_ref.get().target_time, self.attach_tail_ref.get().target_time, self.target_time
-            )
+            return self.attach_frac
         else:
             return 1.0
 

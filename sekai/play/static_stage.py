@@ -1,16 +1,29 @@
-from sonolus.script.archetype import PlayArchetype, callback
+from sonolus.script.archetype import PlayArchetype, callback, entity_memory
 from sonolus.script.array import Dim
 from sonolus.script.containers import VarArray
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp
+from sonolus.script.quad import Rect
 from sonolus.script.runtime import offset_adjusted_time, time, touches
 
 from sekai.lib import archetype_names
+from sekai.lib.layer import (
+    LAYER_BACKGROUND,
+    LAYER_BACKGROUND_COVER,
+    LAYER_COVER,
+    LAYER_COVER_LINE,
+    LAYER_JUDGMENT,
+    LAYER_JUDGMENT_LINE,
+    LAYER_STAGE,
+    LAYER_STAGE_COVER,
+    LAYER_STAGE_LANE,
+    get_z,
+)
 from sekai.lib.layout import layout_lane_area, refresh_layout, touch_to_lane
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.stage import draw_stage_and_accessories, play_lane_hit_effects
 from sekai.lib.streams import Streams
-from sekai.play import input_manager
+from sekai.play import custom_elements, initialization, input_manager
 from sekai.play.common import PlayLevelMemory
 
 
@@ -21,6 +34,17 @@ class StageMemory:
 
 class StaticStage(PlayArchetype):
     name = archetype_names.STATIC_STAGE
+    z_layer_stage_lane: float = entity_memory()
+    z_layer_judgment: float = entity_memory()
+    z_layer_cover: float = entity_memory()
+    z_layer_cover_line: float = entity_memory()
+    z_layer_judgment_line: float = entity_memory()
+    z_layer_background_cover: float = entity_memory()
+    z_layer_stage: float = entity_memory()
+    z_layer_stage_cover: float = entity_memory()
+    z_layer_score: float = entity_memory()
+    z_layer_score_glow: float = entity_memory()
+    z_layer_background: float = entity_memory()
 
     def spawn_order(self) -> float:
         return -1e8
@@ -28,9 +52,26 @@ class StaticStage(PlayArchetype):
     def should_spawn(self) -> bool:
         return True
 
+    def initialize(self):
+        self.z_layer_stage_lane = get_z(LAYER_STAGE_LANE)
+        self.z_layer_cover = get_z(LAYER_COVER)
+        self.z_layer_cover_line = get_z(LAYER_COVER_LINE)
+        self.z_layer_judgment = get_z(LAYER_JUDGMENT)
+        self.z_layer_judgment_line = get_z(LAYER_JUDGMENT_LINE)
+        self.z_layer_background_cover = get_z(LAYER_BACKGROUND_COVER)
+        self.z_layer_stage = get_z(LAYER_STAGE)
+        self.z_layer_stage_cover = get_z(LAYER_STAGE_COVER)
+        self.z_layer_score = get_z(layer=LAYER_JUDGMENT)
+        self.z_layer_score_glow = get_z(layer=LAYER_JUDGMENT, etc=1)
+        self.z_layer_score_bar = get_z(layer=LAYER_JUDGMENT, etc=2)
+        self.z_layer_score_bar_mask = get_z(layer=LAYER_JUDGMENT, etc=3)
+        self.z_layer_score_bar_rate = get_z(layer=LAYER_JUDGMENT, etc=4)
+        self.z_layer_background = get_z(layer=LAYER_BACKGROUND)
+
     @callback(order=-2)
     def update_sequential(self):
         refresh_layout()
+        Streams.life[self.index][offset_adjusted_time()] = custom_elements.LifeManager.life
 
     @callback(order=3)
     def touch(self):
@@ -64,4 +105,20 @@ class StaticStage(PlayArchetype):
             Streams.empty_input_lanes[offset_adjusted_time()] = empty_lanes
 
     def update_parallel(self):
-        draw_stage_and_accessories()
+        draw_stage_and_accessories(
+            self.z_layer_stage_lane,
+            self.z_layer_stage_cover,
+            self.z_layer_stage,
+            self.z_layer_judgment_line,
+            self.z_layer_cover,
+            self.z_layer_cover_line,
+            self.z_layer_judgment,
+            self.z_layer_background_cover,
+            self.z_layer_score,
+            self.z_layer_score_glow,
+            self.z_layer_background,
+            custom_elements.ComboJudgeMemory.ap,
+            custom_elements.ScoreIndicator.score,
+            custom_elements.LifeManager.life,
+            initialization.LastNote.last_time,
+        )

@@ -1,9 +1,8 @@
 from enum import IntEnum
-from math import ceil, cos, pi
+from math import ceil, cos, pi, sin
 from typing import Literal, assert_never
 
 from sonolus.script.archetype import EntityRef
-from sonolus.script.easing import ease_out_cubic
 from sonolus.script.effect import Effect, LoopedEffectHandle
 from sonolus.script.interval import clamp, lerp, remap_clamped, unlerp_clamped
 from sonolus.script.particle import Particle, ParticleHandle
@@ -13,7 +12,6 @@ from sonolus.script.runtime import time
 from sonolus.script.sprite import Sprite
 from sonolus.script.timing import beat_to_time
 
-from sekai.lib.buckets import SLIDE_TICK_JUDGMENT_WINDOW
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.effect import Effects
 from sekai.lib.layer import (
@@ -39,7 +37,8 @@ from sekai.lib.layout import (
     layout_slot_glow_effect,
     pre_rotation_vec_at,
 )
-from sekai.lib.options import Options
+from sekai.lib.level_config import LevelConfig
+from sekai.lib.options import Options, Version
 from sekai.lib.particle import ActiveParticles
 from sekai.lib.skin import ActiveConnectorSpriteSet, ActiveSkin
 from sekai.lib.timescale import iter_timescale_changes_in_group_from_time
@@ -486,6 +485,10 @@ def draw_connector(
     last_alpha = start_alpha
     last_target_time = lerp(head_target_time, tail_target_time, start_frac)
 
+    anim_factor1, anim_factor2 = (1, 1)
+    if visual_state == ConnectorVisualState.ACTIVE and active_sprite.is_available and Options.connector_animation:
+        anim_factor1, anim_factor2 = get_cross_fate_opacities(1.0, time() - segment_head_target_time, 0.5)
+
     for i in range(1, segment_count + 1):
         segment_frac = i / segment_count
         next_frac = lerp(start_frac, end_frac, segment_frac)
@@ -518,11 +521,10 @@ def draw_connector(
 
         if visual_state == ConnectorVisualState.ACTIVE and active_sprite.is_available:
             if Options.connector_animation:
-                a_modifier = (cos(2 * pi * time()) + 1) / 2
-                normal_sprite.draw(layout, z=z_normal, a=base_a * ease_out_cubic(a_modifier))
-                active_sprite.draw(layout, z=z_active, a=base_a * ease_out_cubic(1 - a_modifier))
+                normal_sprite.draw(layout, z=z_normal, a=base_a * anim_factor1)
+                active_sprite.draw(layout, z=z_active, a=base_a * anim_factor2)
             else:
-                active_sprite.draw(layout, z=z_active, a=base_a)
+                normal_sprite.draw(layout, z=z_normal, a=base_a)
         else:
             normal_sprite.draw(
                 layout, z=z_normal, a=base_a * (1 if visual_state != ConnectorVisualState.INACTIVE else 0.5)
@@ -535,18 +537,25 @@ def draw_connector(
         last_target_time = next_target_time
 
 
+def get_cross_fate_opacities(a, t, period):
+    phase = (t % period) / period
+    opacity2_base = 1 - abs(1 - 2 * phase)
+    opacity1_base = 1 - opacity2_base
+    correction = 0.6
+    opacity1 = a * (opacity1_base + correction * opacity1_base * opacity2_base)
+    opacity2 = a * (opacity2_base + correction * opacity1_base * opacity2_base)
+
+    return opacity1, opacity2
+
+
 class ActiveConnectorInfo(Record):
     visual_lane: float
     visual_size: float
     visual_y_offset: float
     input_bounds: Quad
+    is_active: bool
     active_start_time: float
-    last_active_time: float
     connector_kind: ConnectorKind
-
-    @property
-    def is_active(self) -> bool:
-        return self.last_active_time >= (SLIDE_TICK_JUDGMENT_WINDOW.perfect + time()).start
 
 
 def update_circular_connector_particle(
@@ -568,7 +577,7 @@ def update_circular_connector_particle(
                 particle @= ActiveParticles.critical_slide_connector.circular
             case _:
                 assert_never(kind)
-        replace_looped_particle(handle, particle, layout, duration=1)
+        replace_looped_particle(handle, particle, layout, duration=1 / Options.effect_animation_speed)
     else:
         update_looped_particle(handle, layout)
 
@@ -592,7 +601,7 @@ def update_linear_connector_particle(
                 particle @= ActiveParticles.critical_slide_connector.linear
             case _:
                 assert_never(kind)
-        replace_looped_particle(handle, particle, layout, duration=1)
+        replace_looped_particle(handle, particle, layout, duration=1 / Options.effect_animation_speed)
     else:
         update_looped_particle(handle, layout)
 
@@ -644,6 +653,8 @@ def draw_connector_slot_glow_effect(
     size: float,
     y_offset: float = 0.0,
 ):
+    if not Options.slot_effect_enabled:
+        return
     sprite = +Sprite
     match kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
@@ -652,11 +663,17 @@ def draw_connector_slot_glow_effect(
             sprite @= ActiveSkin.critical_active_slide_connector.slot_glow
         case _:
             assert_never(kind)
-    height = (3.25 + (cos((time() - start_time) * 8 * pi) + 1) / 2) / 4.25
-    layout = layout_slot_glow_effect(lane, size, height, y_offset=y_offset)
+    height = (
+        0.85 + (1.2 - 0.85) * ((cos((time() - start_time) * 8 * pi) + 1) / 2)  # min + (max - min) * osc
+        if LevelConfig.ui_version == Version.v3
+        else 0.2 + (1.2 - 0.2) * ((sin((time() - start_time) * 2.5 * pi) + 1) / 2)
+    )
+    ex = 0.035 * abs(2 * size) + 0.08 if LevelConfig.ui_version == Version.v3 else 0
+    layout = layout_slot_glow_effect(lane, size + ex, height, y_offset=y_offset)
     z = get_z(LAYER_SLOT_GLOW_EFFECT, start_time, lane, invert_time=True)
-    a = remap_clamped(start_time, start_time + 0.25, 0.0, 0.3, time())
-    sprite.draw(layout, z=z, a=a)
+    a = remap_clamped(start_time, start_time + 0.25, 0.0, 0.25, time())
+    lightweight = 0.25 if ActiveParticles.lightweight.is_available else 1
+    sprite.draw(layout, z=z, a=a * lightweight)
 
 
 def update_connector_sfx(
