@@ -144,6 +144,7 @@ Shorthand used in the tables:
 | `Sekai Critical Tick`  |
 | `Sekai Trace`          |
 | `Sekai Critical Trace` |
+| `Sekai Skill`          |
 
 ### Particle Effects
 
