@@ -173,9 +173,7 @@ def setting_count(head: int, skill: int) -> None:
 
         # arcade score = judgmentMultiplier * (consecutiveJudgmentMultiplier + archetypeMultiplier + entityMultiplier)
         custom_elements.ScoreIndicator.total_weight += level_score().perfect_multiplier * (
-            level_score().consecutive_perfect_cap
-            + note.BaseNote.at(ptr).archetype_score_multiplier
-            + note.BaseNote.at(ptr).entity_score_multiplier
+            note.BaseNote.at(ptr).archetype_score_multiplier + note.BaseNote.at(ptr).entity_score_multiplier
         )
 
         if Fever.fever_chance_time <= note.BaseNote.at(ptr).target_time < Fever.fever_start_time:
@@ -190,7 +188,7 @@ def setting_count(head: int, skill: int) -> None:
         ptr = note.BaseNote.at(ptr).next_ref.index
 
     if Options.custom_score == 2:
-        custom_elements.ScoreIndicator.score = 100
+        custom_elements.ScoreIndicator.percentage = 100
     custom_elements.ScoreIndicator.scale_factor = (
         custom_elements.ScoreIndicator.max_score / custom_elements.ScoreIndicator.total_weight
     )
