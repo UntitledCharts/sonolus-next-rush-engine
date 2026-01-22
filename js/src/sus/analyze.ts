@@ -1,8 +1,9 @@
 type Line = [string, string]
 
 type MeasureChange = [number, number]
+type TimeScaleGroupChange = [number, string]
 
-type Meta = Map<string, string>
+type Meta = Map<string, string[]>
 
 type BarLengthObject = {
     measure: number
@@ -29,6 +30,7 @@ export type NoteObject = {
     lane: number
     width: number
     type: number
+    timeScaleGroup: number
 }
 
 export type SlideObject = {
@@ -39,19 +41,22 @@ export type SlideObject = {
 export type Score = {
     offset: number
     ticksPerBeat: number
-    timeScaleChanges: TimeScaleChangeObject[]
+    timeScaleChanges: TimeScaleChangeObject[][]
     bpmChanges: BpmChangeObject[]
     tapNotes: NoteObject[]
     directionalNotes: NoteObject[]
     slides: SlideObject[]
+    meta: Meta
 }
 
 type ToTick = (measure: number, p: number, q: number) => number
 
 export const analyze = (sus: string): Score => {
-    const { lines, measureChanges, meta } = parse(sus)
+    if (!sus || sus.trim().length === 0) {
+        throw new Error('The sus file does not exist')
+    }
+    const { lines, measureChanges, timeScaleGroupChanges, meta } = parse(sus)
 
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
     const offset = -+(meta.get('WAVEOFFSET') || '0')
     if (Number.isNaN(offset)) throw new Error('Unexpected offset')
 
@@ -64,62 +69,87 @@ export const analyze = (sus: string): Score => {
 
     const bpms = new Map<string, number>()
     const bpmChanges: BpmChangeObject[] = []
-    const timeScaleChanges: TimeScaleChangeObject[] = []
+    const timeScaleGroups = new Map<string, number>()
+    const timeScaleChanges: TimeScaleChangeObject[][] = []
     const tapNotes: NoteObject[] = []
     const directionalNotes: NoteObject[] = []
     const streams = new Map<string, SlideObject>()
 
-    for (const [index, line] of lines.entries()) {
+    for (const [, timeScaleGroup] of timeScaleGroupChanges) {
+        if (timeScaleGroups.has(timeScaleGroup)) continue
+        timeScaleGroups.set(timeScaleGroup, timeScaleGroups.size)
+        timeScaleChanges.push([])
+    }
+
+    // Time Scale Changes
+    for (const line of lines) {
+        const [header] = line
+        if (header.length === 5 && header.startsWith('TIL')) {
+            const timeScaleGroup = header.substring(3, 5)
+            const timeScaleIndex = timeScaleGroups.get(timeScaleGroup)
+            if (timeScaleIndex === undefined) {
+                continue
+            }
+            timeScaleChanges[timeScaleIndex].push(...toTimeScaleChanges(line, toTick))
+        }
+    }
+    lines.forEach((line, index) => {
         const [header, data] = line
         const measureOffset = measureChanges.find(([changeIndex]) => changeIndex <= index)?.[1] ?? 0
+        const timeScaleGroupName =
+            timeScaleGroupChanges.find(([changeIndex]) => changeIndex <= index)?.[1] ?? '00'
+        let timeScaleGroup = timeScaleGroups.get(timeScaleGroupName)
+        if (timeScaleGroup === undefined) {
+            timeScaleGroup = timeScaleGroups.size
+            timeScaleGroups.set(timeScaleGroupName, timeScaleGroups.size)
+            timeScaleChanges.push([])
+        }
 
-        // Time Scale Changes
+        // Hispeed definitions
         if (header.length === 5 && header.startsWith('TIL')) {
-            timeScaleChanges.push(...toTimeScaleChanges(line, toTick))
-            continue
+            return
         }
 
         // BPM
         if (header.length === 5 && header.startsWith('BPM')) {
             bpms.set(header.substring(3), +data)
-            continue
+            return
         }
 
         // BPM Changes
         if (header.length === 5 && header.endsWith('08')) {
             bpmChanges.push(...toBpmChanges(line, measureOffset, bpms, toTick))
-            continue
+            return
         }
 
         // Tap Notes
         if (header.length === 5 && header[3] === '1') {
-            tapNotes.push(...toNotes(line, measureOffset, toTick))
-            continue
+            tapNotes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick))
+            return
         }
 
         // Streams
         if (header.length === 6 && (header[3] === '3' || header[3] === '9')) {
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            const key = `${header[5]!}-${header[3]}`
+            const key = `${header[5]}-${header[3]}`
             const stream = streams.get(key)
 
             if (stream) {
-                stream.notes.push(...toNotes(line, measureOffset, toTick))
+                stream.notes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick))
             } else {
                 streams.set(key, {
                     type: +header[3],
-                    notes: toNotes(line, measureOffset, toTick),
+                    notes: toNotes(line, measureOffset, timeScaleGroup, toTick),
                 })
             }
-            continue
+            return
         }
 
         // Directional Notes
         if (header.length === 5 && header[3] === '5') {
-            directionalNotes.push(...toNotes(line, measureOffset, toTick))
-            continue
+            directionalNotes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick))
+            return
         }
-    }
+    })
 
     const slides = [...streams.values()].flatMap(toSlides)
 
@@ -131,85 +161,96 @@ export const analyze = (sus: string): Score => {
         tapNotes,
         directionalNotes,
         slides,
-    }
-}
-
-const parse = (sus: string) => {
-    const lines: Line[] = []
-    const measureChanges: MeasureChange[] = []
-    const meta: Meta = new Map()
-
-    for (const line of sus
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith('#'))) {
-        const isLine = line.includes(':')
-
-        const index = line.indexOf(isLine ? ':' : ' ')
-        if (index === -1) continue
-
-        const left = line.substring(1, index).trim()
-        const right = line.substring(index + 1).trim()
-
-        if (isLine) {
-            lines.push([left, right])
-        } else if (left === 'MEASUREBS') {
-            measureChanges.unshift([lines.length, +right])
-        } else {
-            meta.set(left, right)
-        }
-    }
-
-    return {
-        lines,
-        measureChanges,
         meta,
     }
 }
 
-const getTicksPerBeat = (meta: Map<string, string>) => {
+const parse = (
+    sus: string,
+): {
+    lines: Line[]
+    measureChanges: MeasureChange[]
+    timeScaleGroupChanges: TimeScaleGroupChange[]
+    meta: Meta
+} => {
+    const lines: Line[] = []
+    const measureChanges: MeasureChange[] = []
+    const timeScaleGroupChanges: TimeScaleGroupChange[] = []
+    const meta: Meta = new Map()
+
+    sus.split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('#'))
+        .forEach((line) => {
+            const isLine = line.includes(':')
+
+            const index = line.indexOf(isLine ? ':' : ' ')
+            if (index === -1) return
+
+            const left = line.substring(1, index).trim()
+            const right = line.substring(index + 1).trim()
+
+            if (isLine) {
+                lines.push([left, right])
+            } else if (left === 'MEASUREBS') {
+                measureChanges.unshift([lines.length, +right])
+            } else if (left === 'HISPEED') {
+                timeScaleGroupChanges.unshift([lines.length, right])
+            } else {
+                if (!meta.has(left)) meta.set(left, [])
+                meta.get(left)?.push(right)
+            }
+        })
+
+    return {
+        lines,
+        measureChanges,
+        timeScaleGroupChanges,
+        meta,
+    }
+}
+
+const getTicksPerBeat = (meta: Map<string, string[]>) => {
     const request = meta.get('REQUEST')
     if (!request) return
 
-    if (!request.startsWith('"ticks_per_beat ') || !request.endsWith('"')) return
+    const tpbRequest = request.find((r) => JSON.parse(r).startsWith('ticks_per_beat'))
+    if (!tpbRequest) return
 
-    return +request.slice(16, -1)
+    return +JSON.parse(tpbRequest).split(' ')[1]
 }
 
 const getBarLengths = (lines: Line[], measureChanges: MeasureChange[]) => {
     const barLengths: BarLengthObject[] = []
 
-    for (const [index, line] of lines.entries()) {
+    lines.forEach((line, index) => {
         const [header, data] = line
 
-        if (header.length !== 5) continue
-        if (!header.endsWith('02')) continue
+        if (header.length !== 5) return
+        if (!header.endsWith('02')) return
 
         const measure =
             +header.substring(0, 3) +
             (measureChanges.find(([changeIndex]) => changeIndex <= index)?.[1] ?? 0)
-        if (Number.isNaN(measure)) continue
+        if (Number.isNaN(measure)) return
 
         barLengths.push({ measure, length: +data })
-    }
+    })
 
     return barLengths
 }
 
 const getToTick = (barLengths: BarLengthObject[], ticksPerBeat: number): ToTick => {
     let ticks = 0
-    let prev: BarLengthObject | undefined
     const bars = barLengths
         .sort((a, b) => a.measure - b.measure)
-        .map((barLength) => {
-            if (prev) ticks += (barLength.measure - prev.measure) * prev.length * ticksPerBeat
-            prev = barLength
-
-            return {
-                measure: barLength.measure,
-                ticksPerMeasure: barLength.length * ticksPerBeat,
-                ticks,
+        .map(({ measure, length }, i, values) => {
+            if (i) {
+                const prev = values[i - 1]
+                ticks += (measure - prev.measure) * prev.length * ticksPerBeat
             }
+
+            return { measure, ticksPerMeasure: length * ticksPerBeat, ticks }
         })
         .reverse()
 
@@ -247,15 +288,11 @@ const toTimeScaleChanges = ([, data]: Line, toTick: ToTick) => {
         .filter((segment) => !!segment)
         .map((segment) => {
             const [l, rest] = segment.split("'")
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            const [m, r] = rest!.split(':')
+            const [m, r] = rest.split(':')
 
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            const measure = +l!
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            const tick = +m!
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            const timeScale = +r!
+            const measure = +l
+            const tick = +m
+            const timeScale = +r
 
             if (Number.isNaN(measure) || Number.isNaN(tick) || Number.isNaN(timeScale))
                 throw new Error('Unexpected time scale change')
@@ -268,21 +305,19 @@ const toTimeScaleChanges = ([, data]: Line, toTick: ToTick) => {
         .sort((a, b) => a.tick - b.tick)
 }
 
-const toNotes = (line: Line, measureOffset: number, toTick: ToTick) => {
+const toNotes = (line: Line, measureOffset: number, timeScaleGroup: number, toTick: ToTick) => {
     const [header] = line
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const lane = parseInt(header[4]!, 36)
+    const lane = parseInt(header[4], 36)
 
     return toRaws(line, measureOffset, toTick).map(({ tick, value }) => {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const width = parseInt(value[1]!, 36)
+        const width = parseInt(value[1], 36)
 
         return {
             tick,
             lane,
             width,
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            type: parseInt(value[0]!, 36),
+            type: parseInt(value[0], 36),
+            timeScaleGroup,
         }
     })
 }

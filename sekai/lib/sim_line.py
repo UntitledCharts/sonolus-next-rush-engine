@@ -46,7 +46,11 @@ def draw_sim_line(
     )
     progress_diff = abs(left_visual_progress - right_visual_progress)
     fade_alpha = unlerp_clamped(1, 0.5, progress_diff)
-    z = get_z(LAYER_SIM_LINE, (left_target_time + right_target_time) / 2, (left_lane + right_lane) / 2)
+    z = get_z(
+        LAYER_SIM_LINE,
+        (left_target_time + right_target_time) / 2,
+        (left_lane + right_lane) / 2,
+    )
     a = (
         min(
             get_alpha(left_target_time),

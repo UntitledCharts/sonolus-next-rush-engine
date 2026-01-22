@@ -10,6 +10,7 @@ from sekai.preview.dynamic_stage import (
     PreviewStagePivotChange,
     PreviewStageStyleChange,
 )
+from sekai.preview.events import PREVIEW_EVENT_ARCHETYPES
 from sekai.preview.initialization import PreviewInitialization
 from sekai.preview.note import PREVIEW_NOTE_ARCHETYPES
 from sekai.preview.sim_line import PreviewSimLine
@@ -29,6 +30,7 @@ preview_mode = PreviewMode(
         *PREVIEW_NOTE_ARCHETYPES,
         PreviewConnector,
         PreviewSimLine,
+        *PREVIEW_EVENT_ARCHETYPES,
     ],
     skin=BaseSkin,
 )

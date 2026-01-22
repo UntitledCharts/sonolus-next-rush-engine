@@ -10,12 +10,13 @@ from sonolus.script.archetype import (
     imported,
     shared_memory,
 )
-from sonolus.script.bucket import Judgment
-from sonolus.script.interval import lerp, remap_clamped, unlerp_clamped
+from sonolus.script.bucket import Judgment, JudgmentWindow
+from sonolus.script.interval import Interval, lerp, remap_clamped, unlerp_clamped
 from sonolus.script.runtime import is_replay, is_skip, time
 from sonolus.script.timing import beat_to_time
 
 from sekai.debug import DISABLE_NOTES
+from sekai.lib.buckets import get_judgment_interval
 from sekai.lib.connector import ActiveConnectorInfo, ConnectorKind, ConnectorLayer
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.layout import FlickDirection, Hitbox, compute_hitbox_at_time, progress_to
@@ -28,6 +29,7 @@ from sekai.lib.note import (
     get_leniency,
     get_note_bucket,
     get_note_effect_kind,
+    get_note_particles,
     get_note_window,
     get_visual_spawn_time,
     has_release_input,
@@ -41,6 +43,7 @@ from sekai.lib.note import (
     schedule_note_slot_effects,
 )
 from sekai.lib.options import Options
+from sekai.lib.particle import BaseParticles
 from sekai.lib.stage import DivisionParity, get_stage_props
 from sekai.lib.timescale import (
     CompositeTime,
@@ -51,7 +54,11 @@ from sekai.lib.timescale import (
     update_timescale_group,
 )
 from sekai.play.note import HITBOX_DRAW_MIN_EARLY_WINDOW, derive_note_archetypes
+from sekai.watch.custom_elements import spawn_custom
 from sekai.watch.dynamic_stage import WatchDynamicStage
+from sekai.watch.particle_manager import ParticleManager
+
+MIN_START_TIME = 0.0167  # Executes the terminate process with a guaranteed minimum duration.
 
 
 class WatchBaseNote(WatchArchetype):
@@ -82,16 +89,30 @@ class WatchBaseNote(WatchArchetype):
     start_time: float = entity_data()
     target_scaled_time: CompositeTime = entity_data()
     target_y_offset: float = entity_data()
+    not_render: float = entity_data()
 
     active_connector_info: ActiveConnectorInfo = shared_memory()
 
     hitbox: Hitbox = shared_memory()
 
+    next_ref_accuracy: EntityRef[WatchBaseNote] = shared_memory()
+    next_ref_damage_flash: EntityRef[WatchBaseNote] = shared_memory()
+    judgment_window: JudgmentWindow = shared_memory()
+    judgment_window_bad: Interval = shared_memory()
+    combo: int = shared_memory()
+    count: int = shared_memory()
+    ap: bool = shared_memory()
+    score: float = shared_memory()
+
     end_time: float = imported()
     played_hit_effects: bool = imported()
+    wrong_way_check: bool = imported()
 
     judgment: StandardImport.JUDGMENT = imported()
     accuracy: StandardImport.ACCURACY = imported()
+
+    # cache
+    attach_frac: float = shared_memory()
 
     def init_data(self):
         if self.data_init_done:
@@ -107,11 +128,15 @@ class WatchBaseNote(WatchArchetype):
             self.direction = mirror_flick_direction(self.direction)
 
         self.target_time = beat_to_time(self.beat)
+        self.judgment_window = get_note_window(self.kind)
+        self.judgment_window_bad = get_judgment_interval(
+            bad_window=get_note_window_bad(self.kind), good_window=self.judgment_window.good
+        )
 
         if not self.is_attached:
             self.target_scaled_time = group_time_to_scaled_time(self.timescale_group, self.target_time)
             self.visual_start_time = get_visual_spawn_time(self.timescale_group, self.target_scaled_time)
-            self.start_time = self.visual_start_time
+            self.start_time = self.get_min_start_time()
 
         if self.stage_ref.index > 0:
             stage_props = get_stage_props(self.stage_ref.get(), self.target_time)
@@ -180,6 +205,7 @@ class WatchBaseNote(WatchArchetype):
                     self.size,
                     self.end_time,
                     self.direction,
+                    self.judgment,
                     y_offset=self._basic_y_offset_at(self.end_time),
                     pivot_lane=self._stage_pivot_lane_at(self.end_time),
                     half_offset=self._stage_half_offset_at(self.end_time),
@@ -207,16 +233,46 @@ class WatchBaseNote(WatchArchetype):
             stage.start_time = min(stage.start_time, self.start_time - 1.0)
             stage.end_time = max(stage.end_time, self.target_time + 1.0)
 
+        if self.is_scored:
+            spawn_custom(
+                self.next_ref,
+                self.next_ref_accuracy,
+                self.next_ref_damage_flash,
+                self.index,
+                self.judgment,
+                self.played_hit_effects,
+            )
+
+        if self.played_hit_effects or not is_replay():
+            self.spawn_critical_lane()
+
+    def get_min_start_time(self):
+        if self.calc_time - self.visual_start_time > MIN_START_TIME:
+            return self.visual_start_time
+        else:
+            self.not_render = True
+            return self.calc_time - MIN_START_TIME
+
+    def spawn_critical_lane(self):
+        if Options.lane_effect_enabled:
+            particles = get_note_particles(self.kind, self.direction)
+            if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
+                ParticleManager.spawn(lane=self.lane, size=self.size, target_time=self.calc_time, particles=particles)
+
     def spawn_time(self) -> float:
         if DISABLE_NOTES or self.kind == NoteKind.ANCHOR:
             return 1e8
         return self.start_time
 
     def despawn_time(self) -> float:
+        return self.calc_time
+
+    @property
+    def calc_time(self) -> float:
         if is_replay() and self.is_scored:
             if self.end_time == 0 and self.accuracy == 0 and self.judgment == Judgment.MISS:
                 # This is a note that's part of a partial replay that ended before this note was hit
-                return 1e8
+                return self.target_time + self.accuracy
             return self.end_time
         else:
             return self.target_time
@@ -232,6 +288,8 @@ class WatchBaseNote(WatchArchetype):
         if group_hide_notes(self.timescale_group):
             return
         if Options.disable_fake_notes and not self.is_scored:
+            return
+        if self.not_render:
             return
         draw_note(
             self.kind,
@@ -388,7 +446,7 @@ class WatchBaseNote(WatchArchetype):
                 else unlerp_clamped(attach_head.target_time, attach_tail.target_time, time())
             )
             tail_frac = 1.0
-            frac = unlerp_clamped(attach_head.target_time, attach_tail.target_time, self.target_time)
+            frac = self.attach_frac
             return remap_clamped(head_frac, tail_frac, head_progress, tail_progress, frac)
         else:
             return progress_to(
@@ -404,18 +462,14 @@ class WatchBaseNote(WatchArchetype):
     @property
     def head_ease_frac(self) -> float:
         if self.is_attached:
-            return unlerp_clamped(
-                self.attach_head_ref.get().target_time, self.attach_tail_ref.get().target_time, self.target_time
-            )
+            return self.attach_frac
         else:
             return 0.0
 
     @property
     def tail_ease_frac(self) -> float:
         if self.is_attached:
-            return unlerp_clamped(
-                self.attach_head_ref.get().target_time, self.attach_tail_ref.get().target_time, self.target_time
-            )
+            return self.attach_frac
         else:
             return 1.0
 
