@@ -58,9 +58,13 @@ class ComboJudgeMemory:
 @level_memory
 class ScoreIndicator:
     score: float
+    note_score: float
+    note_time: float
+    percentage: float
     total_weight: float
     scale_factor: float
     max_score: int
+    current_raw_score: float
     count: int
 
 
@@ -143,62 +147,44 @@ class ComboJudge(PlayArchetype):
                 Fever.fever_chance_current_combo += 1
 
     def calculate_score(self):
-        if Options.custom_score == 0:
+        if Options.custom_score == 0 and not Options.custom_score_bar:
             return
-        # score = judgmentMultiplier * (consecutiveJudgmentMultiplier + archetypeMultiplier + entityMultiplier)
+        # score = judgmentMultiplier * (consecutiveJudgmentMultiplier(is not support in sekai rush custom elements) + archetypeMultiplier + entityMultiplier)
         judgment_multiplier = 0
-        consecutive_judgment_multiplier = 0
         match self.judgment:
             case Judgment.PERFECT:
                 judgment_multiplier = level_score().perfect_multiplier
-                consecutive_judgment_multiplier = min(
-                    level_score().consecutive_perfect_multiplier * level_score().consecutive_perfect_step,
-                    level_score().consecutive_perfect_cap,
-                )
             case Judgment.GREAT:
                 judgment_multiplier = level_score().great_multiplier
-                consecutive_judgment_multiplier = min(
-                    level_score().consecutive_great_multiplier * level_score().consecutive_great_step,
-                    level_score().consecutive_great_cap,
-                )
             case Judgment.GOOD:
                 judgment_multiplier = level_score().good_multiplier
-                consecutive_judgment_multiplier = min(
-                    level_score().consecutive_good_multiplier * level_score().consecutive_good_step,
-                    level_score().consecutive_good_cap,
-                )
             case Judgment.MISS:
                 judgment_multiplier = 0
-                consecutive_judgment_multiplier = 0
+
+        note_raw_score = judgment_multiplier * (
+            note.BaseNote.at(self.index).archetype_score_multiplier
+            + note.BaseNote.at(self.index).entity_score_multiplier
+        )
+        note_score = round(note_raw_score * ScoreIndicator.scale_factor)
+        ScoreIndicator.note_score = note_score if note_score > 0 else ScoreIndicator.note_score
+        ScoreIndicator.note_time = self.spawn_time if note_score > 0 else ScoreIndicator.note_time
+        ScoreIndicator.current_raw_score += note_raw_score
+        ScoreIndicator.score = clamp(
+            round(ScoreIndicator.current_raw_score * ScoreIndicator.scale_factor),
+            0,
+            ScoreIndicator.max_score,
+        )
         match Options.custom_score:
             case 1:
-                ScoreIndicator.score = clamp(
-                    ScoreIndicator.score
-                    + (
-                        (
-                            judgment_multiplier
-                            * (
-                                consecutive_judgment_multiplier
-                                + note.BaseNote.at(self.index).archetype_score_multiplier
-                                + note.BaseNote.at(self.index).entity_score_multiplier
-                            )
-                            * ScoreIndicator.scale_factor
-                        )
-                        / ScoreIndicator.max_score
-                        * 100
-                    ),
-                    0,
-                    100,
-                )
+                ScoreIndicator.percentage = ScoreIndicator.score / ScoreIndicator.max_score * 100
             case 2:
-                ScoreIndicator.score = clamp(
-                    ScoreIndicator.score
+                ScoreIndicator.percentage = clamp(
+                    ScoreIndicator.percentage
                     - (
                         (
                             (level_score().perfect_multiplier - judgment_multiplier)
                             * (
-                                consecutive_judgment_multiplier
-                                + note.BaseNote.at(self.index).archetype_score_multiplier
+                                note.BaseNote.at(self.index).archetype_score_multiplier
                                 + note.BaseNote.at(self.index).entity_score_multiplier
                             )
                             * ScoreIndicator.scale_factor
@@ -211,7 +197,9 @@ class ComboJudge(PlayArchetype):
                 )
             case 3:
                 ScoreIndicator.count += 1
-                ScoreIndicator.score += (((1 - abs(self.accuracy)) * 100) - ScoreIndicator.score) / ScoreIndicator.count
+                ScoreIndicator.percentage += (
+                    ((1 - abs(self.accuracy)) * 100) - ScoreIndicator.percentage
+                ) / ScoreIndicator.count
 
     def calculate_life(self):
         if not Options.custom_life_bar:

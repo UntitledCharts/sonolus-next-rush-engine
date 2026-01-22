@@ -702,7 +702,7 @@ def layout_life_gauge(life) -> Quad:
     ui = runtime_ui()
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
-    MARGIN = 0.2398  # noqa: N806
+    MARGIN = 0.28  # noqa: N806
     margin_offset = 0.121
     bar_base_w = 0.827
     final_scale = ui.secondary_metric_config.scale * scale_ratio
@@ -721,6 +721,124 @@ def layout_life_gauge(life) -> Quad:
         br=Vec2(screen_center.x + w * life, screen_center.y - h / 2),
         tl=Vec2(screen_center.x, screen_center.y + h / 2),
         tr=Vec2(screen_center.x + w * life, screen_center.y + h / 2),
+    )
+
+
+def layout_score_bar() -> Quad:
+    ui = runtime_ui()
+
+    scale_ratio = min(1, aspect_ratio() / (16 / 9))
+
+    h = 0.27 * ui.primary_metric_config.scale * scale_ratio
+    w = h * 4.6
+
+    MARGIN = 0.3  # noqa: N806
+
+    screen_center = Vec2(x=screen().l + MARGIN + (w / 2), y=0.865)
+    return Quad(
+        bl=Vec2(screen_center.x - w / 2, screen_center.y - h / 2),
+        br=Vec2(screen_center.x + w / 2, screen_center.y - h / 2),
+        tl=Vec2(screen_center.x - w / 2, screen_center.y + h / 2),
+        tr=Vec2(screen_center.x + w / 2, screen_center.y + h / 2),
+    )
+
+
+class ScoreGaugeType(IntEnum):
+    NORMAL = 0
+    MASK = 1
+    EDGE = 2
+
+
+def layout_score_gauge(gauge=0, score_type: ScoreGaugeType = ScoreGaugeType.NORMAL) -> Quad:
+    ui = runtime_ui()
+
+    scale_ratio = min(1, aspect_ratio() / (16 / 9))
+    h = max(
+        (
+            0.045
+            * ui.primary_metric_config.scale
+            * scale_ratio
+            * (clamp((1 - gauge) / 0.0142, 0, 1) if score_type == ScoreGaugeType.EDGE else 1)
+        ),
+        1e-3,
+    )
+    w = max(
+        (h * 21.7 * ((1 - gauge) if score_type == ScoreGaugeType.MASK else 1)),
+        1e-3,
+    )  # c = 0-0.44 b = 0.44-0.6 a= 0.6-0.75 s=0.75-0.9
+    MARGIN = 0.3  # noqa: N806
+    edge_margin = 0.014 if score_type == ScoreGaugeType.MASK else 0
+    margin_offset = 0.043 + edge_margin
+    bar_base_w = 0.27 * 4.6
+    final_scale = ui.primary_metric_config.scale * scale_ratio
+    current_bar_w = bar_base_w * final_scale
+
+    bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
+    number_center_x = bar_center_x - (margin_offset * final_scale)
+
+    screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=0.873)
+
+    return Quad(
+        bl=Vec2(screen_center.x - w, screen_center.y - h / 2),
+        br=Vec2(screen_center.x, screen_center.y - h / 2),
+        tl=Vec2(screen_center.x - w, screen_center.y + h / 2),
+        tr=Vec2(screen_center.x, screen_center.y + h / 2),
+    )
+
+
+def layout_score_rank() -> Quad:
+    ui = runtime_ui()
+
+    scale_ratio = min(1, aspect_ratio() / (16 / 9))
+
+    h = 0.17 * ui.primary_metric_config.scale * scale_ratio
+    w = h * 0.882
+
+    MARGIN = 0.3  # noqa: N806
+
+    margin_offset = 1.138
+    bar_base_w = 0.27 * 4.6
+    final_scale = ui.primary_metric_config.scale * scale_ratio
+    current_bar_w = bar_base_w * final_scale
+
+    bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
+    number_center_x = bar_center_x - (margin_offset * final_scale)
+
+    screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=0.88)
+
+    return Quad(
+        bl=Vec2(screen_center.x - w / 2, screen_center.y - h / 2),
+        br=Vec2(screen_center.x + w / 2, screen_center.y - h / 2),
+        tl=Vec2(screen_center.x - w / 2, screen_center.y + h / 2),
+        tr=Vec2(screen_center.x + w / 2, screen_center.y + h / 2),
+    )
+
+
+def layout_score_rank_text() -> Quad:
+    ui = runtime_ui()
+
+    scale_ratio = min(1, aspect_ratio() / (16 / 9))
+
+    h = 0.02 * ui.primary_metric_config.scale * scale_ratio
+    w = h * 7.5
+
+    MARGIN = 0.3  # noqa: N806
+
+    margin_offset = 1.138
+    bar_base_w = 0.27 * 4.6
+    final_scale = ui.primary_metric_config.scale * scale_ratio
+    current_bar_w = bar_base_w * final_scale
+
+    bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
+    number_center_x = bar_center_x - (margin_offset * final_scale)
+
+    screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=0.76)
+
+    return Quad(
+        bl=Vec2(screen_center.x - w / 2, screen_center.y - h / 2),
+        br=Vec2(screen_center.x + w / 2, screen_center.y - h / 2),
+        tl=Vec2(screen_center.x - w / 2, screen_center.y + h / 2),
+        tr=Vec2(screen_center.x + w / 2, screen_center.y + h / 2),
     )
 
 

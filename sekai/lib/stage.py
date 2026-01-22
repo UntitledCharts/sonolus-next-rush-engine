@@ -6,7 +6,7 @@ from typing import Protocol, assert_never, cast
 
 from sonolus.script import runtime
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
-from sonolus.script.interval import clamp, lerp
+from sonolus.script.interval import clamp, interp, lerp
 from sonolus.script.quad import Quad
 from sonolus.script.record import Record
 from sonolus.script.runtime import is_multiplayer, is_play, is_replay, is_watch, time
@@ -14,12 +14,18 @@ from sonolus.script.vec import Vec2
 
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import get_event_as, query_event_list
-from sekai.lib.custom_elements import draw_life_number, draw_score_number
+from sekai.lib.custom_elements import (
+    draw_life_number,
+    draw_score_bar_number,
+    draw_score_bar_raw_number,
+    draw_score_number,
+)
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.effect import SFX_DISTANCE, Effects
 from sekai.lib.layer import LAYER_COVER, LAYER_STAGE, get_z, get_z_alt
 from sekai.lib.layout import (
     DynamicLayout,
+    ScoreGaugeType,
     approach,
     current_stage_tilt,
     layout_background_cover,
@@ -30,6 +36,10 @@ from sekai.lib.layout import (
     layout_lane_by_edges,
     layout_life_bar,
     layout_life_gauge,
+    layout_score_bar,
+    layout_score_gauge,
+    layout_score_rank,
+    layout_score_rank_text,
     layout_sekai_stage,
     layout_stage_cover,
     layout_stage_cover_and_line,
@@ -42,7 +52,7 @@ from sekai.lib.layout import (
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, StageCoverMode
 from sekai.lib.particle import ActiveParticles
-from sekai.lib.skin import ActiveSkin, JudgmentSpriteSet
+from sekai.lib.skin import ActiveSkin, JudgmentSpriteSet, ScoreRankType
 
 
 class JudgeLineColor(IntEnum):
@@ -391,9 +401,15 @@ def draw_stage_and_accessories(
     z_background_cover,
     z_layer_score,
     z_layer_score_glow,
+    z_layer_score_bar,
+    z_layer_score_bar_mask,
+    z_layer_score_bar_rate,
     z_layer_background,
     ap,
     score,
+    note_score,
+    note_time,
+    percentage,
     life=1000,
     last_time=1e8,
 ):
@@ -405,11 +421,21 @@ def draw_stage_and_accessories(
     draw_dead(z_layer_background, life)
     draw_score_number(
         ap=ap,
-        score=round(score, 4),
+        score=round(percentage, 4),
         z1=z_layer_score,
         z2=z_layer_score_glow,
     )
     draw_life_bar(life, z_layer_score, z_layer_score_glow, last_time)
+    draw_score_bar(
+        score,
+        note_score,
+        note_time,
+        z_layer_score,
+        z_layer_score_glow,
+        z_layer_score_bar,
+        z_layer_score_bar_mask,
+        z_layer_score_bar_rate,
+    )
 
 
 def normalize_transition[T](value: Transition[T] | T) -> Transition[T]:
@@ -939,6 +965,76 @@ def draw_life_bar(life, z_layer_score, z_layer_score_glow, last_time):
         ActiveSkin.life.bar.pause.draw(bar_layout, z=z_layer_score)
     gauge_layout = layout_life_gauge(life)
     ActiveSkin.life.gauge.get_sprite(life).draw(gauge_layout, z_layer_score_glow)
+
+
+def draw_score_bar(
+    score,
+    note_score,
+    note_time,
+    z_layer_score,
+    z_layer_score_glow,
+    z_layer_score_bar,
+    z_layer_score_bar_mask,
+    z_layer_score_bar_rate,
+):
+    if Options.hide_ui >= 2:
+        return
+    if not ActiveSkin.ui_number.available:
+        return
+    if not Options.custom_score_bar:
+        return
+    if not ActiveSkin.score.available:
+        return
+    draw_score_bar_number(
+        score,
+        z_layer_score_glow,
+    )
+    draw_score_bar_raw_number(number=note_score, z=z_layer_score_bar, time=time() - note_time)
+    bar_layout = layout_score_bar()
+    ActiveSkin.score.bar.draw(bar_layout, z=z_layer_score)
+    ActiveSkin.score.panel.draw(bar_layout, z=z_layer_score_bar_rate)
+    rank = get_score_rank(score)
+    if score > 0:
+        gauge = get_gauge_progress(score)
+        gauge_mask = get_gauge_progress_mask(score)
+        gauge_normal_layout = layout_score_gauge(score_type=ScoreGaugeType.NORMAL)
+        ActiveSkin.score.gauge.normal.draw(gauge_normal_layout, z=z_layer_score_bar)
+        if gauge_mask < 1:
+            gauge_mask_layout = layout_score_gauge(gauge_mask, ScoreGaugeType.MASK)
+            ActiveSkin.score.gauge.mask.draw(gauge_mask_layout, z=z_layer_score_bar_mask)
+        gauge_mask_edge_layout = layout_score_gauge(gauge, score_type=ScoreGaugeType.EDGE)
+        ActiveSkin.score.gauge.mask_edge.draw(gauge_mask_edge_layout, z=z_layer_score_bar_mask)
+        score_rank_layout = layout_score_rank()
+        ActiveSkin.score.rank.get_sprite(rank).draw(score_rank_layout, z=z_layer_score_glow)
+    score_rank_text_layout = layout_score_rank_text()
+    ActiveSkin.score.rank_text.get_sprite(rank).draw(score_rank_text_layout, z=z_layer_score_glow)
+
+
+def get_gauge_progress(score):
+    xp = (0, 3000, 300000, 520000, 740000, 1000000)
+    fp = (0, 0.447, 0.6, 0.755, 0.908, 1.0)
+
+    return interp(xp, fp, score)
+
+
+def get_gauge_progress_mask(score):
+    xp = (0, 3000, 300000, 520000, 740000, 960000)
+    fp = (0, 0.447, 0.6, 0.755, 0.908, 1.0)
+
+    return interp(xp, fp, score)
+
+
+def get_score_rank(score):
+    if score >= 740000:
+        return ScoreRankType.S
+    elif score >= 520000:
+        return ScoreRankType.A
+    elif score >= 300000:
+        return ScoreRankType.B
+    elif score >= 3000:
+        return ScoreRankType.C
+    else:
+        return ScoreRankType.D
 
 
 def play_lane_hit_effects(lane: float, sfx: bool = True):
