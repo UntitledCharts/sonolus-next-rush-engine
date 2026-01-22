@@ -1,7 +1,7 @@
 [project]
-name = "next-sekai"
+name = "next-rush"
 version = "0.1.0"
-description = "Next SEKAI Sonolus engine"
+description = "Next RUSH+ Sonolus engine"
 readme = "README.md"
 requires-python = ">=3.12.5"
 dependencies = [

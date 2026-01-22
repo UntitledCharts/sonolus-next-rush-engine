@@ -1,4 +1,4 @@
-# Next SEKAI Sonolus Engine
+# Next RUSH+ Sonolus Engine
 
 A new Project Sekai inspired engine for [Sonolus](https://sonolus.com).
 
@@ -136,7 +136,7 @@ Shorthand used in the tables:
 ### Effect Clips
 
 | Name                   |
-|------------------------|
+| ---------------------- |
 | `Sekai Tick`           |
 | `Sekai Critical Tap`   |
 | `Sekai Critical Flick` |
@@ -148,11 +148,17 @@ Shorthand used in the tables:
 ### Particle Effects
 
 | Name                                   |
-|----------------------------------------|
+| -------------------------------------- |
 | `Sekai Note Lane Linear`               |
+| `Sekai Circular Tap Cyan Great`        |
+| `Sekai Circular Tap Cyan Good`         |
+| `Sekai Linear Tap Cyan Great`          |
+| `Sekai Linear Tap Cyan Good`           |
 | `Sekai Critical Lane Linear`           |
 | `Sekai Critical Flick Lane Linear`     |
 | `Sekai Slot Linear Tap Cyan`           |
+| `Sekai Slot Linear Tap Cyan Great`     |
+| `Sekai Slot Linear Tap Cyan Good`      |
 | `Sekai Slot Linear Slide Tap Green`    |
 | `Sekai Slot Linear Alternative Red`    |
 | `Sekai Slot Linear Tap Yellow`         |

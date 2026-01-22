@@ -1,9 +1,12 @@
 {
-  "name": "@next-sekai/sonolus-next-sekai-engine",
+  "name": "sonolus-next-rush-plus-engine",
   "version": "0.0.0",
   "description": "A new Project Sekai inspired engine for Sonolus",
-  "author": "qwewqa",
-  "repository": "github:Next-SEKAI/sonolus-next-sekai-engine",
+  "author": "Hyeon2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hyeon2006/sonolus-next-rush-plus-engine.git"
+  },
   "license": "MIT",
   "keywords": [
     "Sonolus"
@@ -24,8 +27,8 @@
   },
   "scripts": {
     "check-type": "tsc -p . --noEmit",
-    "check-lint": "eslint .",
-    "check-format": "prettier . --check",
+    "biome": "biome check",
+    "format": "biome format --write --files-max-size=100000000000",
     "version": "node ./version.js",
     "build": "tsc -p . && node ./build.js"
   },
@@ -33,13 +36,9 @@
     "@sonolus/core": "~7.14.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
+    "@biomejs/biome": "2.3.10",
     "@sonolus/sonolus.js": "~9.6.0",
     "@types/node": "^22.19.1",
-    "eslint": "^9.39.1",
-    "eslint-config-prettier": "^10.1.8",
-    "prettier": "^3.7.4",
-    "prettier-plugin-organize-imports": "^4.3.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.1"
   }

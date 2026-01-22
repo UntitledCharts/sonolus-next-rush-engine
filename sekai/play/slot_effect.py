@@ -34,7 +34,7 @@ class SlotGlowEffect(PlayArchetype):
             self.start_time,
             self.end_time,
             self.lane,
-            self.size,
+            0.5,
             y_offset=self.y_offset,
         )
 

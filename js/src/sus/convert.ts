@@ -2,17 +2,18 @@ import {
     USC,
     USCConnectionAttachNote,
     USCConnectionEndNote,
-    USCConnectionIgnoreNote,
     USCConnectionStartNote,
     USCConnectionTickNote,
+    USCGuideNote,
     USCObject,
     USCSlideNote,
 } from '../usc/index.js'
-import { NoteObject, analyze } from './analyze.js'
+import { NoteObject, Score, analyze } from './analyze.js'
 
-export const susToUSC = (sus: string): USC => {
-    const score = analyze(sus)
+/** Convert a SUS to a USC */
+export const susToUSC = (sus: string): USC => chsLikeToUSC(analyze(sus))
 
+export const chsLikeToUSC = (score: Score): USC => {
     const flickMods = new Map<string, 'left' | 'up' | 'right'>()
     const traceMods = new Set<string>()
     const criticalMods = new Set<string>()
@@ -22,7 +23,30 @@ export const susToUSC = (sus: string): USC => {
 
     const preventSingles = new Set<string>()
     const dedupeSingles = new Set<string>()
-    const dedupeSlides = new Map<string, USCSlideNote>()
+    const dedupeSlides = new Map<string, USCSlideNote | USCGuideNote>()
+
+    const requests = {
+        sideLane: false,
+        laneOffset: 0,
+    }
+    const requestsRaw = score.meta.get('REQUEST')
+    if (requestsRaw) {
+        for (const request of requestsRaw) {
+            try {
+                const [key, value] = JSON.parse(request).split(' ', 2)
+                switch (key) {
+                    case 'side_lane':
+                        requests.sideLane = value === 'true'
+                        break
+                    case 'lane_offset':
+                        requests.laneOffset = Number(value)
+                        break
+                }
+            } catch (_e) {
+                // Noop
+            }
+        }
+    }
 
     for (const slide of score.slides) {
         if (slide.type !== 3) continue
@@ -39,6 +63,7 @@ export const susToUSC = (sus: string): USC => {
             }
         }
     }
+
     for (const note of score.directionalNotes) {
         const key = getKey(note)
         switch (note.type) {
@@ -88,11 +113,13 @@ export const susToUSC = (sus: string): USC => {
 
     const objects: USCObject[] = []
 
-    for (const timeScaleChange of score.timeScaleChanges) {
+    for (const timeScaleChanges of score.timeScaleChanges) {
         objects.push({
-            type: 'timeScale',
-            beat: timeScaleChange.tick / score.ticksPerBeat,
-            timeScale: timeScaleChange.timeScale,
+            type: 'timeScaleGroup',
+            changes: timeScaleChanges.map((timeScaleChange) => ({
+                beat: timeScaleChange.tick / score.ticksPerBeat,
+                timeScale: timeScaleChange.timeScale,
+            })),
         })
     }
 
@@ -105,8 +132,39 @@ export const susToUSC = (sus: string): USC => {
     }
 
     for (const note of score.tapNotes) {
-        if (note.lane <= 1 || note.lane >= 14) continue
-        if (note.type !== 1 && note.type !== 2 && note.type !== 5 && note.type !== 6) continue
+        if (note.lane === 0 && note.type === 4) {
+            objects.push({
+                type: 'skill',
+                beat: note.tick / score.ticksPerBeat,
+            })
+            continue
+        }
+
+        if (note.lane === 15 && note.type === 1) {
+            objects.push({
+                type: 'feverChance',
+                beat: note.tick / score.ticksPerBeat,
+            })
+            continue
+        }
+
+        if (note.lane === 15 && note.type === 2) {
+            objects.push({
+                type: 'feverStart',
+                beat: note.tick / score.ticksPerBeat,
+            })
+            continue
+        }
+
+        if (!requests.sideLane && (note.lane <= 1 || note.lane >= 14)) continue
+        if (
+            note.type !== 1 &&
+            note.type !== 2 &&
+            note.type !== 5 &&
+            note.type !== 6 &&
+            note.type !== 4
+        )
+            continue
 
         const key = getKey(note)
         if (preventSingles.has(key)) continue
@@ -114,17 +172,40 @@ export const susToUSC = (sus: string): USC => {
         if (dedupeSingles.has(key)) continue
         dedupeSingles.add(key)
 
-        const object: USCObject = {
-            type: 'single',
-            beat: note.tick / score.ticksPerBeat,
-            lane: note.lane - 8 + note.width / 2,
-            size: note.width / 2,
-            trace: note.type === 5 || note.type === 6,
-            critical: note.type === 2 || note.type === 6,
-        }
+        let object: USCObject
+        switch (note.type) {
+            case 1:
+            case 2:
+            case 5:
+            case 6: {
+                object = {
+                    type: 'single',
+                    beat: note.tick / score.ticksPerBeat,
+                    lane: note.lane - 8 + note.width / 2 + requests.laneOffset,
+                    size: note.width / 2,
+                    critical: [2, 6].includes(note.type),
+                    trace: [5, 6].includes(note.type),
 
-        const flickMod = flickMods.get(key)
-        if (flickMod) object.direction = flickMod
+                    timeScaleGroup: note.timeScaleGroup,
+                }
+
+                const flickMod = flickMods.get(key)
+                if (flickMod) object.direction = flickMod
+                break
+            }
+            case 4:
+                object = {
+                    type: 'damage',
+                    beat: note.tick / score.ticksPerBeat,
+                    lane: note.lane - 8 + note.width / 2 + requests.laneOffset,
+                    size: note.width / 2,
+
+                    timeScaleGroup: note.timeScaleGroup,
+                }
+                break
+            default:
+                continue
+        }
 
         objects.push(object)
     }
@@ -134,8 +215,7 @@ export const susToUSC = (sus: string): USC => {
         if (!startNote) continue
 
         const object: USCSlideNote = {
-            type: 'slide',
-            active: slide.type === 3,
+            type: slide.type === 3 ? 'slide' : 'guide',
             critical: criticalMods.has(getKey(startNote)),
             connections: [] as never,
         }
@@ -144,21 +224,27 @@ export const susToUSC = (sus: string): USC => {
             const key = getKey(note)
 
             const beat = note.tick / score.ticksPerBeat
-            const lane = note.lane - 8 + note.width / 2
+            const lane = note.lane - 8 + note.width / 2 + requests.laneOffset
             const size = note.width / 2
-            const trace = traceMods.has(key)
-            const critical = object.critical || criticalMods.has(key)
+            const timeScaleGroup = note.timeScaleGroup
+            const critical = ('critical' in object && object.critical) || criticalMods.has(key)
             const ease = easeMods.get(key) ?? 'linear'
 
+            let judgeType: 'normal' | 'trace' | 'none' = 'normal'
+            if (traceMods.has(key)) judgeType = 'trace'
             switch (note.type) {
                 case 1: {
-                    if (!object.active || slideStartEndRemoveMods.has(key)) {
-                        const connection: USCConnectionIgnoreNote = {
-                            type: 'ignore',
+                    if (object.type == 'guide' || slideStartEndRemoveMods.has(key)) {
+                        const connection: USCConnectionStartNote = {
+                            type: 'start',
                             beat,
                             lane,
                             size,
+                            critical,
                             ease,
+                            judgeType: 'none',
+
+                            timeScaleGroup,
                         }
 
                         object.connections.push(connection)
@@ -168,9 +254,11 @@ export const susToUSC = (sus: string): USC => {
                             beat,
                             lane,
                             size,
-                            trace,
                             critical,
                             ease: easeMods.get(key) ?? 'linear',
+                            judgeType,
+
+                            timeScaleGroup,
                         }
 
                         object.connections.push(connection)
@@ -178,15 +266,17 @@ export const susToUSC = (sus: string): USC => {
                     break
                 }
                 case 2: {
-                    if (!object.active || slideStartEndRemoveMods.has(key)) {
-                        const connection: USCConnectionIgnoreNote = {
-                            type: 'ignore',
+                    if (object.type == 'guide' || slideStartEndRemoveMods.has(key)) {
+                        const connection: USCConnectionEndNote = {
+                            type: 'end',
                             beat,
                             lane,
                             size,
-                            ease,
-                        }
+                            critical,
+                            judgeType: 'none',
 
+                            timeScaleGroup,
+                        }
                         object.connections.push(connection)
                     } else {
                         const connection: USCConnectionEndNote = {
@@ -194,13 +284,14 @@ export const susToUSC = (sus: string): USC => {
                             beat,
                             lane,
                             size,
-                            trace,
                             critical,
+                            judgeType,
+
+                            timeScaleGroup,
                         }
 
                         const flickMod = flickMods.get(key)
                         if (flickMod) connection.direction = flickMod
-
                         object.connections.push(connection)
                     }
                     break
@@ -211,6 +302,7 @@ export const susToUSC = (sus: string): USC => {
                             type: 'attach',
                             beat,
                             critical,
+                            timeScaleGroup,
                         }
 
                         object.connections.push(connection)
@@ -220,9 +312,11 @@ export const susToUSC = (sus: string): USC => {
                             beat,
                             lane,
                             size,
-                            trace,
                             critical,
                             ease,
+                            judgeType,
+
+                            timeScaleGroup,
                         }
 
                         object.connections.push(connection)
@@ -232,12 +326,14 @@ export const susToUSC = (sus: string): USC => {
                 case 5: {
                     if (tickRemoveMods.has(key)) break
 
-                    const connection: USCConnectionIgnoreNote = {
-                        type: 'ignore',
+                    const connection: USCConnectionTickNote = {
+                        type: 'tick',
                         beat,
                         lane,
                         size,
                         ease,
+
+                        timeScaleGroup,
                     }
 
                     object.connections.push(connection)
@@ -248,7 +344,7 @@ export const susToUSC = (sus: string): USC => {
 
         objects.push(object)
 
-        if (!object.active) continue
+        if (object.type == 'guide') continue
 
         const key = getKey(startNote)
         const dupe = dedupeSlides.get(key)

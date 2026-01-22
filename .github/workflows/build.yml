@@ -2,8 +2,8 @@ name: Build Engine
 
 on:
   push:
-  pull_request:
-  workflow_dispatch:
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -27,5 +27,5 @@ jobs:
       - name: Upload engine artifact
         uses: actions/upload-artifact@v4
         with:
-          name: next-sekai-engine
+          name: next-sekai-rush-plus-engine
           path: build/dist/

@@ -3,12 +3,15 @@ from __future__ import annotations
 from enum import IntEnum
 from typing import Self, assert_never
 
+from sonolus.script.bucket import Judgment
 from sonolus.script.globals import level_data
-from sonolus.script.interval import clamp
+from sonolus.script.interval import Interval, clamp
 from sonolus.script.record import Record
+from sonolus.script.runtime import is_replay, is_watch
 from sonolus.script.sprite import RenderMode, Sprite, SpriteGroup, StandardSprite, skin, sprite, sprite_group
 
-from sekai.lib.layout import FlickDirection
+from sekai.lib.layout import AccuracyType, ComboType, FlickDirection, JudgmentType
+from sekai.lib.options import Options
 
 
 @skin
@@ -16,6 +19,7 @@ class BaseSkin:
     render_mode: RenderMode = RenderMode.LIGHTWEIGHT
 
     cover: StandardSprite.STAGE_COVER
+    background: Sprite = sprite("Sekai Black Background")
 
     lane: StandardSprite.LANE
     stage_middle: StandardSprite.STAGE_MIDDLE
@@ -80,6 +84,13 @@ class BaseSkin:
     judgment_center_black: Sprite = sprite("Sekai Judgment Center Black")
 
     sekai_stage: Sprite = sprite("Sekai Stage")
+    sekai_stage_lane: Sprite = sprite("Sekai Stage Lane")
+    sekai_stage_cover: Sprite = sprite("Sekai Stage Cover")
+
+    sekai_stage_fever: Sprite = sprite("Sekai Stage Fever")
+    sekai_stage_fever_tablet: Sprite = sprite("Sekai Stage Fever Tablet")
+    sekai_fever_gauge_yellow: Sprite = sprite("Sekai Fever Gauge Yellow")
+    sekai_fever_gauge_rainbow: Sprite = sprite("Sekai Fever Gauge Rainbow")
 
     sim_line: StandardSprite.SIMULTANEOUS_CONNECTION_NEUTRAL
 
@@ -182,6 +193,8 @@ class BaseSkin:
     slot_critical_down_flick: Sprite = sprite("Sekai Slot Critical Down Flick")
 
     slot_glow_cyan: Sprite = sprite("Sekai Slot Glow Cyan")
+    slot_glow_cyan_great: Sprite = sprite("Sekai Slot Glow Cyan Great")
+    slot_glow_cyan_good: Sprite = sprite("Sekai Slot Glow Cyan Good")
     slot_glow_green: Sprite = sprite("Sekai Slot Glow Green")
     slot_glow_red: Sprite = sprite("Sekai Slot Glow Red")
     slot_glow_yellow: Sprite = sprite("Sekai Slot Glow Yellow")
@@ -319,7 +332,59 @@ class BaseSkin:
     timescale_change_line: StandardSprite.GRID_YELLOW
     camera_line: StandardSprite.GRID_RED
     camera_target_line: StandardSprite.GRID_CYAN
+    skill_line: StandardSprite.GRID_GREEN
+    fever_chance_line: StandardSprite.GRID_CYAN
+    fever_start_line: StandardSprite.GRID_BLUE
 
+    # Custom Elements
+    perfect: Sprite = sprite("Perfect")
+    great: Sprite = sprite("Great")
+    good: Sprite = sprite("Good")
+    bad: Sprite = sprite("Bad")
+    miss: Sprite = sprite("Miss")
+    auto: Sprite = sprite("Auto")
+    ap_combo_number: SpriteGroup = sprite_group(f"AP Combo Number {i}" for i in range(12))
+    combo_number: SpriteGroup = sprite_group(f"Combo Number {i}" for i in range(12))
+    combo_number_glow: SpriteGroup = sprite_group(f"Combo Number Glow {i}" for i in range(12))
+    ap_combo_label: Sprite = sprite("AP Combo Label")
+    combo_label: Sprite = sprite("Combo Label")
+    combo_label_glow: Sprite = sprite("Combo Label Glow")
+    fast_warning: Sprite = sprite("Fast Warning")
+    late_warning: Sprite = sprite("Late Warning")
+    flick_warning: Sprite = sprite("Flick Warning")
+    damage_flash: Sprite = sprite("Damage Flash")
+    auto_live: Sprite = sprite("Auto Live")
+    skill_bar: Sprite = sprite("Skill Bar")
+    skill_level: SpriteGroup = sprite_group(f"Skill Level {i}" for i in range(1, 5))
+    skill_percent: Sprite = sprite("Skill Percent")
+    skill_value_score: Sprite = sprite("Skill Value Score")
+    skill_value_life: Sprite = sprite("Skill Value Life")
+    skill_value_judgment: Sprite = sprite("Skill Value Judgment")
+    skill_icon: SpriteGroup = sprite_group(f"Skill Icon {i}" for i in range(1, 6))
+    ui_number: SpriteGroup = sprite_group(f"UI Number {i}" for i in range(12))
+    life_bar_pause: Sprite = sprite("Life Bar Pause")
+    life_bar_skip: Sprite = sprite("Life Bar Skip")
+    life_bar_disable: Sprite = sprite("Life Bar Disable")
+    life_bar_gauge_normal: Sprite = sprite("Life Bar Gauge Normal")
+    life_bar_gauge_danger: Sprite = sprite("Life Bar Gauge Danger")
+    score_bar: Sprite = sprite("Score Bar")
+    score_bar_panel: Sprite = sprite("Score Bar Panel")
+    score_bar_gauge: Sprite = sprite("Score Bar Gauge")
+    score_bar_mask: Sprite = sprite("Score Bar Mask")
+    score_rank_s: Sprite = sprite("Score Rank S")
+    score_rank_a: Sprite = sprite("Score Rank A")
+    score_rank_b: Sprite = sprite("Score Rank B")
+    score_rank_c: Sprite = sprite("Score Rank C")
+    score_rank_d: Sprite = sprite("Score Rank D")
+    score_rank_text_s: Sprite = sprite("Score Rank Text S")
+    score_rank_text_a: Sprite = sprite("Score Rank Text A")
+    score_rank_text_b: Sprite = sprite("Score Rank Text B")
+    score_rank_text_c: Sprite = sprite("Score Rank Text C")
+    score_rank_text_d: Sprite = sprite("Score Rank Text D")
+
+
+EMPTY_SPRITE = Sprite(-1)
+EMPTY_SPRITE_GROUP = SpriteGroup(-1, 1)
 
 EMPTY_SPRITE = Sprite(-1)
 EMPTY_SPRITE_GROUP = SpriteGroup(-1, 1)
@@ -502,12 +567,382 @@ EMPTY_ARROW_SPRITE_SET = ArrowSpriteSet(
 )
 
 
+class SlotGlowSpriteSet(Record):
+    perfect: Sprite
+    great: Sprite
+    good: Sprite
+
+    def get_sprite(self, judgment: Judgment = Judgment.PERFECT):
+        result = +Sprite
+        match judgment:
+            case Judgment.PERFECT:
+                result @= self.perfect
+            case Judgment.GREAT:
+                result @= self.great
+            case _:
+                result @= self.good
+        return result
+
+    @property
+    def available(self):
+        return self.perfect.is_available
+
+
+EMPTY_SLOT_GLOW_SPRITE_SET = SlotGlowSpriteSet(
+    perfect=EMPTY_SPRITE,
+    great=EMPTY_SPRITE,
+    good=EMPTY_SPRITE,
+)
+
+
+def first_available_slot_glow_sprite_set(*sets: SlotGlowSpriteSet) -> SlotGlowSpriteSet:
+    result = +EMPTY_SLOT_GLOW_SPRITE_SET
+    for s in sets:
+        if s.available:
+            result @= s
+            break
+    return result
+
+
+class ComboNumberSpriteSet(Record):
+    normal: SpriteGroup
+    ap: SpriteGroup
+    glow: SpriteGroup
+
+    def get_sprite(self, combo: int, combo_type: ComboType):
+        result = +Sprite
+        match combo_type:
+            case ComboType.NORMAL:
+                result @= self.normal[combo]
+            case ComboType.AP:
+                result @= self.ap[combo]
+            case ComboType.GLOW:
+                result @= self.glow[combo]
+            case _:
+                assert_never(combo_type)
+        return result
+
+    @property
+    def available(self):
+        return self.normal[0].is_available
+
+
+class ComboLabelSpriteSet(Record):
+    normal: Sprite
+    ap: Sprite
+    glow: Sprite
+
+    def get_sprite(self, combo_type: ComboType):
+        result = +Sprite
+        match combo_type:
+            case ComboType.NORMAL:
+                result @= self.normal
+            case ComboType.AP:
+                result @= self.ap
+            case ComboType.GLOW:
+                result @= self.glow
+            case _:
+                assert_never(combo_type)
+        return result
+
+    @property
+    def available(self):
+        return self.normal.is_available
+
+
+class JudgmentSpriteSet(Record):
+    perfect: Sprite
+    great: Sprite
+    good: Sprite
+    bad: Sprite
+    miss: Sprite
+    auto: Sprite
+
+    def get_bad(self, judgment: Judgment, windows_bad: Interval, accuracy: float, check_pass: bool):
+        if Options.auto_judgment and is_watch() and not is_replay():
+            return JudgmentType.AUTO
+        elif (
+            judgment == Judgment.MISS
+            and windows_bad != Interval(-1, -1)
+            and (windows_bad.start <= accuracy <= windows_bad.end or windows_bad == Interval(0, 0))
+            and check_pass
+        ):
+            return JudgmentType.BAD
+        else:
+            return judgment
+
+    def get_sprite(self, judgment_type: Judgment, windows_bad: Interval, accuracy: float, check_pass: bool):
+        result = +Sprite
+        match self.get_bad(judgment_type, windows_bad, accuracy, check_pass):
+            case JudgmentType.PERFECT:
+                result @= self.perfect
+            case JudgmentType.GREAT:
+                result @= self.great
+            case JudgmentType.GOOD:
+                result @= self.good
+            case JudgmentType.BAD:
+                result @= self.bad
+            case JudgmentType.MISS:
+                result @= self.miss
+            case JudgmentType.AUTO:
+                result @= self.auto
+        return result
+
+    @property
+    def available(self):
+        return self.perfect.is_available
+
+
+class AccuracySpriteSet(Record):
+    fast: Sprite
+    late: Sprite
+    flick: Sprite
+
+    def get_accuracy(self, judgment: Judgment, windows: Interval, accuracy: float, wrong_way: bool) -> AccuracyType:
+        if judgment != Judgment.PERFECT:
+            if wrong_way:
+                return AccuracyType.Flick
+            elif windows.start > accuracy:
+                return AccuracyType.Fast
+            else:
+                return AccuracyType.Late
+        else:
+            return AccuracyType.NONE
+
+    def get_sprite(self, judgment: Judgment, windows: Interval, accuracy: float, wrong_way: bool):
+        result = +Sprite
+        match self.get_accuracy(judgment, windows, accuracy, wrong_way):
+            case AccuracyType.Fast:
+                result @= self.fast
+            case AccuracyType.Late:
+                result @= self.late
+            case AccuracyType.Flick:
+                result @= self.flick
+        return result
+
+    @property
+    def available(self):
+        return self.fast.is_available
+
+
+class FeverGaugeSpriteSet(Record):
+    yellow: Sprite
+    rainbow: Sprite
+
+    def get_sprite(self, percentage: float):
+        result = +Sprite
+        if percentage >= 0.78:
+            result @= self.rainbow
+        else:
+            result @= self.yellow
+        return result
+
+    @property
+    def available(self):
+        return self.yellow.is_available
+
+
+class SkillIconSpriteSet(Record):
+    icon: SpriteGroup
+
+    def get_sprite(self, num: int):
+        result = +Sprite
+        result = self.icon[(num) % 5]
+        return result
+
+    @property
+    def available(self):
+        return self.icon[0].is_available
+
+
+class SkillLevelSpriteSet(Record):
+    skill: SpriteGroup
+
+    def get_sprite(self, level: int):
+        result = +Sprite
+        result = self.skill[level - 1]
+        return result
+
+    @property
+    def available(self):
+        return self.skill[0].is_available
+
+
+class SkillEffects(IntEnum):
+    SCORE = 0
+    HEAL = 1
+    JUDGMENT = 2
+
+
+class SkillValueSpriteSet(Record):
+    score: Sprite
+    heal: Sprite
+    judgment: Sprite
+
+    def get_sprite(self, level: int, effect: SkillEffects):
+        result = +Sprite
+        match effect:
+            case SkillEffects.SCORE:
+                result @= self.score
+            case SkillEffects.HEAL:
+                result @= self.heal
+            case SkillEffects.JUDGMENT:
+                result @= self.judgment
+            case _:
+                assert_never(effect)
+        return result
+
+    @property
+    def available(self):
+        return self.score.is_available
+
+
+class UINumberSpriteSet(Record):
+    ui: SpriteGroup
+
+    def get_sprite(self, number: int):
+        return self.ui[number]
+
+    @property
+    def available(self):
+        return self.ui[0].is_available
+
+
+class LifeBarType(IntEnum):
+    PAUSE = 0
+    SKIP = 1
+    DISABLE = 2
+
+
+class LifeBarSpriteSet(Record):
+    pause: Sprite
+    skip: Sprite
+    disable: Sprite
+
+    def get_sprite(self, bar_type: LifeBarType):
+        result = +Sprite
+        match bar_type:
+            case LifeBarType.PAUSE:
+                result = self.pause
+            case LifeBarType.SKIP:
+                result = self.skip
+            case LifeBarType.DISABLE:
+                result = self.disable
+            case _:
+                assert_never(bar_type)
+        return result
+
+    @property
+    def available(self):
+        return self.pause.is_available
+
+
+class LifeGaugeSpriteSet(Record):
+    normal: Sprite
+    danger: Sprite
+
+    def get_sprite(self, life: int):
+        result = +Sprite
+        if life > 400:
+            result @= self.normal
+        else:
+            result @= self.danger
+        return result
+
+    @property
+    def available(self):
+        return self.normal.is_available
+
+
+class LifeSpriteSet(Record):
+    bar: LifeBarSpriteSet
+    gauge: LifeGaugeSpriteSet
+
+    @property
+    def available(self):
+        return self.bar.available
+
+
+class ScoreGaugeType(IntEnum):
+    NORMAL = 0
+    MASK = 1
+
+
+class ScoreGaugeSpriteSet(Record):
+    normal: Sprite
+    mask: Sprite
+
+    def get_sprite(self, gauge_type: ScoreGaugeType):
+        result = +Sprite
+        match gauge_type:
+            case ScoreGaugeType.NORMAL:
+                result = self.normal
+            case ScoreGaugeType.MASK:
+                result = self.mask
+            case _:
+                assert_never(gauge_type)
+        return result
+
+    @property
+    def available(self):
+        return self.normal.is_available
+
+
+class ScoreRankType(IntEnum):
+    S = 0
+    A = 1
+    B = 2
+    C = 3
+    D = 4
+
+
+class ScoreRankSpriteSet(Record):
+    s: Sprite
+    a: Sprite
+    b: Sprite
+    c: Sprite
+    d: Sprite
+
+    def get_sprite(self, score_type: ScoreRankType):
+        result = +Sprite
+        match score_type:
+            case ScoreRankType.S:
+                result = self.s
+            case ScoreRankType.A:
+                result = self.a
+            case ScoreRankType.B:
+                result = self.b
+            case ScoreRankType.C:
+                result = self.c
+            case ScoreRankType.D:
+                result = self.d
+            case _:
+                assert_never(score_type)
+        return result
+
+    @property
+    def available(self):
+        return self.s.is_available
+
+
+class ScoreSpriteSet(Record):
+    bar: Sprite
+    panel: Sprite
+    gauge: ScoreGaugeSpriteSet
+    rank: ScoreRankSpriteSet
+    rank_text: ScoreRankSpriteSet
+
+    @property
+    def available(self):
+        return self.bar.is_available
+
+
 class NoteSpriteSet(Record):
     body: BodySpriteSet
     arrow: ArrowSpriteSet
     tick: Sprite
     slot: Sprite
-    slot_glow: Sprite
+    slot_glow: SlotGlowSpriteSet
 
 
 EMPTY_NOTE_SPRITE_SET = NoteSpriteSet(
@@ -515,7 +950,7 @@ EMPTY_NOTE_SPRITE_SET = NoteSpriteSet(
     arrow=EMPTY_ARROW_SPRITE_SET,
     tick=EMPTY_SPRITE,
     slot=EMPTY_SPRITE,
-    slot_glow=EMPTY_SPRITE,
+    slot_glow=EMPTY_SLOT_GLOW_SPRITE_SET,
 )
 
 
@@ -576,9 +1011,11 @@ note_cyan_body_sprites = BodySpriteSet.of_normal(
     middle=BaseSkin.note_cyan_middle,
     right=BaseSkin.note_cyan_right,
 )
+
 note_cyan_fallback_body_sprites = BodySpriteSet.of_normal_fallback(
     fallback=BaseSkin.note_cyan_fallback,
 )
+
 note_green_body_sprites = BodySpriteSet.of_normal(
     left=BaseSkin.note_green_left,
     middle=BaseSkin.note_green_middle,
@@ -643,7 +1080,6 @@ critical_down_flick_note_body_sprites = BodySpriteSet.of_normal(
     middle=BaseSkin.critical_down_flick_note_middle,
     right=BaseSkin.critical_down_flick_note_right,
 )
-
 flick_arrow_red_sprites = ArrowSpriteSet.of_normal(
     up=BaseSkin.flick_arrow_red_up,
     up_left=BaseSkin.flick_arrow_red_up_left,
@@ -674,7 +1110,6 @@ critical_flick_arrow_sprites = ArrowSpriteSet.of_normal(
     down=BaseSkin.critical_flick_arrow_down,
     down_left=BaseSkin.critical_flick_arrow_down_left,
 )
-
 trace_note_green_body_sprites = BodySpriteSet.of_slim(
     left=BaseSkin.trace_note_green_left,
     middle=BaseSkin.trace_note_green_middle,
@@ -765,11 +1200,81 @@ critical_active_slide_connector_sprites = ActiveConnectionSpriteSet.of_normal(
     normal=BaseSkin.critical_active_slide_connection_normal,
     active=BaseSkin.critical_active_slide_connection_active,
 )
+slot_glow_cyan_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_cyan, great=BaseSkin.slot_glow_cyan_great, good=BaseSkin.slot_glow_cyan_good
+)
+slot_glow_green_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_green, great=BaseSkin.slot_glow_green, good=BaseSkin.slot_glow_green
+)
+slot_glow_red_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_red, great=BaseSkin.slot_glow_red, good=BaseSkin.slot_glow_red
+)
+slot_glow_yellow_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_yellow, great=BaseSkin.slot_glow_yellow, good=BaseSkin.slot_glow_yellow
+)
+slot_glow_yellow_flick_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_yellow_flick, great=BaseSkin.slot_glow_yellow_flick, good=BaseSkin.slot_glow_yellow_flick
+)
+slot_glow_yellow_slider_tap_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_yellow_slider_tap,
+    great=BaseSkin.slot_glow_yellow_slider_tap,
+    good=BaseSkin.slot_glow_yellow_slider_tap,
+)
+slot_glow_normal_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_normal, great=BaseSkin.slot_glow_normal, good=BaseSkin.slot_glow_normal
+)
+slot_glow_slide_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_slide, great=BaseSkin.slot_glow_slide, good=BaseSkin.slot_glow_slide
+)
+slot_glow_flick_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_flick, great=BaseSkin.slot_glow_flick, good=BaseSkin.slot_glow_flick
+)
+slot_glow_down_flick_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_down_flick, great=BaseSkin.slot_glow_down_flick, good=BaseSkin.slot_glow_down_flick
+)
+slot_glow_critical_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_critical, great=BaseSkin.slot_glow_critical, good=BaseSkin.slot_glow_critical
+)
+slot_glow_critical_slide_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_critical_slide,
+    great=BaseSkin.slot_glow_critical_slide,
+    good=BaseSkin.slot_glow_critical_slide,
+)
+slot_glow_critical_flick_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_critical_flick,
+    great=BaseSkin.slot_glow_critical_flick,
+    good=BaseSkin.slot_glow_critical_flick,
+)
+slot_glow_critical_down_flick_sprites = SlotGlowSpriteSet(
+    perfect=BaseSkin.slot_glow_critical_down_flick,
+    great=BaseSkin.slot_glow_critical_down_flick,
+    good=BaseSkin.slot_glow_critical_down_flick,
+)
+life_bar = LifeBarSpriteSet(
+    pause=BaseSkin.life_bar_pause, skip=BaseSkin.life_bar_skip, disable=BaseSkin.life_bar_disable
+)
+life_gauge = LifeGaugeSpriteSet(normal=BaseSkin.life_bar_gauge_normal, danger=BaseSkin.life_bar_gauge_danger)
+score_gauge = ScoreGaugeSpriteSet(normal=BaseSkin.score_bar_gauge, mask=BaseSkin.score_bar_mask)
+score_rank = ScoreRankSpriteSet(
+    s=BaseSkin.score_rank_s,
+    a=BaseSkin.score_rank_a,
+    b=BaseSkin.score_rank_b,
+    c=BaseSkin.score_rank_c,
+    d=BaseSkin.score_rank_d,
+)
+score_rank_text = ScoreRankSpriteSet(
+    s=BaseSkin.score_rank_text_s,
+    a=BaseSkin.score_rank_text_a,
+    b=BaseSkin.score_rank_text_b,
+    c=BaseSkin.score_rank_text_c,
+    d=BaseSkin.score_rank_text_d,
+)
 
 
 @level_data
 class ActiveSkin:
     cover: Sprite
+    background: Sprite
 
     lane: Sprite
     judgment_line: Sprite
@@ -793,6 +1298,12 @@ class ActiveSkin:
     judgment_black: JudgmentSpriteSet
 
     sekai_stage: Sprite
+    sekai_stage_lane: Sprite
+    sekai_stage_cover: Sprite
+
+    sekai_stage_fever: Sprite
+    sekai_stage_fever_tablet: Sprite
+    sekai_fever_gauge: FeverGaugeSpriteSet
 
     sim_line: Sprite
 
@@ -813,7 +1324,6 @@ class ActiveSkin:
     normal_slide_tick_note: NoteSpriteSet
     critical_slide_tick_note: NoteSpriteSet
     damage_note: NoteSpriteSet
-
     active_slide_connector: ActiveConnectorSpriteSet
     critical_active_slide_connector: ActiveConnectorSpriteSet
 
@@ -832,10 +1342,29 @@ class ActiveSkin:
     timescale_change_line: Sprite
     camera_line: Sprite
     camera_target_line: Sprite
+    skill_line: Sprite
+    fever_chance_line: Sprite
+    fever_start_line: Sprite
+
+    judgment: JudgmentSpriteSet
+    combo_number: ComboNumberSpriteSet
+    combo_label: ComboLabelSpriteSet
+    accuracy_warning: AccuracySpriteSet
+    damage_flash: Sprite
+    auto_live: Sprite
+    skill_bar: Sprite
+    skill_level: SkillLevelSpriteSet
+    skill_percent: Sprite
+    skill_value: SkillValueSpriteSet
+    skill_icon: SkillIconSpriteSet
+    ui_number: UINumberSpriteSet
+    life: LifeSpriteSet
+    score: ScoreSpriteSet
 
 
 def init_skin():
     ActiveSkin.cover = BaseSkin.cover
+    ActiveSkin.background = BaseSkin.background
 
     ActiveSkin.lane = BaseSkin.lane
     ActiveSkin.judgment_line = BaseSkin.judgment_line
@@ -955,9 +1484,16 @@ def init_skin():
     )
 
     ActiveSkin.sekai_stage = BaseSkin.sekai_stage
+    ActiveSkin.sekai_stage_lane = BaseSkin.sekai_stage_lane
+    ActiveSkin.sekai_stage_cover = BaseSkin.sekai_stage_cover
+
+    ActiveSkin.sekai_stage_fever = BaseSkin.sekai_stage_fever
+    ActiveSkin.sekai_stage_fever_tablet = BaseSkin.sekai_stage_fever_tablet
+    ActiveSkin.sekai_fever_gauge = FeverGaugeSpriteSet(
+        yellow=BaseSkin.sekai_fever_gauge_yellow, rainbow=BaseSkin.sekai_fever_gauge_rainbow
+    )
 
     ActiveSkin.sim_line = BaseSkin.sim_line
-
     ActiveSkin.normal_note = NoteSpriteSet(
         body=first_available_body_sprite_set(
             normal_note_body_sprites,
@@ -970,9 +1506,9 @@ def init_skin():
             BaseSkin.slot_normal,
             BaseSkin.slot_cyan,
         ),
-        slot_glow=first_available_sprite(
-            BaseSkin.slot_glow_normal,
-            BaseSkin.slot_glow_cyan,
+        slot_glow=first_available_slot_glow_sprite_set(
+            slot_glow_normal_sprites,
+            slot_glow_cyan_sprites,
         ),
     )
     ActiveSkin.slide_note = NoteSpriteSet(
@@ -987,9 +1523,9 @@ def init_skin():
             BaseSkin.slot_slide,
             BaseSkin.slot_green,
         ),
-        slot_glow=first_available_sprite(
-            BaseSkin.slot_glow_slide,
-            BaseSkin.slot_glow_green,
+        slot_glow=first_available_slot_glow_sprite_set(
+            slot_glow_slide_sprites,
+            slot_glow_green_sprites,
         ),
     )
     ActiveSkin.flick_note = NoteSpriteSet(
@@ -1008,9 +1544,9 @@ def init_skin():
             BaseSkin.slot_flick,
             BaseSkin.slot_red,
         ),
-        slot_glow=first_available_sprite(
-            BaseSkin.slot_glow_flick,
-            BaseSkin.slot_glow_red,
+        slot_glow=first_available_slot_glow_sprite_set(
+            slot_glow_flick_sprites,
+            slot_glow_red_sprites,
         ),
     )
     ActiveSkin.down_flick_note = NoteSpriteSet(
@@ -1031,10 +1567,10 @@ def init_skin():
             BaseSkin.slot_flick,
             BaseSkin.slot_red,
         ),
-        slot_glow=first_available_sprite(
-            BaseSkin.slot_glow_down_flick,
-            BaseSkin.slot_glow_flick,
-            BaseSkin.slot_glow_red,
+        slot_glow=first_available_slot_glow_sprite_set(
+            slot_glow_down_flick_sprites,
+            slot_glow_flick_sprites,
+            slot_glow_red_sprites,
         ),
     )
     ActiveSkin.critical_note = NoteSpriteSet(
@@ -1049,9 +1585,9 @@ def init_skin():
             BaseSkin.slot_critical,
             BaseSkin.slot_yellow,
         ),
-        slot_glow=first_available_sprite(
-            BaseSkin.slot_glow_critical,
-            BaseSkin.slot_glow_yellow,
+        slot_glow=first_available_slot_glow_sprite_set(
+            slot_glow_critical_sprites,
+            slot_glow_yellow_sprites,
         ),
     )
     ActiveSkin.critical_slide_note = NoteSpriteSet(
@@ -1069,11 +1605,11 @@ def init_skin():
             BaseSkin.slot_critical,
             BaseSkin.slot_yellow,
         ),
-        slot_glow=first_available_sprite(
-            BaseSkin.slot_glow_critical_slide,
-            BaseSkin.slot_glow_yellow_slider_tap,
-            BaseSkin.slot_glow_critical,
-            BaseSkin.slot_glow_yellow,
+        slot_glow=first_available_slot_glow_sprite_set(
+            slot_glow_critical_slide_sprites,
+            slot_glow_yellow_slider_tap_sprites,
+            slot_glow_critical_sprites,
+            slot_glow_yellow_sprites,
         ),
     )
     ActiveSkin.critical_flick_note = NoteSpriteSet(
@@ -1095,11 +1631,11 @@ def init_skin():
             BaseSkin.slot_critical,
             BaseSkin.slot_yellow,
         ),
-        slot_glow=first_available_sprite(
-            BaseSkin.slot_glow_critical_flick,
-            BaseSkin.slot_glow_yellow_flick,
-            BaseSkin.slot_glow_critical,
-            BaseSkin.slot_glow_yellow,
+        slot_glow=first_available_slot_glow_sprite_set(
+            slot_glow_critical_flick_sprites,
+            slot_glow_yellow_flick_sprites,
+            slot_glow_critical_sprites,
+            slot_glow_yellow_sprites,
         ),
     )
     ActiveSkin.critical_down_flick_note = NoteSpriteSet(
@@ -1123,12 +1659,12 @@ def init_skin():
             BaseSkin.slot_critical,
             BaseSkin.slot_yellow,
         ),
-        slot_glow=first_available_sprite(
-            BaseSkin.slot_glow_critical_down_flick,
-            BaseSkin.slot_glow_critical_flick,
-            BaseSkin.slot_glow_yellow_flick,
-            BaseSkin.slot_glow_critical,
-            BaseSkin.slot_glow_yellow,
+        slot_glow=first_available_slot_glow_sprite_set(
+            slot_glow_critical_down_flick_sprites,
+            slot_glow_critical_flick_sprites,
+            slot_glow_yellow_flick_sprites,
+            slot_glow_critical_sprites,
+            slot_glow_yellow_sprites,
         ),
     )
     ActiveSkin.trace_note = NoteSpriteSet(
@@ -1144,7 +1680,7 @@ def init_skin():
             BaseSkin.trace_note_green_tick_fallback,
         ),
         slot=EMPTY_SPRITE,
-        slot_glow=EMPTY_SPRITE,
+        slot_glow=EMPTY_SLOT_GLOW_SPRITE_SET,
     )
     ActiveSkin.trace_flick_note = NoteSpriteSet(
         body=first_available_body_sprite_set(
@@ -1163,7 +1699,7 @@ def init_skin():
             BaseSkin.trace_note_red_tick_fallback,
         ),
         slot=EMPTY_SPRITE,
-        slot_glow=EMPTY_SPRITE,
+        slot_glow=EMPTY_SLOT_GLOW_SPRITE_SET,
     )
     ActiveSkin.trace_down_flick_note = NoteSpriteSet(
         body=first_available_body_sprite_set(
@@ -1184,7 +1720,7 @@ def init_skin():
             BaseSkin.trace_note_red_tick_fallback,
         ),
         slot=EMPTY_SPRITE,
-        slot_glow=EMPTY_SPRITE,
+        slot_glow=EMPTY_SLOT_GLOW_SPRITE_SET,
     )
     ActiveSkin.critical_trace_note = NoteSpriteSet(
         body=first_available_body_sprite_set(
@@ -1199,7 +1735,7 @@ def init_skin():
             BaseSkin.trace_note_yellow_tick_fallback,
         ),
         slot=EMPTY_SPRITE,
-        slot_glow=EMPTY_SPRITE,
+        slot_glow=EMPTY_SLOT_GLOW_SPRITE_SET,
     )
     ActiveSkin.critical_trace_flick_note = NoteSpriteSet(
         body=first_available_body_sprite_set(
@@ -1220,7 +1756,7 @@ def init_skin():
             BaseSkin.trace_note_yellow_tick_fallback,
         ),
         slot=EMPTY_SPRITE,
-        slot_glow=EMPTY_SPRITE,
+        slot_glow=EMPTY_SLOT_GLOW_SPRITE_SET,
     )
     ActiveSkin.critical_trace_down_flick_note = NoteSpriteSet(
         body=first_available_body_sprite_set(
@@ -1243,7 +1779,7 @@ def init_skin():
             BaseSkin.trace_note_yellow_tick_fallback,
         ),
         slot=EMPTY_SPRITE,
-        slot_glow=EMPTY_SPRITE,
+        slot_glow=EMPTY_SLOT_GLOW_SPRITE_SET,
     )
     ActiveSkin.normal_slide_tick_note = NoteSpriteSet(
         body=EMPTY_BODY_SPRITE_SET,
@@ -1252,7 +1788,7 @@ def init_skin():
             BaseSkin.normal_slide_tick_note, BaseSkin.slide_tick_note_green, BaseSkin.slide_tick_note_green_fallback
         ),
         slot=EMPTY_SPRITE,
-        slot_glow=EMPTY_SPRITE,
+        slot_glow=EMPTY_SLOT_GLOW_SPRITE_SET,
     )
     ActiveSkin.critical_slide_tick_note = NoteSpriteSet(
         body=EMPTY_BODY_SPRITE_SET,
@@ -1261,7 +1797,7 @@ def init_skin():
             BaseSkin.critical_slide_tick_note, BaseSkin.slide_tick_note_yellow, BaseSkin.slide_tick_note_yellow_fallback
         ),
         slot=EMPTY_SPRITE,
-        slot_glow=EMPTY_SPRITE,
+        slot_glow=EMPTY_SLOT_GLOW_SPRITE_SET,
     )
     ActiveSkin.damage_note = NoteSpriteSet(
         body=first_available_body_sprite_set(
@@ -1272,7 +1808,7 @@ def init_skin():
         arrow=EMPTY_ARROW_SPRITE_SET,
         tick=EMPTY_SPRITE,
         slot=EMPTY_SPRITE,
-        slot_glow=EMPTY_SPRITE,
+        slot_glow=EMPTY_SLOT_GLOW_SPRITE_SET,
     )
 
     ActiveSkin.active_slide_connector = ActiveConnectorSpriteSet(
@@ -1341,3 +1877,42 @@ def init_skin():
     ActiveSkin.timescale_change_line = BaseSkin.timescale_change_line
     ActiveSkin.camera_line = BaseSkin.camera_line
     ActiveSkin.camera_target_line = BaseSkin.camera_target_line
+    ActiveSkin.skill_line = BaseSkin.skill_line
+    ActiveSkin.fever_chance_line = BaseSkin.fever_chance_line
+    ActiveSkin.fever_start_line = BaseSkin.fever_start_line
+    ActiveSkin.judgment = JudgmentSpriteSet(
+        perfect=BaseSkin.perfect,
+        great=BaseSkin.great,
+        good=BaseSkin.good,
+        bad=BaseSkin.bad,
+        miss=BaseSkin.miss,
+        auto=BaseSkin.auto,
+    )
+
+    ActiveSkin.combo_number = ComboNumberSpriteSet(
+        normal=BaseSkin.combo_number, ap=BaseSkin.ap_combo_number, glow=BaseSkin.combo_number_glow
+    )
+    ActiveSkin.combo_label = ComboLabelSpriteSet(
+        normal=BaseSkin.combo_label, ap=BaseSkin.ap_combo_label, glow=BaseSkin.combo_label_glow
+    )
+    ActiveSkin.accuracy_warning = AccuracySpriteSet(
+        fast=BaseSkin.fast_warning, late=BaseSkin.late_warning, flick=BaseSkin.flick_warning
+    )
+    ActiveSkin.damage_flash = BaseSkin.damage_flash
+    ActiveSkin.auto_live = BaseSkin.auto_live
+    ActiveSkin.skill_bar = BaseSkin.skill_bar
+    ActiveSkin.skill_icon = SkillIconSpriteSet(icon=BaseSkin.skill_icon)
+    ActiveSkin.skill_level = SkillLevelSpriteSet(skill=BaseSkin.skill_level)
+    ActiveSkin.skill_percent = BaseSkin.skill_percent
+    ActiveSkin.skill_value = SkillValueSpriteSet(
+        score=BaseSkin.skill_value_score, heal=BaseSkin.skill_value_life, judgment=BaseSkin.skill_value_judgment
+    )
+    ActiveSkin.ui_number = UINumberSpriteSet(ui=BaseSkin.ui_number)
+    ActiveSkin.life = LifeSpriteSet(bar=life_bar, gauge=life_gauge)
+    ActiveSkin.score = ScoreSpriteSet(
+        bar=BaseSkin.score_bar,
+        panel=BaseSkin.score_bar_panel,
+        gauge=score_gauge,
+        rank=score_rank,
+        rank_text=score_rank_text,
+    )

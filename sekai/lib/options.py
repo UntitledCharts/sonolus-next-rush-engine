@@ -201,10 +201,11 @@ class Options:
         scope="Sekai",
         default=True,
     )
-    hide_ui: bool = toggle_option(
+    hide_ui: int = select_option(
         name="Hide UI",
-        scope="Sekai",
-        default=False,
+        scope="Rush",
+        default=0,
+        values=["None", "Sonolus", "Sonolus + Custom Judgment", "All"],
     )
     show_lane: bool = toggle_option(
         name=StandardText.STAGE,
@@ -310,4 +311,18 @@ class Options:
         "Note Margin",
         "Alternative Approach Curve",
         "Disable Timescale",
+        StandardText.VERSION,
+        "Using Custom Combo",
+        "Custom Combo Number Distance",
+        "Ap Effect",
+        "Using Combo Judgment",
+        "Late/Fast/Flick",
+        "Using Auto Judgment",
+        "Using Custom Damage Effect",
+        "Using Custom Tag",
+        StandardText.STAGE_ALPHA,
+        StandardText.LANE_ALPHA,
+        "Fever Effect",
+        "Forced Fever Chance",
+        "Skill Effect",
     )
