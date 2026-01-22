@@ -491,13 +491,13 @@ def draw_life_number(number: int, z: float):
             y_offset = 0.04314
             h = 0.06141 * ui.secondary_metric_config.scale * scale_ratio
             w = h * 0.714
-            digit_gap = w * (-0.04 + Options.combo_distance)
+            digit_gap = w * -0.04
         case 1:
             margin_offset = 0.55
             y_offset = 0.06314
             h = 0.08141 * ui.secondary_metric_config.scale * scale_ratio
             w = h * 0.714
-            digit_gap = w * (-0.1 + Options.combo_distance)
+            digit_gap = w * -0.1
 
     bar_base_w = 0.827
     final_scale = ui.secondary_metric_config.scale * scale_ratio
@@ -554,13 +554,13 @@ def draw_score_bar_number(number: int, z: float):
             y_offset = -0.09
             h = 0.09141 * ui.primary_metric_config.scale * scale_ratio
             w = h * 0.705
-            digit_gap = w * (-0.04 + Options.combo_distance)
+            digit_gap = w * -0.04
         case 1:
             margin_offset = 1.025
             y_offset = -0.07
             h = 0.14141 * ui.primary_metric_config.scale * scale_ratio
             w = h * 0.705
-            digit_gap = w * (-0.3 + Options.combo_distance)
+            digit_gap = w * -0.3
 
     bar_base_w = 0.27 * 4.6
     final_scale = ui.primary_metric_config.scale * scale_ratio
@@ -621,13 +621,13 @@ def draw_score_bar_raw_number(number: int, z: float, time: float):
             y_offset = -0.102
             h = 0.06 * ui.primary_metric_config.scale * scale_ratio
             w = h * 0.705
-            digit_gap = w * (-0.04 + Options.combo_distance)
+            digit_gap = w * -0.04
         case 1:
             margin_offset = 0.51 + (0.442 - 0.51) * clamp(time / 0.2, 0, 1)
             y_offset = -0.085
             h = 0.09 * ui.primary_metric_config.scale * scale_ratio
             w = h * 0.705
-            digit_gap = w * (-0.3 + Options.combo_distance)
+            digit_gap = w * -0.3
 
     bar_base_w = 0.27 * 4.6
     final_scale = ui.primary_metric_config.scale * scale_ratio
