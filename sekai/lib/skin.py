@@ -830,7 +830,7 @@ class LifeBarSpriteSet(Record):
 
     def get_sprite(self, bar_type: LifeBarType, life):
         result = +Sprite
-        if life < 200:
+        if life < 200 and Options.version == 1:
             match bar_type:
                 case LifeBarType.PAUSE:
                     result @= self.danger_pause
