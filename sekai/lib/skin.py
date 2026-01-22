@@ -354,9 +354,10 @@ class BaseSkin:
     flick_warning: Sprite = sprite("Flick Warning")
     damage_flash: Sprite = sprite("Damage Flash")
     auto_live: Sprite = sprite("Auto Live")
-    skill_bar: Sprite = sprite("Skill Bar")
+    skill_bar_life: Sprite = sprite("Skill Bar Life")
+    skill_bar_score: Sprite = sprite("Skill Bar Score")
+    skill_bar_judgment: Sprite = sprite("Skill Bar Judgment")
     skill_level: SpriteGroup = sprite_group(f"Skill Level {i}" for i in range(1, 5))
-    skill_percent: Sprite = sprite("Skill Percent")
     skill_value_score: Sprite = sprite("Skill Value Score")
     skill_value_life: Sprite = sprite("Skill Value Life")
     skill_value_judgment: Sprite = sprite("Skill Value Judgment")
@@ -780,7 +781,7 @@ class SkillValueSpriteSet(Record):
     heal: Sprite
     judgment: Sprite
 
-    def get_sprite(self, level: int, effect: SkillEffects):
+    def get_sprite(self, effect: SkillEffects):
         result = +Sprite
         match effect:
             case SkillEffects.SCORE:
@@ -1336,11 +1337,13 @@ class ActiveSkin:
     accuracy_warning: AccuracySpriteSet
     damage_flash: Sprite
     auto_live: Sprite
-    skill_bar: Sprite
+    skill_bar_life: Sprite
+    skill_bar_score: Sprite
+    skill_bar_judgment: Sprite
     skill_level: SkillLevelSpriteSet
-    skill_percent: Sprite
     skill_value: SkillValueSpriteSet
     skill_icon: SkillIconSpriteSet
+    skill_judgment_line: Sprite
     ui_number: UINumberSpriteSet
     life: LifeSpriteSet
     score: ScoreSpriteSet
@@ -1884,13 +1887,15 @@ def init_skin():
     )
     ActiveSkin.damage_flash = BaseSkin.damage_flash
     ActiveSkin.auto_live = BaseSkin.auto_live
-    ActiveSkin.skill_bar = BaseSkin.skill_bar
+    ActiveSkin.skill_bar_life = BaseSkin.skill_bar_life
+    ActiveSkin.skill_bar_score = BaseSkin.skill_bar_score
+    ActiveSkin.skill_bar_judgment = BaseSkin.skill_bar_judgment
     ActiveSkin.skill_icon = SkillIconSpriteSet(icon=BaseSkin.skill_icon)
     ActiveSkin.skill_level = SkillLevelSpriteSet(skill=BaseSkin.skill_level)
-    ActiveSkin.skill_percent = BaseSkin.skill_percent
     ActiveSkin.skill_value = SkillValueSpriteSet(
         score=BaseSkin.skill_value_score, heal=BaseSkin.skill_value_life, judgment=BaseSkin.skill_value_judgment
     )
+    ActiveSkin.skill_judgment_line = BaseSkin.slot_cyan
     ActiveSkin.ui_number = UINumberSpriteSet(ui=BaseSkin.ui_number)
     ActiveSkin.life = LifeSpriteSet(bar=life_bar, gauge=life_gauge)
     ActiveSkin.score = ScoreSpriteSet(
