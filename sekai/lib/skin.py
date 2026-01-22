@@ -363,16 +363,20 @@ class BaseSkin:
     skill_value_judgment: Sprite = sprite("Skill Value Judgment")
     skill_icon: SpriteGroup = sprite_group(f"Skill Icon {i}" for i in range(1, 6))
     ui_number: SpriteGroup = sprite_group(f"UI Number {i}" for i in range(12))
+    life_number: SpriteGroup = sprite_group(f"Life Number {i}" for i in range(10))
     life_bar_pause: Sprite = sprite("Life Bar Pause")
     life_bar_skip: Sprite = sprite("Life Bar Skip")
     life_bar_disable: Sprite = sprite("Life Bar Disable")
+    life_bar_danger_pause: Sprite = sprite("Life Bar Danger Pause")
+    life_bar_danger_skip: Sprite = sprite("Life Bar Danger Skip")
+    life_bar_danger_disable: Sprite = sprite("Life Bar Danger Disable")
     life_bar_gauge_normal: Sprite = sprite("Life Bar Gauge Normal")
     life_bar_gauge_danger: Sprite = sprite("Life Bar Gauge Danger")
     score_bar: Sprite = sprite("Score Bar")
     score_bar_panel: Sprite = sprite("Score Bar Panel")
     score_bar_gauge: Sprite = sprite("Score Bar Gauge")
     score_bar_mask: Sprite = sprite("Score Bar Mask")
-    score_bar_mask_edge: Sprite = sprite("Score Bar Mask Edge")
+    score_bar_cover: Sprite = sprite("Score Bar Cover")
     score_rank_s: Sprite = sprite("Score Rank S")
     score_rank_a: Sprite = sprite("Score Rank A")
     score_rank_b: Sprite = sprite("Score Rank B")
@@ -818,20 +822,34 @@ class LifeBarType(IntEnum):
 
 class LifeBarSpriteSet(Record):
     pause: Sprite
+    danger_pause: Sprite
     skip: Sprite
+    danger_skip: Sprite
     disable: Sprite
+    danger_disable: Sprite
 
-    def get_sprite(self, bar_type: LifeBarType):
+    def get_sprite(self, bar_type: LifeBarType, life):
         result = +Sprite
-        match bar_type:
-            case LifeBarType.PAUSE:
-                result = self.pause
-            case LifeBarType.SKIP:
-                result = self.skip
-            case LifeBarType.DISABLE:
-                result = self.disable
-            case _:
-                assert_never(bar_type)
+        if life < 200:
+            match bar_type:
+                case LifeBarType.PAUSE:
+                    result @= self.danger_pause
+                case LifeBarType.SKIP:
+                    result @= self.danger_skip
+                case LifeBarType.DISABLE:
+                    result @= self.danger_disable
+                case _:
+                    assert_never(bar_type)
+        else:
+            match bar_type:
+                case LifeBarType.PAUSE:
+                    result @= self.pause
+                case LifeBarType.SKIP:
+                    result @= self.skip
+                case LifeBarType.DISABLE:
+                    result @= self.disable
+                case _:
+                    assert_never(bar_type)
         return result
 
     @property
@@ -845,7 +863,7 @@ class LifeGaugeSpriteSet(Record):
 
     def get_sprite(self, life: int):
         result = +Sprite
-        if life > 400:
+        if life > 200:
             result @= self.normal
         else:
             result @= self.danger
@@ -859,6 +877,7 @@ class LifeGaugeSpriteSet(Record):
 class LifeSpriteSet(Record):
     bar: LifeBarSpriteSet
     gauge: LifeGaugeSpriteSet
+    number: UINumberSpriteSet
 
     @property
     def available(self):
@@ -868,7 +887,7 @@ class LifeSpriteSet(Record):
 class ScoreGaugeSpriteSet(Record):
     normal: Sprite
     mask: Sprite
-    mask_edge: Sprite
+    cover: Sprite
 
 
 class ScoreRankType(IntEnum):
@@ -1234,11 +1253,16 @@ slot_glow_critical_down_flick_sprites = SlotGlowSpriteSet(
     good=BaseSkin.slot_glow_critical_down_flick,
 )
 life_bar = LifeBarSpriteSet(
-    pause=BaseSkin.life_bar_pause, skip=BaseSkin.life_bar_skip, disable=BaseSkin.life_bar_disable
+    pause=BaseSkin.life_bar_pause,
+    danger_pause=BaseSkin.life_bar_danger_pause,
+    skip=BaseSkin.life_bar_skip,
+    danger_skip=BaseSkin.life_bar_danger_skip,
+    disable=BaseSkin.life_bar_disable,
+    danger_disable=BaseSkin.life_bar_danger_disable,
 )
 life_gauge = LifeGaugeSpriteSet(normal=BaseSkin.life_bar_gauge_normal, danger=BaseSkin.life_bar_gauge_danger)
 score_gauge = ScoreGaugeSpriteSet(
-    normal=BaseSkin.score_bar_gauge, mask=BaseSkin.score_bar_mask, mask_edge=BaseSkin.score_bar_mask_edge
+    normal=BaseSkin.score_bar_gauge, mask=BaseSkin.score_bar_mask, cover=BaseSkin.score_bar_cover
 )
 score_rank = ScoreRankSpriteSet(
     s=BaseSkin.score_rank_s,
@@ -1897,7 +1921,7 @@ def init_skin():
     )
     ActiveSkin.skill_judgment_line = BaseSkin.slot_cyan
     ActiveSkin.ui_number = UINumberSpriteSet(ui=BaseSkin.ui_number)
-    ActiveSkin.life = LifeSpriteSet(bar=life_bar, gauge=life_gauge)
+    ActiveSkin.life = LifeSpriteSet(bar=life_bar, gauge=life_gauge, number=UINumberSpriteSet(ui=BaseSkin.life_number))
     ActiveSkin.score = ScoreSpriteSet(
         bar=BaseSkin.score_bar,
         panel=BaseSkin.score_bar_panel,

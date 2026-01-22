@@ -8,7 +8,6 @@ from sonolus.script.runtime import aspect_ratio, is_replay, is_watch, runtime_ui
 from sonolus.script.vec import Vec2
 
 from sekai.lib.layout import (
-    LIFE_BAR_BASE_Y,
     SCORE_BAR_BASE_Y,
     ComboType,
     Quad,
@@ -478,8 +477,28 @@ def draw_life_number(number: int, z: float):
             digit_count += 1
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
-    MARGIN = 0.28  # noqa: N806
-    margin_offset = 0.61
+    MARGIN = 0.28 if Options.version == 0 else 0.275  # noqa: N806
+    LIFE_BAR_BASE_Y = 0.887 if Options.version == 0 else 0.875  # noqa: N806
+
+    y_offset = 0
+    margin_offset = 0
+    h = 0
+    w = 0
+    digit_gap = 0
+    match Options.version:
+        case 0:
+            margin_offset = 0.61
+            y_offset = 0.04314
+            h = 0.06141 * ui.secondary_metric_config.scale * scale_ratio
+            w = h * 0.714
+            digit_gap = w * (-0.04 + Options.combo_distance)
+        case 1:
+            margin_offset = 0.55
+            y_offset = 0.06314
+            h = 0.08141 * ui.secondary_metric_config.scale * scale_ratio
+            w = h * 0.714
+            digit_gap = w * (-0.1 + Options.combo_distance)
+
     bar_base_w = 0.827
     final_scale = ui.secondary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
@@ -487,15 +506,9 @@ def draw_life_number(number: int, z: float):
     bar_center_x = screen().r - MARGIN - (current_bar_w / 2)
     number_center_x = bar_center_x + (margin_offset * final_scale)
 
-    y_offset = 0.04314
     center_y = LIFE_BAR_BASE_Y + (y_offset * final_scale)
 
     screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=center_y)
-
-    h = 0.06141 * ui.secondary_metric_config.scale * scale_ratio
-    w = h * 0.714
-
-    digit_gap = w * (-0.04 + Options.combo_distance)
 
     drawing_ui = UILayout(
         core=UICoreConfig(number, digit_count, mode=UIMode.LIFE),
@@ -528,8 +541,27 @@ def draw_score_bar_number(number: int, z: float):
             digit_count += 1
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
-    MARGIN = 0.3  # noqa: N806
-    margin_offset = 1.02
+    MARGIN = 0.3 if Options.version == 0 else 0.2  # noqa: N806
+
+    margin_offset = 0
+    y_offset = 0
+    h = 0
+    w = 0
+    digit_gap = 0
+    match Options.version:
+        case 0:
+            margin_offset = 1.02
+            y_offset = -0.09
+            h = 0.09141 * ui.primary_metric_config.scale * scale_ratio
+            w = h * 0.705
+            digit_gap = w * (-0.04 + Options.combo_distance)
+        case 1:
+            margin_offset = 1.025
+            y_offset = -0.07
+            h = 0.14141 * ui.primary_metric_config.scale * scale_ratio
+            w = h * 0.705
+            digit_gap = w * (-0.3 + Options.combo_distance)
+
     bar_base_w = 0.27 * 4.6
     final_scale = ui.primary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
@@ -537,15 +569,9 @@ def draw_score_bar_number(number: int, z: float):
     bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
-    y_offset = -0.09
     center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
-
-    h = 0.09141 * ui.primary_metric_config.scale * scale_ratio
-    w = h * 0.705
-
-    digit_gap = w * (-0.04 + Options.combo_distance)
 
     drawing_ui = UILayout(
         core=UICoreConfig(number, digit_count, mode=UIMode.SCORE_BAR),
@@ -582,8 +608,27 @@ def draw_score_bar_raw_number(number: int, z: float, time: float):
             digit_count += 1
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
-    MARGIN = 0.3  # noqa: N806
-    margin_offset = 0.56 + (0.492 - 0.56) * clamp(time / 0.2, 0, 1)
+    MARGIN = 0.3 if Options.version == 0 else 0.2  # noqa: N806
+
+    margin_offset = 0
+    y_offset = 0
+    h = 0
+    w = 0
+    digit_gap = 0
+    match Options.version:
+        case 0:
+            margin_offset = 0.56 + (0.492 - 0.56) * clamp(time / 0.2, 0, 1)
+            y_offset = -0.102
+            h = 0.06 * ui.primary_metric_config.scale * scale_ratio
+            w = h * 0.705
+            digit_gap = w * (-0.04 + Options.combo_distance)
+        case 1:
+            margin_offset = 0.51 + (0.442 - 0.51) * clamp(time / 0.2, 0, 1)
+            y_offset = -0.085
+            h = 0.09 * ui.primary_metric_config.scale * scale_ratio
+            w = h * 0.705
+            digit_gap = w * (-0.3 + Options.combo_distance)
+
     bar_base_w = 0.27 * 4.6
     final_scale = ui.primary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
@@ -591,15 +636,9 @@ def draw_score_bar_raw_number(number: int, z: float, time: float):
     bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
-    y_offset = -0.102
     center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
-
-    h = 0.06 * ui.primary_metric_config.scale * scale_ratio
-    w = h * 0.705
-
-    digit_gap = w * (-0.04 + Options.combo_distance)
 
     drawing_ui = UILayout(
         core=UICoreConfig(number, digit_count, mode=UIMode.SCORE_ADD),
@@ -706,5 +745,7 @@ class UILayout(Record):
             b = unscaled_b + s_inv * self.common.center_y
 
             digit_layout = self.layout_combo_number(l=l, r=r, t=t, b=b)
-
-            ActiveSkin.ui_number.get_sprite(number=digit).draw(quad=digit_layout, z=z, a=a)
+            if self.core.mode == UIMode.LIFE:
+                ActiveSkin.life.number.get_sprite(number=digit).draw(quad=digit_layout, z=z, a=a)
+            else:
+                ActiveSkin.ui_number.get_sprite(number=digit).draw(quad=digit_layout, z=z, a=a)

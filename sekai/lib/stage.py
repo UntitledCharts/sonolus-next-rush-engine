@@ -52,7 +52,7 @@ from sekai.lib.layout import (
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, StageCoverMode
 from sekai.lib.particle import ActiveParticles
-from sekai.lib.skin import ActiveSkin, JudgmentSpriteSet, ScoreRankType
+from sekai.lib.skin import ActiveSkin, JudgmentSpriteSet, LifeBarType, ScoreRankType
 
 
 class JudgeLineColor(IntEnum):
@@ -958,11 +958,11 @@ def draw_life_bar(life, z_layer_score, z_layer_score_glow, last_time):
     )
     bar_layout = layout_life_bar()
     if is_multiplayer():
-        ActiveSkin.life.bar.disable.draw(bar_layout, z=z_layer_score)
+        ActiveSkin.life.bar.get_sprite(LifeBarType.DISABLE, life).draw(bar_layout, z=z_layer_score)
     elif last_time < time() and is_play():
-        ActiveSkin.life.bar.skip.draw(bar_layout, z=z_layer_score)
+        ActiveSkin.life.bar.get_sprite(LifeBarType.SKIP, life).draw(bar_layout, z=z_layer_score)
     else:
-        ActiveSkin.life.bar.pause.draw(bar_layout, z=z_layer_score)
+        ActiveSkin.life.bar.get_sprite(LifeBarType.PAUSE, life).draw(bar_layout, z=z_layer_score)
     gauge_layout = layout_life_gauge(life)
     ActiveSkin.life.gauge.get_sprite(life).draw(gauge_layout, z_layer_score_glow)
 
@@ -987,51 +987,53 @@ def draw_score_bar(
         return
     draw_score_bar_number(
         score,
-        z_layer_score_glow,
+        z_layer_score_bar_rate,
     )
-    draw_score_bar_raw_number(number=note_score, z=z_layer_score_bar, time=time() - note_time)
+    draw_score_bar_raw_number(number=note_score, z=z_layer_score_bar_rate, time=time() - note_time)
     bar_layout = layout_score_bar()
-    ActiveSkin.score.bar.draw(bar_layout, z=z_layer_score)
+    ActiveSkin.score.bar.draw(bar_layout, z=z_layer_score_bar)
     ActiveSkin.score.panel.draw(bar_layout, z=z_layer_score_bar_rate)
     rank = get_score_rank(score)
     if score > 0:
         gauge = get_gauge_progress(score)
-        gauge_mask = get_gauge_progress_mask(score)
         gauge_normal_layout = layout_score_gauge(score_type=ScoreGaugeType.NORMAL)
-        ActiveSkin.score.gauge.normal.draw(gauge_normal_layout, z=z_layer_score_bar)
-        if gauge_mask < 1:
-            gauge_mask_layout = layout_score_gauge(gauge_mask, ScoreGaugeType.MASK)
-            ActiveSkin.score.gauge.mask.draw(gauge_mask_layout, z=z_layer_score_bar_mask)
-        gauge_mask_edge_layout = layout_score_gauge(gauge, score_type=ScoreGaugeType.EDGE)
-        ActiveSkin.score.gauge.mask_edge.draw(gauge_mask_edge_layout, z=z_layer_score_bar_mask)
-        score_rank_layout = layout_score_rank()
-        ActiveSkin.score.rank.get_sprite(rank).draw(score_rank_layout, z=z_layer_score_glow)
-    score_rank_text_layout = layout_score_rank_text()
-    ActiveSkin.score.rank_text.get_sprite(rank).draw(score_rank_text_layout, z=z_layer_score_glow)
+        ActiveSkin.score.gauge.normal.draw(gauge_normal_layout, z=z_layer_score)
+
+        gauge_mask_layout = layout_score_gauge(gauge, ScoreGaugeType.MASK)
+        ActiveSkin.score.gauge.mask.draw(gauge_mask_layout, z=z_layer_score_glow)
+        if Options.version == 0 or rank != ScoreRankType.D:
+            score_rank_layout = layout_score_rank()
+            ActiveSkin.score.rank.get_sprite(rank).draw(score_rank_layout, z=z_layer_score_bar_rate)
+    else:
+        gauge_cover_layout = layout_score_gauge(score_type=ScoreGaugeType.NORMAL)
+        ActiveSkin.score.gauge.cover.draw(gauge_cover_layout, z=z_layer_score)
+    if Options.version == 0:
+        score_rank_text_layout = layout_score_rank_text()
+        ActiveSkin.score.rank_text.get_sprite(rank).draw(score_rank_text_layout, z=z_layer_score_bar_rate)
 
 
 def get_gauge_progress(score):
-    xp = (0, 3000, 300000, 520000, 740000, 1000000)
-    fp = (0, 0.447, 0.6, 0.755, 0.908, 1.0)
-
-    return interp(xp, fp, score)
-
-
-def get_gauge_progress_mask(score):
-    xp = (0, 3000, 300000, 520000, 740000, 960000)
-    fp = (0, 0.447, 0.6, 0.755, 0.908, 1.0)
+    xp = (0, 4000, 400000, 620000, 840000, 1000000)
+    fp = (
+        0,
+        0.447,
+        0.6 if Options.version == 0 else 0.577,
+        0.755 if Options.version == 0 else 0.72,
+        0.9 if Options.version == 0 else 0.87,
+        1.0,
+    )
 
     return interp(xp, fp, score)
 
 
 def get_score_rank(score):
-    if score >= 740000:
+    if score >= 840000:
         return ScoreRankType.S
-    elif score >= 520000:
+    elif score >= 620000:
         return ScoreRankType.A
-    elif score >= 300000:
+    elif score >= 400000:
         return ScoreRankType.B
-    elif score >= 3000:
+    elif score >= 4000:
         return ScoreRankType.C
     else:
         return ScoreRankType.D

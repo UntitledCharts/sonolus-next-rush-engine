@@ -679,7 +679,6 @@ def layout_custom_tag() -> Quad:
     )
 
 
-LIFE_BAR_BASE_Y = 0.887
 SCORE_BAR_BASE_Y = 0.865
 
 
@@ -688,10 +687,18 @@ def layout_life_bar() -> Quad:
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
 
-    h = 0.196 * ui.secondary_metric_config.scale * scale_ratio
-    w = 0.827 * ui.secondary_metric_config.scale * scale_ratio
+    MARGIN = 0.28 if Options.version == 0 else 0.275  # noqa: N806
+    LIFE_BAR_BASE_Y = 0.887 if Options.version == 0 else 0.875  # noqa: N806
 
-    MARGIN = 0.28  # noqa: N806
+    h = 0
+    w = 0
+    match Options.version:
+        case 0:
+            h = 0.196 * ui.secondary_metric_config.scale * scale_ratio
+            w = h * 4.22
+        case 1:
+            h = 0.23 * ui.secondary_metric_config.scale * scale_ratio
+            w = h * 4.22
 
     screen_center = Vec2(x=screen().r - MARGIN - (w / 2), y=LIFE_BAR_BASE_Y)
     return Quad(
@@ -706,8 +713,25 @@ def layout_life_gauge(life) -> Quad:
     ui = runtime_ui()
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
-    MARGIN = 0.28  # noqa: N806
-    margin_offset = 0.121
+    MARGIN = 0.28 if Options.version == 0 else 0.275  # noqa: N806
+    LIFE_BAR_BASE_Y = 0.887 if Options.version == 0 else 0.875  # noqa: N806
+
+    y_offset = 0
+    margin_offset = 0
+    h = 0
+    w = 0
+    match Options.version:
+        case 0:
+            margin_offset = 0.121
+            y_offset = -0.007
+            h = 0.027 * ui.secondary_metric_config.scale * scale_ratio
+            w = h * 18.3
+        case 1:
+            margin_offset = 0.07
+            y_offset = 0.007
+            h = 0.022 * ui.secondary_metric_config.scale * scale_ratio
+            w = h * 23.5
+
     bar_base_w = 0.827
     final_scale = ui.secondary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
@@ -715,13 +739,10 @@ def layout_life_gauge(life) -> Quad:
     bar_center_x = screen().r - MARGIN - (current_bar_w / 2)
     number_center_x = bar_center_x + (margin_offset * final_scale)
 
-    y_offset = -0.007
     center_y = LIFE_BAR_BASE_Y + (y_offset * final_scale)
 
     screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=center_y)
 
-    h = 0.027 * ui.secondary_metric_config.scale * scale_ratio
-    w = 0.495 * ui.secondary_metric_config.scale * scale_ratio
     life = clamp((life / 1000), 0, 1)
     return Quad(
         bl=Vec2(screen_center.x, screen_center.y - h / 2),
@@ -739,7 +760,17 @@ def layout_score_bar() -> Quad:
     h = 0.27 * ui.primary_metric_config.scale * scale_ratio
     w = h * 4.6
 
-    MARGIN = 0.3  # noqa: N806
+    MARGIN = 0.3 if Options.version == 0 else 0.2  # noqa: N806
+
+    h = 0
+    w = 0
+    match Options.version:
+        case 0:
+            h = 0.27 * ui.primary_metric_config.scale * scale_ratio
+            w = h * 4.6
+        case 1:
+            h = 0.32 * ui.primary_metric_config.scale * scale_ratio
+            w = h * 4.6
 
     screen_center = Vec2(x=screen().l + MARGIN + (w / 2), y=SCORE_BAR_BASE_Y)
     return Quad(
@@ -753,7 +784,6 @@ def layout_score_bar() -> Quad:
 class ScoreGaugeType(IntEnum):
     NORMAL = 0
     MASK = 1
-    EDGE = 2
 
 
 def layout_score_gauge(gauge=0, score_type: ScoreGaugeType = ScoreGaugeType.NORMAL) -> Quad:
@@ -761,28 +791,49 @@ def layout_score_gauge(gauge=0, score_type: ScoreGaugeType = ScoreGaugeType.NORM
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
     h = max(
-        (
-            0.045
-            * ui.primary_metric_config.scale
-            * scale_ratio
-            * (clamp((1 - gauge) / 0.0142, 0, 1) if score_type == ScoreGaugeType.EDGE else 1)
-        ),
+        (0.049 * ui.primary_metric_config.scale * scale_ratio),
         1e-3,
     )
     w = max(
-        (h * 21.7 * ((1 - gauge) if score_type == ScoreGaugeType.MASK else 1)),
+        (h * 20 * ((1 - gauge) if score_type == ScoreGaugeType.MASK else 1)),
         1e-3,
     )  # c = 0-0.44 b = 0.44-0.6 a= 0.6-0.75 s=0.75-0.9
-    MARGIN = 0.3  # noqa: N806
-    edge_margin = 0.014 if score_type == ScoreGaugeType.MASK else 0
-    margin_offset = 0.043 + edge_margin
+    MARGIN = 0.3 if Options.version == 0 else 0.2  # noqa: N806
+
+    margin_offset = 0
+    y_offset = 0
+    h = 0
+    w = 0
+    match Options.version:
+        case 0:
+            margin_offset = 0.04
+            y_offset = 0.008
+            h = max(
+                (0.049 * ui.primary_metric_config.scale * scale_ratio),
+                1e-3,
+            )
+            w = max(
+                (h * 20 * ((1 - gauge) if score_type == ScoreGaugeType.MASK else 1)),
+                1e-3,
+            )
+        case 1:
+            margin_offset = -0.155
+            y_offset = 0.021
+            h = max(
+                (0.062 * ui.primary_metric_config.scale * scale_ratio),
+                1e-3,
+            )
+            w = max(
+                (h * 18.8 * ((1 - gauge) if score_type == ScoreGaugeType.MASK else 1)),
+                1e-3,
+            )
+
     bar_base_w = 0.27 * 4.6
     final_scale = ui.primary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
     bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
-    y_offset = 0.007
     center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
@@ -800,12 +851,27 @@ def layout_score_rank() -> Quad:
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
 
-    h = 0.17 * ui.primary_metric_config.scale * scale_ratio
+    h = 0.22 * ui.primary_metric_config.scale * scale_ratio
     w = h * 0.882
 
-    MARGIN = 0.3  # noqa: N806
+    MARGIN = 0.3 if Options.version == 0 else 0.2  # noqa: N806
 
+    y_offset = 0.015
     margin_offset = 1.138
+    h = 0
+    w = 0
+    match Options.version:
+        case 0:
+            margin_offset = 1.138
+            y_offset = 0.015
+            h = 0.22 * ui.primary_metric_config.scale * scale_ratio
+            w = h * 0.882
+        case 1:
+            margin_offset = 1.102
+            y_offset = 0.002
+            h = 0.17 * ui.primary_metric_config.scale * scale_ratio
+            w = h * 0.882
+
     bar_base_w = 0.27 * 4.6
     final_scale = ui.primary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
@@ -813,7 +879,6 @@ def layout_score_rank() -> Quad:
     bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
-    y_offset = 0.015
     center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
@@ -1225,14 +1290,27 @@ def layout_skill_bar(
     w: float,
     h: float,
 ) -> Quad:
-    return transform_fixed_quad(
-        Quad(
-            bl=Vec2(center.x - w, center.y + h),
-            br=Vec2(center.x + w, center.y + h),
-            tl=Vec2(center.x - w, center.y - h),
-            tr=Vec2(center.x + w, center.y - h),
+    layout = +Quad
+    if Options.version == 1:
+        h, w = transform_fixed_size(h, w)
+        layout @= transform_quad(
+            Quad(
+                bl=Vec2(center.x - w, center.y + h),
+                br=Vec2(center.x + w, center.y + h),
+                tl=Vec2(center.x - w, center.y - h),
+                tr=Vec2(center.x + w, center.y - h),
+            )
         )
-    )
+    else:
+        layout @= transform_fixed_quad(
+            Quad(
+                bl=Vec2(center.x - w, center.y + h),
+                br=Vec2(center.x + w, center.y + h),
+                tl=Vec2(center.x - w, center.y - h),
+                tr=Vec2(center.x + w, center.y - h),
+            )
+        )
+    return layout
 
 
 def layout_fever_cover_left() -> Quad:
