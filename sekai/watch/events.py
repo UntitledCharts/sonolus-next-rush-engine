@@ -21,6 +21,7 @@ from sekai.lib.events import (
     draw_fever_gauge,
     draw_fever_side_bar,
     draw_fever_side_cover,
+    draw_judgment_effect,
     draw_skill_bar,
     spawn_fever_chance_particle,
     spawn_fever_start_particle,
@@ -67,6 +68,8 @@ class Skill(WatchArchetype):
     def update_parallel(self):
         if time() < self.start_time + 3:
             draw_skill_bar(self.z, self.z2, time() - self.start_time, self.count, self.effect, self.level)
+        if time() < self.start_time + 6 and self.effect == SkillEffects.JUDGMENT and Options.version == 0:
+            draw_judgment_effect()
 
     def update_sequential(self):
         if not is_replay():

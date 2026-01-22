@@ -21,6 +21,7 @@ from sekai.lib.events import (
     draw_fever_gauge,
     draw_fever_side_bar,
     draw_fever_side_cover,
+    draw_judgment_effect,
     draw_skill_bar,
     spawn_fever_chance_particle,
     spawn_fever_start_particle,
@@ -29,6 +30,11 @@ from sekai.lib.options import Options
 from sekai.lib.skin import SkillEffects
 from sekai.lib.streams import Streams
 from sekai.play import initialization
+
+
+@level_memory
+class SkillActive:
+    judgment: bool
 
 
 class Skill(PlayArchetype):
@@ -61,9 +67,20 @@ class Skill(PlayArchetype):
         return time() >= self.start_time
 
     def update_parallel(self):
-        draw_skill_bar(self.z, self.z2, time() - self.start_time, self.count, self.effect, self.level)
-        if time() >= self.start_time + 3:
+        if time() < self.start_time + 3:
+            draw_skill_bar(self.z, self.z2, time() - self.start_time, self.count, self.effect, self.level)
+        if (time() >= self.start_time + 3 and self.effect != SkillEffects.JUDGMENT) or time() >= self.start_time + 6:
             self.despawn = True
+            return
+        if self.effect == SkillEffects.JUDGMENT and Options.version == 0:
+            draw_judgment_effect()
+
+    def update_sequential(self):
+        if time() >= self.start_time + 6:
+            SkillActive.judgment = False
+            return
+        if not SkillActive.judgment and self.effect == SkillEffects.JUDGMENT:
+            SkillActive.judgment = True
 
     @property
     def calc_time(self) -> float:

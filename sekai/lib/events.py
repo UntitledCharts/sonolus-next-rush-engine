@@ -1,6 +1,7 @@
 from sonolus.script.interval import lerp, unlerp_clamped
 from sonolus.script.vec import Vec2
 
+from sekai.lib.layer import LAYER_SLOT_EFFECT, get_z
 from sekai.lib.layout import (
     LANE_B,
     LANE_T,
@@ -18,6 +19,7 @@ from sekai.lib.layout import (
     layout_sekai_stage,
     layout_sekai_stage_t,
     layout_skill_bar,
+    layout_slot_effect,
     perspective_rect,
     screen,
 )
@@ -126,7 +128,7 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillEffe
         return
     if not Options.skill_effect:
         return
-    if not ActiveSkin.skill_bar.is_available:
+    if not ActiveSkin.skill_bar_life.is_available:
         return
 
     enter_progress = unlerp_clamped(0, 0.25, time)
@@ -147,7 +149,13 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillEffe
     h = 0.08
     w = h * 21
     layout = layout_skill_bar(current_center, w, h)
-    ActiveSkin.skill_bar.draw(layout, z, anim)
+    match effect:
+        case SkillEffects.SCORE:
+            ActiveSkin.skill_bar_score.draw(layout, z, anim)
+        case SkillEffects.HEAL:
+            ActiveSkin.skill_bar_life.draw(layout, z, anim)
+        case SkillEffects.JUDGMENT:
+            ActiveSkin.skill_bar_judgment.draw(layout, z, anim)
 
     x = -7.5 + x_ratio
     y = 0.45 - y_ratio
@@ -183,4 +191,11 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillEffe
     if time <= 1.5:
         ActiveSkin.skill_level.get_sprite(level).draw(layout, z2, final_anim)
     else:
-        ActiveSkin.skill_value.get_sprite(level, effect).draw(layout, z2, final_anim)
+        ActiveSkin.skill_value.get_sprite(effect).draw(layout, z2, final_anim)
+
+
+def draw_judgment_effect():
+    for lane in range(-5.5, 6.5):
+        layout = layout_slot_effect(lane)
+        z = get_z(LAYER_SLOT_EFFECT, lane=lane)
+        ActiveSkin.skill_judgment_line.draw(layout, z=z, a=0.8)
