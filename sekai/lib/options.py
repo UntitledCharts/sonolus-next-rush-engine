@@ -41,6 +41,13 @@ class Options:
         step=0.05,
         unit=StandardText.PERCENTAGE_UNIT,
     )
+    version: int = select_option(
+        name=StandardText.VERSION,
+        description="Adjusts UI, skins, particles, etc. to match the Sekai version.",
+        scope="Rush",
+        default=0,
+        values=["v3", "v1"],
+    )
     note_speed: float = slider_option(
         name=StandardText.NOTE_SPEED,
         scope="Sekai",
@@ -49,9 +56,135 @@ class Options:
         max=12,
         step=0.01,
     )
+
+    stage_cover: float = slider_option(
+        name=StandardText.STAGE_COVER_VERTICAL,
+        advanced=True,
+        scope="Sekai",
+        default=0,
+        min=0,
+        max=1,
+        step=0.01,
+        unit=StandardText.PERCENTAGE_UNIT,
+    )
+    slide_alpha: float = slider_option(
+        name="Slide Alpha",
+        scope="Sekai",
+        default=1,
+        min=0,
+        max=1,
+        step=0.05,
+        unit=StandardText.PERCENTAGE_UNIT,
+    )
+    guide_alpha: float = slider_option(
+        name="Guide Alpha",
+        scope="Sekai",
+        default=0.6,
+        min=0,
+        max=1,
+        step=0.05,
+        unit=StandardText.PERCENTAGE_UNIT,
+    )
+    background_alpha: float = slider_option(
+        name=StandardText.STAGE_ALPHA,
+        scope="Sekai",
+        default=1,
+        min=0.5,
+        max=1,
+        step=0.1,
+        unit=StandardText.PERCENTAGE_UNIT,
+    )
+    lane_alpha: float = slider_option(
+        name=StandardText.LANE_ALPHA,
+        scope="Sekai",
+        default=1,
+        min=0,
+        max=1,
+        step=0.1,
+        unit=StandardText.PERCENTAGE_UNIT,
+    )
+    fever_effect: int = select_option(
+        name="Fever Effect",
+        scope="Rush",
+        default=0,
+        values=["Default", "Lightweight", "None"],
+    )
+    skill_effect: bool = toggle_option(
+        name="Skill Effect",
+        scope="Rush",
+        default=True,
+    )
+    sim_line_enabled: bool = toggle_option(
+        name=StandardText.SIMLINE,
+        scope="Sekai",
+        default=True,
+    )
+    ap_effect: bool = toggle_option(
+        name="AP Effect",
+        scope="Rush",
+        default=False,
+    )
+    custom_accuracy: bool = toggle_option(
+        name="Late/Fast/Flick",
+        scope="Rush",
+        default=False,
+    )
     mirror: bool = toggle_option(
         name=StandardText.MIRROR,
         default=False,
+    )
+
+    custom_combo: bool = toggle_option(
+        name="Custom Combo",
+        scope="Rush",
+        default=True,
+    )
+    custom_score: int = select_option(
+        name="Custom Score Indicator",
+        scope="Rush",
+        default=0,
+        values=["Disable", "Arcade% (+)", "Arcade% (-)", "Accuracy%"],
+    )
+    combo_distance: float = slider_option(
+        name="Custom Combo Number Distance",
+        scope="Rush",
+        advanced=True,
+        default=0,
+        min=-0.25,
+        max=0.25,
+        step=0.01,
+    )
+    custom_judgment: bool = toggle_option(
+        name="Custom Judgment",
+        scope="Rush",
+        default=True,
+    )
+    auto_judgment: bool = toggle_option(
+        name="Auto Judgment Display",
+        description="Displays judgment as 'Auto' during Watch mode when Custom Judgment is enabled.",
+        scope="Rush",
+        default=True,
+    )
+    custom_damage: bool = toggle_option(
+        name="Custom Damage Effect",
+        scope="Rush",
+        default=True,
+    )
+    custom_life_bar: bool = toggle_option(
+        name="Custom Life Bar",
+        scope="Rush",
+        default=True,
+    )
+    custom_score_bar: bool = toggle_option(
+        name="Custom Score Bar",
+        scope="Rush",
+        default=True,
+    )
+    custom_tag: bool = toggle_option(
+        name="Custom Tag",
+        description="Displays special tags (e.g., Auto Live) during Watch mode.",
+        scope="Rush",
+        default=True,
     )
     sfx_enabled: bool = toggle_option(
         name=StandardText.EFFECT,
@@ -97,33 +230,10 @@ class Options:
         scope="Sekai",
         default=True,
     )
-    sim_line_enabled: bool = toggle_option(
-        name=StandardText.SIMLINE,
-        scope="Sekai",
-        default=True,
-    )
     connector_animation: bool = toggle_option(
         name=StandardText.CONNECTOR_ANIMATION,
         scope="Sekai",
         default=True,
-    )
-    slide_alpha: float = slider_option(
-        name="Slide Alpha",
-        scope="Sekai",
-        default=1,
-        min=0,
-        max=1,
-        step=0.05,
-        unit=StandardText.PERCENTAGE_UNIT,
-    )
-    guide_alpha: float = slider_option(
-        name="Guide Alpha",
-        scope="Sekai",
-        default=0.6,
-        min=0,
-        max=1,
-        step=0.05,
-        unit=StandardText.PERCENTAGE_UNIT,
     )
     lane_effect_enabled: bool = toggle_option(
         name=StandardText.LANE_EFFECT,
@@ -144,16 +254,7 @@ class Options:
         step=0.05,
         unit=StandardText.PERCENTAGE_UNIT,
     )
-    stage_cover: float = slider_option(
-        name=StandardText.STAGE_COVER_VERTICAL,
-        advanced=True,
-        scope="Sekai",
-        default=0,
-        min=0,
-        max=1,
-        step=0.01,
-        unit=StandardText.PERCENTAGE_UNIT,
-    )
+
     stage_cover_mode: StageCoverMode = select_option(
         name="Stage Cover Mode",
         advanced=True,
@@ -163,7 +264,7 @@ class Options:
             "Stage and Line",
             "Full Width",
         ],
-        default=0,
+        default=1,
     )
     stage_cover_alpha: float = slider_option(
         name=StandardText.STAGE_COVER_ALPHA,
@@ -199,6 +300,7 @@ class Options:
     lock_stage_aspect_ratio: bool = toggle_option(
         name=StandardText.STAGE_ASPECTRATIO_LOCK,
         scope="Sekai",
+        description="Custom UI does not support disabling this feature. If it crashes, please disable the conflicting settings.",
         default=True,
     )
     hide_ui: int = select_option(
@@ -265,6 +367,12 @@ class Options:
         advanced=True,
         default=False,
     )
+    forced_fever_chance: bool = toggle_option(
+        name="Forced Fever Chance",
+        description="Enables Fever Chance even in solo play.",
+        scope="Rush",
+        default=False,
+    )
     score_mode: ScoreMode = select_option(
         name="Score Mode",
         scope="Sekai",
@@ -312,14 +420,14 @@ class Options:
         "Alternative Approach Curve",
         "Disable Timescale",
         StandardText.VERSION,
-        "Using Custom Combo",
+        "Custom Combo",
         "Custom Combo Number Distance",
         "Ap Effect",
-        "Using Combo Judgment",
+        "Combo Judgment",
         "Late/Fast/Flick",
-        "Using Auto Judgment",
-        "Using Custom Damage Effect",
-        "Using Custom Tag",
+        "Auto Judgment",
+        "Custom Damage Effect",
+        "Custom Tag",
         StandardText.STAGE_ALPHA,
         StandardText.LANE_ALPHA,
         "Fever Effect",
