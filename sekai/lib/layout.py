@@ -1313,6 +1313,12 @@ def layout_skill_bar(
     return layout
 
 
+def layout_skill_judgment_line() -> Quad:
+    b = 1 + NOTE_H
+    t = 1 - NOTE_H
+    return perspective_rect(l=-6, r=6, t=t, b=b)
+
+
 def layout_fever_cover_left() -> Quad:
     p = perspective_rect(l=-6.5, r=0, t=0, b=get_perspective_y(-1))
     safe_bl_x = min(screen().bl.x, p.bl.x)

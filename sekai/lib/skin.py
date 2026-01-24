@@ -362,6 +362,7 @@ class BaseSkin:
     skill_value_life: Sprite = sprite("Skill Value Life")
     skill_value_judgment: Sprite = sprite("Skill Value Judgment")
     skill_icon: SpriteGroup = sprite_group(f"Skill Icon {i}" for i in range(1, 6))
+    skill_judgment_line: Sprite = sprite("Skill Judgment Line")
     ui_number: SpriteGroup = sprite_group(f"UI Number {i}" for i in range(12))
     life_number: SpriteGroup = sprite_group(f"Life Number {i}" for i in range(10))
     life_bar_pause: Sprite = sprite("Life Bar Pause")
@@ -1919,7 +1920,7 @@ def init_skin():
     ActiveSkin.skill_value = SkillValueSpriteSet(
         score=BaseSkin.skill_value_score, heal=BaseSkin.skill_value_life, judgment=BaseSkin.skill_value_judgment
     )
-    ActiveSkin.skill_judgment_line = BaseSkin.slot_cyan
+    ActiveSkin.skill_judgment_line = BaseSkin.skill_judgment_line
     ActiveSkin.ui_number = UINumberSpriteSet(ui=BaseSkin.ui_number)
     ActiveSkin.life = LifeSpriteSet(bar=life_bar, gauge=life_gauge, number=UINumberSpriteSet(ui=BaseSkin.life_number))
     ActiveSkin.score = ScoreSpriteSet(

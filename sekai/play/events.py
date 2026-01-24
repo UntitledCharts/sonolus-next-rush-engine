@@ -72,8 +72,8 @@ class Skill(PlayArchetype):
         if (time() >= self.start_time + 3 and self.effect != SkillEffects.JUDGMENT) or time() >= self.start_time + 6:
             self.despawn = True
             return
-        if self.effect == SkillEffects.JUDGMENT and Options.version == 0:
-            draw_judgment_effect()
+        if self.effect == SkillEffects.JUDGMENT:
+            draw_judgment_effect(time() - self.start_time)
 
     def update_sequential(self):
         if time() >= self.start_time + 6:

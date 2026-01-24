@@ -20,7 +20,7 @@ from sekai.lib.layout import (
     layout_sekai_stage,
     layout_sekai_stage_t,
     layout_skill_bar,
-    layout_slot_effect,
+    layout_skill_judgment_line,
     perspective_rect,
     screen,
 )
@@ -223,8 +223,11 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillEffe
         ActiveSkin.skill_value.get_sprite(effect).draw(layout, z2, final_anim)
 
 
-def draw_judgment_effect():
-    for lane in range(-5.5, 6.5):
-        layout = layout_slot_effect(lane)
-        z = get_z(LAYER_SLOT_EFFECT, lane=lane)
-        ActiveSkin.skill_judgment_line.draw(layout, z=z, a=0.8)
+def draw_judgment_effect(time):
+    enter_progress = unlerp_clamped(0, 0.25, time)
+    exit_progress = unlerp_clamped(5.75, 6, time)
+
+    anim = enter_progress - exit_progress
+    layout = layout_skill_judgment_line()
+    z = get_z(LAYER_SLOT_EFFECT)
+    ActiveSkin.skill_judgment_line.draw(layout, z=z, a=anim)
