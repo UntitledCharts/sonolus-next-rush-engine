@@ -68,8 +68,8 @@ class Skill(WatchArchetype):
     def update_parallel(self):
         if time() < self.start_time + 3:
             draw_skill_bar(self.z, self.z2, time() - self.start_time, self.count, self.effect, self.level)
-        if time() < self.start_time + 6 and self.effect == SkillEffects.JUDGMENT and Options.version == 0:
-            draw_judgment_effect()
+        if time() < self.start_time + 6 and self.effect == SkillEffects.JUDGMENT:
+            draw_judgment_effect(time() - self.start_time)
 
     def update_sequential(self):
         if not is_replay():
