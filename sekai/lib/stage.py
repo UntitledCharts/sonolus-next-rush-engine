@@ -421,7 +421,7 @@ def draw_stage_and_accessories(
     draw_dead(z_layer_background, life)
     draw_score_number(
         ap=ap,
-        score=round(percentage, 4),
+        score=percentage,
         z1=z_layer_score,
         z2=z_layer_score_glow,
     )

@@ -1,3 +1,5 @@
+from math import floor
+
 from sonolus.script.archetype import PlayArchetype, callback, entity_memory
 from sonolus.script.bucket import Judgment, JudgmentWindow
 from sonolus.script.globals import level_memory
@@ -62,10 +64,18 @@ class ScoreIndicator:
     note_time: float
     percentage: float
     total_weight: float
-    scale_factor: float
+    total_weight_compensation: float
+    acc_sum: float
+    acc_compensation: float
+    processed_weight: float
+    processed_weight_compensation: float
     max_score: int
     current_raw_score: float
+    raw_score_compensation: float
     count: int
+    perfect_step: int
+    great_step: int
+    good_step: int
 
 
 @level_memory
@@ -149,57 +159,119 @@ class ComboJudge(PlayArchetype):
     def calculate_score(self):
         if Options.custom_score == 0 and not Options.custom_score_bar:
             return
-        # score = judgmentMultiplier * (consecutiveJudgmentMultiplier(is not support in sekai rush custom elements) + archetypeMultiplier + entityMultiplier)
+        # score = judgmentMultiplier * (consecutiveJudgmentMultiplier + archetypeMultiplier + entityMultiplier)
         judgment_multiplier = 0
         match self.judgment:
             case Judgment.PERFECT:
                 judgment_multiplier = level_score().perfect_multiplier
+                ScoreIndicator.perfect_step += 1
+                ScoreIndicator.great_step += 1
+                ScoreIndicator.good_step += 1
             case Judgment.GREAT:
                 judgment_multiplier = level_score().great_multiplier
+                ScoreIndicator.perfect_step = 0
+                ScoreIndicator.great_step += 1
+                ScoreIndicator.good_step += 1
             case Judgment.GOOD:
                 judgment_multiplier = level_score().good_multiplier
+                ScoreIndicator.perfect_step = 0
+                ScoreIndicator.great_step = 0
+                ScoreIndicator.good_step += 1
             case Judgment.MISS:
                 judgment_multiplier = 0
+                ScoreIndicator.perfect_step = 0
+                ScoreIndicator.great_step = 0
+                ScoreIndicator.good_step = 0
 
+        inv_perfect_step = (
+            1.0 / level_score().consecutive_perfect_step if level_score().consecutive_perfect_step > 0 else 0.0
+        )
+        inv_great_step = 1.0 / level_score().consecutive_great_step if level_score().consecutive_great_step > 0 else 0.0
+        inv_good_step = 1.0 / level_score().consecutive_good_step if level_score().consecutive_good_step > 0 else 0.0
         note_raw_score = judgment_multiplier * (
-            note.BaseNote.at(self.index).archetype_score_multiplier
+            (
+                min(
+                    floor(ScoreIndicator.perfect_step * inv_perfect_step)
+                    * level_score().consecutive_perfect_multiplier,
+                    (level_score().consecutive_perfect_cap * inv_perfect_step)
+                    * level_score().consecutive_perfect_multiplier,
+                )
+                + min(
+                    floor(ScoreIndicator.great_step * inv_great_step) * level_score().consecutive_great_multiplier,
+                    (level_score().consecutive_great_cap * inv_great_step) * level_score().consecutive_great_multiplier,
+                )
+                + min(
+                    floor(ScoreIndicator.good_step * inv_good_step) * level_score().consecutive_good_multiplier,
+                    (level_score().consecutive_good_cap * inv_good_step) * level_score().consecutive_good_multiplier,
+                )
+            )
+            + note.BaseNote.at(self.index).archetype_score_multiplier
             + note.BaseNote.at(self.index).entity_score_multiplier
         )
-        note_score = round(note_raw_score * ScoreIndicator.scale_factor)
+        EPSILON = 1e-9  # noqa: N806
+        raw_calc = (note_raw_score * ScoreIndicator.max_score) / ScoreIndicator.total_weight
+        note_score = round(raw_calc + EPSILON)
         ScoreIndicator.note_score = note_score if note_score > 0 else ScoreIndicator.note_score
         ScoreIndicator.note_time = self.spawn_time if note_score > 0 else ScoreIndicator.note_time
-        ScoreIndicator.current_raw_score += note_raw_score
+
+        y = note_raw_score - ScoreIndicator.raw_score_compensation
+        t = ScoreIndicator.current_raw_score + y
+        ScoreIndicator.raw_score_compensation = (t - ScoreIndicator.current_raw_score) - y
+        ScoreIndicator.current_raw_score = t
+
+        final_calc = (ScoreIndicator.current_raw_score * ScoreIndicator.max_score) / ScoreIndicator.total_weight
         ScoreIndicator.score = clamp(
-            round(ScoreIndicator.current_raw_score * ScoreIndicator.scale_factor),
+            round(final_calc + EPSILON),
             0,
             ScoreIndicator.max_score,
         )
         match Options.custom_score:
             case 1:
-                ScoreIndicator.percentage = ScoreIndicator.score / ScoreIndicator.max_score * 100
+                ScoreIndicator.percentage = (ScoreIndicator.current_raw_score / ScoreIndicator.total_weight) * 100.0
             case 2:
-                ScoreIndicator.percentage = clamp(
-                    ScoreIndicator.percentage
-                    - (
-                        (
-                            (level_score().perfect_multiplier - judgment_multiplier)
-                            * (
-                                note.BaseNote.at(self.index).archetype_score_multiplier
-                                + note.BaseNote.at(self.index).entity_score_multiplier
-                            )
-                            * ScoreIndicator.scale_factor
+                ideal_combo = note.BaseNote.at(self.index).count
+                note_ideal_weight = level_score().perfect_multiplier * (
+                    (
+                        min(
+                            floor(ideal_combo * inv_perfect_step) * level_score().consecutive_perfect_multiplier,
+                            (level_score().consecutive_perfect_cap * inv_perfect_step)
+                            * level_score().consecutive_perfect_multiplier,
                         )
-                        / ScoreIndicator.max_score
-                        * 100
-                    ),
-                    0,
-                    100,
+                        + min(
+                            floor(ideal_combo * inv_great_step) * level_score().consecutive_great_multiplier,
+                            (level_score().consecutive_great_cap * inv_great_step)
+                            * level_score().consecutive_great_multiplier,
+                        )
+                        + min(
+                            floor(ideal_combo * inv_good_step) * level_score().consecutive_good_multiplier,
+                            (level_score().consecutive_good_cap * inv_good_step)
+                            * level_score().consecutive_good_multiplier,
+                        )
+                    )
+                    + note.BaseNote.at(self.index).archetype_score_multiplier
+                    + note.BaseNote.at(self.index).entity_score_multiplier
                 )
+                y2 = note_ideal_weight - ScoreIndicator.processed_weight_compensation
+                t2 = ScoreIndicator.processed_weight + y2
+                ScoreIndicator.processed_weight_compensation = (t2 - ScoreIndicator.processed_weight) - y2
+                ScoreIndicator.processed_weight = t2
+
+                current_loss = ScoreIndicator.processed_weight - ScoreIndicator.current_raw_score
+                if abs(current_loss) < 1e-9:
+                    current_loss = 0.0
+                current_visible_score = ScoreIndicator.total_weight - current_loss
+                percent = (current_visible_score / ScoreIndicator.total_weight) * 100.0
+                ScoreIndicator.percentage = clamp(percent, 0.0, 100.0)
             case 3:
                 ScoreIndicator.count += 1
-                ScoreIndicator.percentage += (
-                    ((1 - abs(self.accuracy)) * 100) - ScoreIndicator.percentage
-                ) / ScoreIndicator.count
+                current_acc = (1 - abs(self.accuracy)) * 100
+
+                y = current_acc - ScoreIndicator.acc_compensation
+                t = ScoreIndicator.acc_sum + y
+                ScoreIndicator.acc_compensation = (t - ScoreIndicator.acc_sum) - y
+                ScoreIndicator.acc_sum = t
+
+                ScoreIndicator.percentage = ScoreIndicator.acc_sum / ScoreIndicator.count
 
     def calculate_life(self):
         if not Options.custom_life_bar:

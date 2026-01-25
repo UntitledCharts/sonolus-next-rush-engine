@@ -1,3 +1,5 @@
+from math import floor
+
 from sonolus.script.archetype import EntityRef, WatchArchetype, callback, imported
 from sonolus.script.runtime import is_replay
 
@@ -155,7 +157,15 @@ def setting_combo(head: int, skill: int) -> None:
     ap = False
     accuracy = head
     damage_flash = head
-    total_weight = 0
+    total_weight = 0.0
+    total_weight_compensation = 0.0
+    current_note_weight = 0.0
+    inv_perfect_step = (
+        1.0 / level_score().consecutive_perfect_step if level_score().consecutive_perfect_step > 0 else 0.0
+    )
+    inv_great_step = 1.0 / level_score().consecutive_great_step if level_score().consecutive_great_step > 0 else 0.0
+    inv_good_step = 1.0 / level_score().consecutive_good_step if level_score().consecutive_good_step > 0 else 0.0
+
     while ptr > 0:
         if skill_ptr > 0 and note.WatchBaseNote.at(ptr).target_time >= Skill.at(skill_ptr).start_time:
             if Skill.at(skill_ptr).effect == SkillEffects.HEAL:
@@ -202,84 +212,172 @@ def setting_combo(head: int, skill: int) -> None:
             )
             Fever.fever_last_count = max(note.WatchBaseNote.at(ptr).count, Fever.fever_last_count)
 
-        total_weight += level_score().perfect_multiplier * (
-            note.WatchBaseNote.at(ptr).archetype_score_multiplier + note.WatchBaseNote.at(ptr).entity_score_multiplier
+        current_note_weight = level_score().perfect_multiplier * (
+            (
+                min(
+                    floor(count * inv_perfect_step) * level_score().consecutive_perfect_multiplier,
+                    (level_score().consecutive_perfect_cap * inv_perfect_step)
+                    * level_score().consecutive_perfect_multiplier,
+                )
+                + min(
+                    floor(count * inv_great_step) * level_score().consecutive_great_multiplier,
+                    (level_score().consecutive_great_cap * inv_great_step) * level_score().consecutive_great_multiplier,
+                )
+                + min(
+                    floor(count * inv_good_step) * level_score().consecutive_good_multiplier,
+                    (level_score().consecutive_good_cap * inv_good_step) * level_score().consecutive_good_multiplier,
+                )
+            )
+            + note.WatchBaseNote.at(ptr).archetype_score_multiplier
+            + note.WatchBaseNote.at(ptr).entity_score_multiplier
         )
+
+        y = current_note_weight - total_weight_compensation
+        t = total_weight + y
+        total_weight_compensation = (t - total_weight) - y
+        total_weight = t
 
         LastNote.last_time = max(LastNote.last_time, note.WatchBaseNote.at(ptr).calc_time)
         ptr = note.WatchBaseNote.at(ptr).next_ref.index
 
-    if total_weight == 0:
-        scale_factor = 1000000
-    else:
-        scale_factor = 1000000 / total_weight
-    calculate_score(head, 1000000, scale_factor)
+    calculate_score(head, 1000000, total_weight)
 
 
-def calculate_score(head: int, max_score: int, scale_factor: float):
+def calculate_score(head: int, max_score: int, total_weight: float):
     ptr = head
     count = 0
     score = 0
-    percentage = 0
     current_raw_score = 0.0
+    raw_score_compensation = 0.0
+    acc_sum = 0.0
+    acc_compensation = 0.0
+    processed_weight = 0.0
+    processed_weight_compensation = 0.0
+    perfect_step = 0
+    great_step = 0
+    good_step = 0
+    total_weight = total_weight if total_weight > 0 else 1.0
     if Options.custom_score == 2:
-        percentage = 100
         custom_elements.ScoreIndicator.percentage = 100
     custom_elements.ScoreIndicator.first = note.WatchBaseNote.at(head).calc_time
     while ptr > 0:
-        # score = judgmentMultiplier * (consecutiveJudgmentMultiplier(is not support in sekai rush custom elements) + archetypeMultiplier + entityMultiplier)
+        count += 1
+        # score = judgmentMultiplier * (consecutiveJudgmentMultiplier + archetypeMultiplier + entityMultiplier)
         judgment_multiplier = 0
         if is_replay():
             match note.WatchBaseNote.at(ptr).judgment:
                 case Judgment.PERFECT:
                     judgment_multiplier = level_score().perfect_multiplier
+                    perfect_step += 1
+                    great_step += 1
+                    good_step += 1
                 case Judgment.GREAT:
                     judgment_multiplier = level_score().great_multiplier
+                    perfect_step = 0
+                    great_step += 1
+                    good_step += 1
                 case Judgment.GOOD:
                     judgment_multiplier = level_score().good_multiplier
+                    perfect_step = 0
+                    great_step = 0
+                    good_step += 1
                 case Judgment.MISS:
                     judgment_multiplier = 0
+                    perfect_step = 0
+                    great_step = 0
+                    good_step = 0
         else:
             judgment_multiplier = level_score().perfect_multiplier
+            perfect_step += 1
+            great_step += 1
+            good_step += 1
 
-        note_raw_score = judgment_multiplier * (
-            note.WatchBaseNote.at(ptr).archetype_score_multiplier + note.WatchBaseNote.at(ptr).entity_score_multiplier
+        inv_perfect_step = (
+            1.0 / level_score().consecutive_perfect_step if level_score().consecutive_perfect_step > 0 else 0.0
         )
-        note.WatchBaseNote.at(ptr).note_raw_score = round(note_raw_score * scale_factor)
-        current_raw_score += note_raw_score
+        inv_great_step = 1.0 / level_score().consecutive_great_step if level_score().consecutive_great_step > 0 else 0.0
+        inv_good_step = 1.0 / level_score().consecutive_good_step if level_score().consecutive_good_step > 0 else 0.0
+        note_raw_score = judgment_multiplier * (
+            (
+                min(
+                    floor(perfect_step * inv_perfect_step) * level_score().consecutive_perfect_multiplier,
+                    (level_score().consecutive_perfect_cap * inv_perfect_step)
+                    * level_score().consecutive_perfect_multiplier,
+                )
+                + min(
+                    floor(great_step * inv_great_step) * level_score().consecutive_great_multiplier,
+                    (level_score().consecutive_great_cap * inv_great_step) * level_score().consecutive_great_multiplier,
+                )
+                + min(
+                    floor(good_step * inv_good_step) * level_score().consecutive_good_multiplier,
+                    (level_score().consecutive_good_cap * inv_good_step) * level_score().consecutive_good_multiplier,
+                )
+            )
+            + note.WatchBaseNote.at(ptr).archetype_score_multiplier
+            + note.WatchBaseNote.at(ptr).entity_score_multiplier
+        )
+        EPSILON = 1e-9  # noqa: N806
+        raw_calc = (note_raw_score * max_score) / total_weight
+        note.WatchBaseNote.at(ptr).note_raw_score = round(raw_calc + EPSILON)
+
+        y = note_raw_score - raw_score_compensation
+        t = current_raw_score + y
+        raw_score_compensation = (t - current_raw_score) - y
+        current_raw_score = t
+
+        final_calc = (current_raw_score * max_score) / total_weight
         score = clamp(
-            round(current_raw_score * scale_factor),
+            round(final_calc + EPSILON),
             0,
             max_score,
         )
         note.WatchBaseNote.at(ptr).score = score
+
         match Options.custom_score:
             case 1:
-                percentage = score / max_score * 100
-                note.WatchBaseNote.at(ptr).percentage = percentage
+                note.WatchBaseNote.at(ptr).percentage = (current_raw_score / total_weight) * 100.0
             case 2:
-                percentage = clamp(
-                    percentage
-                    - (
-                        (
-                            (level_score().perfect_multiplier - judgment_multiplier)
-                            * (
-                                note.WatchBaseNote.at(ptr).archetype_score_multiplier
-                                + note.WatchBaseNote.at(ptr).entity_score_multiplier
-                            )
-                            * scale_factor
+                note_ideal_weight = level_score().perfect_multiplier * (
+                    (
+                        min(
+                            floor(count * inv_perfect_step) * level_score().consecutive_perfect_multiplier,
+                            (level_score().consecutive_perfect_cap * inv_perfect_step)
+                            * level_score().consecutive_perfect_multiplier,
                         )
-                        / max_score
-                        * 100
-                    ),
-                    0,
-                    100,
+                        + min(
+                            floor(count * inv_great_step) * level_score().consecutive_great_multiplier,
+                            (level_score().consecutive_great_cap * inv_great_step)
+                            * level_score().consecutive_great_multiplier,
+                        )
+                        + min(
+                            floor(count * inv_good_step) * level_score().consecutive_good_multiplier,
+                            (level_score().consecutive_good_cap * inv_good_step)
+                            * level_score().consecutive_good_multiplier,
+                        )
+                    )
+                    + note.WatchBaseNote.at(ptr).archetype_score_multiplier
+                    + note.WatchBaseNote.at(ptr).entity_score_multiplier
                 )
-                note.WatchBaseNote.at(ptr).percentage = percentage
+                y2 = note_ideal_weight - processed_weight_compensation
+                t2 = processed_weight + y2
+                processed_weight_compensation = (t2 - processed_weight) - y2
+                processed_weight = t2
+
+                current_loss = processed_weight - current_raw_score
+                if abs(current_loss) < EPSILON:
+                    current_loss = 0.0
+                current_visible_score = total_weight - current_loss
+                percent = (current_visible_score / total_weight) * 100.0
+                note.WatchBaseNote.at(ptr).percentage = clamp(percent, 0.0, 100.0)
             case 3:
-                count += 1
-                percentage += (((1 - abs(note.WatchBaseNote.at(ptr).accuracy)) * 100) - percentage) / count
-                note.WatchBaseNote.at(ptr).percentage = percentage
+                current_acc = (1 - abs(note.WatchBaseNote.at(ptr).accuracy)) * 100
+
+                y = current_acc - acc_compensation
+                t = acc_sum + y
+                acc_compensation = (t - acc_sum) - y
+                acc_sum = t
+
+                note.WatchBaseNote.at(ptr).percentage = acc_sum / count
 
         ptr = note.WatchBaseNote.at(ptr).next_ref.index
 
