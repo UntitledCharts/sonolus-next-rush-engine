@@ -208,9 +208,8 @@ class ComboJudge(PlayArchetype):
             + note.BaseNote.at(self.index).archetype_score_multiplier
             + note.BaseNote.at(self.index).entity_score_multiplier
         )
-        EPSILON = 1e-9  # noqa: N806
         raw_calc = (note_raw_score * ScoreIndicator.max_score) / ScoreIndicator.total_weight
-        note_score = round(raw_calc + EPSILON)
+        note_score = raw_calc
         ScoreIndicator.note_score = note_score if note_score > 0 else ScoreIndicator.note_score
         ScoreIndicator.note_time = self.spawn_time if note_score > 0 else ScoreIndicator.note_time
 
@@ -219,9 +218,9 @@ class ComboJudge(PlayArchetype):
         ScoreIndicator.raw_score_compensation = (t - ScoreIndicator.current_raw_score) - y
         ScoreIndicator.current_raw_score = t
 
-        final_calc = (ScoreIndicator.current_raw_score * ScoreIndicator.max_score) / ScoreIndicator.total_weight
+        final_calc = (ScoreIndicator.current_raw_score / ScoreIndicator.total_weight) * ScoreIndicator.max_score
         ScoreIndicator.score = clamp(
-            round(final_calc + EPSILON),
+            final_calc,
             0,
             ScoreIndicator.max_score,
         )
@@ -257,8 +256,6 @@ class ComboJudge(PlayArchetype):
                 ScoreIndicator.processed_weight = t2
 
                 current_loss = ScoreIndicator.processed_weight - ScoreIndicator.current_raw_score
-                if abs(current_loss) < 1e-9:
-                    current_loss = 0.0
                 current_visible_score = ScoreIndicator.total_weight - current_loss
                 percent = (current_visible_score / ScoreIndicator.total_weight) * 100.0
                 ScoreIndicator.percentage = clamp(percent, 0.0, 100.0)
