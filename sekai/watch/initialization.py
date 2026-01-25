@@ -316,18 +316,17 @@ def calculate_score(head: int, max_score: int, total_weight: float):
             + note.WatchBaseNote.at(ptr).archetype_score_multiplier
             + note.WatchBaseNote.at(ptr).entity_score_multiplier
         )
-        EPSILON = 1e-9  # noqa: N806
         raw_calc = (note_raw_score * max_score) / total_weight
-        note.WatchBaseNote.at(ptr).note_raw_score = round(raw_calc + EPSILON)
+        note.WatchBaseNote.at(ptr).note_raw_score = raw_calc
 
         y = note_raw_score - raw_score_compensation
         t = current_raw_score + y
         raw_score_compensation = (t - current_raw_score) - y
         current_raw_score = t
 
-        final_calc = (current_raw_score * max_score) / total_weight
+        final_calc = (current_raw_score / total_weight) * max_score
         score = clamp(
-            round(final_calc + EPSILON),
+            final_calc,
             0,
             max_score,
         )
@@ -364,8 +363,6 @@ def calculate_score(head: int, max_score: int, total_weight: float):
                 processed_weight = t2
 
                 current_loss = processed_weight - current_raw_score
-                if abs(current_loss) < EPSILON:
-                    current_loss = 0.0
                 current_visible_score = total_weight - current_loss
                 percent = (current_visible_score / total_weight) * 100.0
                 note.WatchBaseNote.at(ptr).percentage = clamp(percent, 0.0, 100.0)
