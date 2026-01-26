@@ -1,4 +1,4 @@
-from sonolus.script.runtime import HorizontalAlign, is_play, is_preview, is_tutorial, is_watch, runtime_ui, safe_area
+from sonolus.script.runtime import HorizontalAlign, is_preview, is_tutorial, runtime_ui, safe_area
 from sonolus.script.ui import (
     EaseType,
     UiAnimation,
@@ -12,7 +12,7 @@ from sonolus.script.ui import (
 from sonolus.script.vec import Vec2
 
 from sekai.lib.layout import Layout
-from sekai.lib.options import Options
+from sekai.lib.options import Options, SekaiVersion
 from sekai.lib.skin import ActiveSkin
 
 ui_config = UiConfig(
@@ -61,7 +61,7 @@ ui_config = UiConfig(
 )
 
 
-def init_ui():
+def init_ui(ui_version: SekaiVersion = SekaiVersion.v3):
     ui = runtime_ui()
 
     gap = 0.05
@@ -74,19 +74,24 @@ def init_ui():
     custom_combo_number = not Options.custom_combo or not ActiveSkin.combo_number.available
     custom_judgment = not Options.custom_judgment or not ActiveSkin.judgment.available
     custom_life_bar = not Options.custom_life_bar or not ActiveSkin.life.available or is_preview() or is_tutorial()
-    custom_life_bar_margin = Vec2(0.26, 0) if is_play() or is_watch() else Vec2(0, 0)
+    custom_life_bar_margin = +Vec2(0, 0)
+    if ActiveSkin.life.bar.available and ui_version == SekaiVersion.v3 and Options.custom_life_bar:
+        custom_life_bar_margin @= Vec2(0.26, 0)
+    custom_life_bar_scale = (
+        1 if is_preview() or is_tutorial() or not ActiveSkin.life.bar.available or not Options.custom_life_bar else 1.5
+    )
     custom_score_bar = not Options.custom_score_bar or not ActiveSkin.score.available or is_preview() or is_tutorial()
 
     ui.menu.update(
         anchor=box.tr - custom_life_bar_margin,
         pivot=Vec2(1, 1),
-        dimensions=Vec2(0.15, 0.15) * ui.menu_config.scale,
+        dimensions=Vec2(0.15, 0.15) * ui.menu_config.scale * custom_life_bar_scale,
         alpha=ui.menu_config.alpha * show_ui * custom_life_bar,
         horizontal_align=HorizontalAlign.CENTER,
         background=True,
     )
     ui.primary_metric_bar.update(
-        anchor=box.tl + custom_life_bar_margin,
+        anchor=box.tl,
         pivot=Vec2(0, 1),
         dimensions=Vec2(0.75, 0.15) * ui.primary_metric_config.scale,
         alpha=ui.primary_metric_config.alpha * show_ui * custom_score_bar,
@@ -94,7 +99,7 @@ def init_ui():
         background=True,
     )
     ui.primary_metric_value.update(
-        anchor=box.tl + custom_life_bar_margin + Vec2(0.715, -0.035) * ui.primary_metric_config.scale,
+        anchor=box.tl + Vec2(0.715, -0.035) * ui.primary_metric_config.scale,
         pivot=Vec2(1, 1),
         dimensions=Vec2(0, 0.08) * ui.primary_metric_config.scale,
         alpha=ui.primary_metric_config.alpha * show_ui * custom_score_bar,

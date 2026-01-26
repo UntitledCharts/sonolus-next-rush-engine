@@ -477,8 +477,8 @@ def draw_life_number(number: int, z: float):
             digit_count += 1
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
-    MARGIN = 0.28 if LevelConfig.ui_version == SekaiVersion.v3 else 0.275  # noqa: N806
-    LIFE_BAR_BASE_Y = 0.887 if LevelConfig.ui_version == SekaiVersion.v3 else 0.875  # noqa: N806
+    MARGIN = 0.28 if LevelConfig.ui_version == SekaiVersion.v3 else 0.0  # noqa: N806
+    LIFE_BAR_BASE_Y = 0.887 if LevelConfig.ui_version == SekaiVersion.v3 else 0.87  # noqa: N806
 
     y_offset = 0
     margin_offset = 0
@@ -493,11 +493,11 @@ def draw_life_number(number: int, z: float):
             w = h * 0.714
             digit_gap = w * -0.04
         case SekaiVersion.v1:
-            margin_offset = 0.55
+            margin_offset = 0.5
             y_offset = 0.06314
             h = 0.08141 * ui.secondary_metric_config.scale * scale_ratio
             w = h * 0.714
-            digit_gap = w * -0.1
+            digit_gap = w * -0.2
 
     bar_base_w = 0.827
     final_scale = ui.secondary_metric_config.scale * scale_ratio
@@ -541,7 +541,7 @@ def draw_score_bar_number(number: int, z: float):
             digit_count += 1
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
-    MARGIN = 0.3 if LevelConfig.ui_version == SekaiVersion.v3 else 0.2  # noqa: N806
+    MARGIN = 0.3 if LevelConfig.ui_version == SekaiVersion.v3 else 0.05  # noqa: N806
 
     margin_offset = 0
     y_offset = 0
@@ -608,7 +608,7 @@ def draw_score_bar_raw_number(number: int, z: float, time: float):
             digit_count += 1
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
-    MARGIN = 0.3 if LevelConfig.ui_version == SekaiVersion.v3 else 0.2  # noqa: N806
+    MARGIN = 0.3 if LevelConfig.ui_version == SekaiVersion.v3 else 0.05  # noqa: N806
 
     margin_offset = 0
     y_offset = 0
