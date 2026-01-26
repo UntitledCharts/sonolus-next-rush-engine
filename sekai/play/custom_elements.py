@@ -1,12 +1,13 @@
 from math import floor
 
 from sonolus.script.archetype import PlayArchetype, callback, entity_memory
-from sonolus.script.bucket import Judgment, JudgmentWindow
+from sonolus.script.bucket import Judgment
 from sonolus.script.globals import level_memory
-from sonolus.script.interval import Interval, clamp
+from sonolus.script.interval import clamp
 from sonolus.script.runtime import level_score, time
 
 from sekai.lib import archetype_names
+from sekai.lib.buckets import SekaiWindow
 from sekai.lib.custom_elements import (
     draw_combo_label,
     draw_combo_number,
@@ -22,10 +23,8 @@ from sekai.play.events import Fever
 def spawn_custom(
     judgment: Judgment,
     accuracy: float,
-    windows: JudgmentWindow,
-    windows_bad: Interval,
+    windows: SekaiWindow,
     wrong_way: bool,
-    check_pass: bool,
     target_time: float,
     index: int,
 ):
@@ -34,11 +33,9 @@ def spawn_custom(
         target_time=target_time,
         spawn_time=time(),
         judgment=judgment,
-        windows_bad=windows_bad,
         accuracy=accuracy,
-        check_pass=check_pass,
     )
-    if judgment != Judgment.PERFECT and check_pass:
+    if judgment != Judgment.PERFECT and windows.bad.start < accuracy < windows.bad.end:
         JudgmentAccuracy.spawn(
             spawn_time=time(),
             judgment=judgment,
@@ -88,10 +85,8 @@ class ComboJudge(PlayArchetype):
     spawn_time: float = entity_memory()
     judgment: Judgment = entity_memory()
     accuracy: Judgment = entity_memory()
-    windows: JudgmentWindow = entity_memory()
-    windows_bad: Interval = entity_memory()
+    windows: SekaiWindow = entity_memory()
     wrong_way: bool = entity_memory()
-    check_pass: bool = entity_memory()
     my_judge_id: int = entity_memory()
     index: int = entity_memory()
 
@@ -118,9 +113,8 @@ class ComboJudge(PlayArchetype):
         draw_judgment_text(
             draw_time=self.spawn_time,
             judgment=self.judgment,
-            windows_bad=self.windows_bad,
+            windows=self.windows,
             accuracy=self.accuracy,
-            check_pass=self.check_pass,
             z=self.z,
         )
 
@@ -308,7 +302,7 @@ class JudgmentAccuracy(PlayArchetype):
     spawn_time: float = entity_memory()
     judgment: Judgment = entity_memory()
     accuracy: float = entity_memory()
-    windows: JudgmentWindow = entity_memory()
+    windows: SekaiWindow = entity_memory()
     wrong_way: bool = entity_memory()
     z: float = entity_memory()
     check: bool = entity_memory()
