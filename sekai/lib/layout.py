@@ -11,7 +11,17 @@ from sonolus.script.interval import clamp, lerp, remap, unlerp
 from sonolus.script.num import Num
 from sonolus.script.quad import Quad, QuadLike, Rect
 from sonolus.script.record import Record
-from sonolus.script.runtime import aspect_ratio, background, is_play, is_watch, runtime_ui, screen, set_background, time
+from sonolus.script.runtime import (
+    aspect_ratio,
+    background,
+    is_play,
+    is_watch,
+    runtime_ui,
+    safe_area,
+    screen,
+    set_background,
+    time,
+)
 from sonolus.script.values import swap
 from sonolus.script.vec import Vec2
 
@@ -19,7 +29,7 @@ from sekai.lib import archetype_names
 from sekai.lib.baseevent import get_event_as, query_event_list
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.level_config import LevelConfig
-from sekai.lib.options import Options, StageCoverNoteSpeedCompensation
+from sekai.lib.options import Options, StageCoverNoteSpeedCompensation, Version
 from sekai.lib.timescale import CompositeTime
 
 LANE_T = 47 / 850
@@ -88,6 +98,15 @@ class ComboType(IntEnum):
 
 
 @level_data
+class UIMargin:
+    life_bar_x: float
+    life_bar_y: float
+    score_bar_x: float
+    score_bar_y: float
+    ui_x: float
+
+
+@level_data
 class Layout:
     field_w: float
     field_h: float
@@ -96,6 +115,11 @@ class Layout:
     cutoff_depth: float
     flick_speed_threshold: float
     initial_background: Quad
+    t: float
+    w_scale: float
+    h_scale: float
+    fixed_w_scale: float
+    fixed_h_scale: float
 
 
 @level_memory
@@ -146,6 +170,26 @@ def init_layout():
     Layout.field_h = field_h
 
     Layout.initial_background = background()
+
+    t = Layout.field_h * (0.5 + 1.15875 * (47 / 1176))
+    b = Layout.field_h * (0.5 - 1.15875 * (803 / 1176))
+    w = Layout.field_w * ((1.15875 * (1420 / 1176)) / TARGET_ASPECT_RATIO / 12)
+
+    Layout.t = t
+    Layout.w_scale = w
+    Layout.h_scale = b - t
+
+    if aspect_ratio() > TARGET_ASPECT_RATIO:
+        field_w = screen().h * TARGET_ASPECT_RATIO
+        field_h = screen().h
+    else:
+        field_w = screen().w
+        field_h = screen().w / TARGET_ASPECT_RATIO
+    ref_t = field_h * (0.5 + 1.15875 * (47 / 1176))
+    ref_b = field_h * (0.5 - 1.15875 * (803 / 1176))
+    ref_w = field_w * ((1.15875 * (1420 / 1176)) / TARGET_ASPECT_RATIO / 12)
+    Layout.fixed_w_scale = ref_w
+    Layout.fixed_h_scale = ref_b - ref_t
 
     Layout.approach_start = 0.0
 
@@ -508,10 +552,17 @@ def transform_vec(v: Vec2) -> Vec2:
     ).rotate(-DynamicLayout.rotate)
 
 
+def transform_static_vec(v: Vec2) -> Vec2:
+    return Vec2(
+        v.x * Layout.w_scale,
+        v.y * Layout.h_scale + Layout.t,
+    )
+
+
 def transform_fixed_vec(v: Vec2) -> Vec2:
     return Vec2(
-        v.x * DynamicLayout.fixed_w_scale,
-        v.y * DynamicLayout.fixed_h_scale + DynamicLayout.t,
+        v.x * Layout.fixed_w_scale,
+        v.y * Layout.fixed_h_scale + Layout.t,
     )
 
 
@@ -521,6 +572,15 @@ def transform_quad(q: QuadLike) -> Quad:
         br=transform_vec(q.br),
         tl=transform_vec(q.tl),
         tr=transform_vec(q.tr),
+    )
+
+
+def transform_static_quad(q: QuadLike) -> Quad:
+    return Quad(
+        bl=transform_static_vec(q.bl),
+        br=transform_static_vec(q.br),
+        tl=transform_static_vec(q.tl),
+        tr=transform_static_vec(q.tr),
     )
 
 
@@ -558,17 +618,27 @@ def perspective_vec(x: float, y: float, travel: float = 1.0) -> Vec2:
     return transform_vec(Vec2(x * tilt_width_factor(y * travel), y * travel))
 
 
-def perspective_rect(l: float, r: float, t: float, b: float, travel: float = 1.0) -> Quad:
+def perspective_rect(l, r, t, b, travel=1.0, p=1.0):
     depth_b = tilt_depth(b, travel)
     depth_t = tilt_depth(t, travel)
-    wb = tilt_width_factor(depth_b)
-    wt = tilt_width_factor(depth_t)
-    return transform_quad(
+    w_ref = tilt_width_factor(travel)
+    wb = lerp(w_ref, tilt_width_factor(depth_b), p)
+    wt = lerp(w_ref, tilt_width_factor(depth_t), p)
+    return transform_quad(Quad(
+        bl=Vec2(l * wb, depth_b),
+        br=Vec2(r * wb, depth_b),
+        tl=Vec2(l * wt, depth_t),
+        tr=Vec2(r * wt, depth_t),
+    ))
+
+
+def perspective_static_rect(l: float, r: float, t: float, b: float, travel: float = 1.0) -> Quad:
+    return transform_static_quad(
         Quad(
-            bl=Vec2(l * wb, depth_b),
-            br=Vec2(r * wb, depth_b),
-            tl=Vec2(l * wt, depth_t),
-            tr=Vec2(r * wt, depth_t),
+            bl=Vec2(l * b * travel, b * travel),
+            br=Vec2(r * b * travel, b * travel),
+            tl=Vec2(l * t * travel, t * travel),
+            tr=Vec2(r * t * travel, t * travel),
         )
     )
 
@@ -679,7 +749,22 @@ def layout_custom_tag() -> Quad:
     )
 
 
-SCORE_BAR_BASE_Y = 0.865
+def init_ui_margin():
+    has_side_notch = (screen().l != safe_area().l) or (screen().r != safe_area().r)
+
+    match LevelConfig.ui_version:
+        case Version.v3:
+            UIMargin.life_bar_x = 0.28 if has_side_notch else 0.05
+            UIMargin.score_bar_x = 0.3 if has_side_notch else 0.1
+            UIMargin.life_bar_y = 0.887
+            UIMargin.score_bar_y = 0.865
+            UIMargin.ui_x = 0.23 if has_side_notch else 0.0
+        case Version.v1:
+            UIMargin.life_bar_x = 0.28 if has_side_notch else 0.0
+            UIMargin.score_bar_x = 0.3 if has_side_notch else 0.05
+            UIMargin.life_bar_y = 0.84
+            UIMargin.score_bar_y = 0.83
+            UIMargin.ui_x = 0.28 if has_side_notch else 0.0
 
 
 def layout_life_bar() -> Quad:
@@ -687,20 +772,22 @@ def layout_life_bar() -> Quad:
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
 
-    MARGIN = 0.28 if Options.version == 0 else 0.275  # noqa: N806
-    LIFE_BAR_BASE_Y = 0.887 if Options.version == 0 else 0.875  # noqa: N806
-
     h = 0
     w = 0
-    match Options.version:
-        case 0:
-            h = 0.196 * ui.secondary_metric_config.scale * scale_ratio
+    base_h_unscaled = 0
+    match LevelConfig.ui_version:
+        case Version.v3:
+            base_h_unscaled = 0.196 * ui.secondary_metric_config.scale
+            h = base_h_unscaled * scale_ratio
             w = h * 4.22
-        case 1:
-            h = 0.23 * ui.secondary_metric_config.scale * scale_ratio
+        case Version.v1:
+            base_h_unscaled = 0.23 * ui.secondary_metric_config.scale
+            h = base_h_unscaled * scale_ratio
             w = h * 4.22
 
-    screen_center = Vec2(x=screen().r - MARGIN - (w / 2), y=LIFE_BAR_BASE_Y)
+    y_shift = (base_h_unscaled - h) / 2
+
+    screen_center = Vec2(x=screen().r - UIMargin.life_bar_x * scale_ratio - (w / 2), y=UIMargin.life_bar_y + y_shift)
     return Quad(
         bl=Vec2(screen_center.x - w / 2, screen_center.y - h / 2),
         br=Vec2(screen_center.x + w / 2, screen_center.y - h / 2),
@@ -709,47 +796,69 @@ def layout_life_bar() -> Quad:
     )
 
 
-def layout_life_gauge(life) -> Quad:
+def layout_life_gauge(life, edge=False) -> Quad:
     ui = runtime_ui()
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
-    MARGIN = 0.28 if Options.version == 0 else 0.275  # noqa: N806
-    LIFE_BAR_BASE_Y = 0.887 if Options.version == 0 else 0.875  # noqa: N806
+
+    bar_h_unscaled = (
+        0.196 * ui.secondary_metric_config.scale
+        if LevelConfig.ui_version == Version.v3
+        else 0.23 * ui.secondary_metric_config.scale
+    )
+    bar_h_current = bar_h_unscaled * scale_ratio
+    y_shift = (bar_h_unscaled - bar_h_current) / 2
 
     y_offset = 0
     margin_offset = 0
     h = 0
     w = 0
-    match Options.version:
-        case 0:
-            margin_offset = 0.121
+    match LevelConfig.ui_version:
+        case Version.v3:
+            margin_offset = 0.118
             y_offset = -0.007
-            h = 0.027 * ui.secondary_metric_config.scale * scale_ratio
-            w = h * 18.3
-        case 1:
-            margin_offset = 0.07
-            y_offset = 0.007
-            h = 0.022 * ui.secondary_metric_config.scale * scale_ratio
-            w = h * 23.5
+            h = 0.033 * ui.secondary_metric_config.scale * scale_ratio
+            w = h * 15.3
+        case Version.v1:
+            margin_offset = 0.02
+            y_offset = 0.01
+            h = 0.023 * ui.secondary_metric_config.scale * scale_ratio
+            w = h * 23
 
     bar_base_w = 0.827
     final_scale = ui.secondary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
 
-    bar_center_x = screen().r - MARGIN - (current_bar_w / 2)
+    bar_center_x = screen().r - UIMargin.life_bar_x * scale_ratio - (current_bar_w / 2)
     number_center_x = bar_center_x + (margin_offset * final_scale)
 
-    center_y = LIFE_BAR_BASE_Y + (y_offset * final_scale)
+    center_y = UIMargin.life_bar_y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=center_y)
 
     life = clamp((life / 1000), 0, 1)
-    return Quad(
-        bl=Vec2(screen_center.x, screen_center.y - h / 2),
-        br=Vec2(screen_center.x + w * life, screen_center.y - h / 2),
-        tl=Vec2(screen_center.x, screen_center.y + h / 2),
-        tr=Vec2(screen_center.x + w * life, screen_center.y + h / 2),
-    )
+    if not edge:
+        return Quad(
+            bl=Vec2(screen_center.x, screen_center.y - h / 2),
+            br=Vec2(screen_center.x + w * life, screen_center.y - h / 2),
+            tl=Vec2(screen_center.x, screen_center.y + h / 2),
+            tr=Vec2(screen_center.x + w * life, screen_center.y + h / 2),
+        )
+    else:
+        active_ratio = 0.9625 if LevelConfig.ui_version == Version.v3 else 0.915
+
+        travel_distance = w * active_ratio
+
+        shift_amount = travel_distance * (1 - life)
+
+        base_x = screen_center.x
+
+        return Quad(
+            bl=Vec2(base_x - shift_amount, screen_center.y - h / 2),
+            br=Vec2(base_x + w - shift_amount, screen_center.y - h / 2),
+            tl=Vec2(base_x - shift_amount, screen_center.y + h / 2),
+            tr=Vec2(base_x + w - shift_amount, screen_center.y + h / 2),
+        )
 
 
 def layout_score_bar() -> Quad:
@@ -757,22 +866,22 @@ def layout_score_bar() -> Quad:
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
 
-    h = 0.27 * ui.primary_metric_config.scale * scale_ratio
-    w = h * 4.6
-
-    MARGIN = 0.3 if Options.version == 0 else 0.2  # noqa: N806
-
+    base_h_unscaled = 0
     h = 0
     w = 0
-    match Options.version:
-        case 0:
-            h = 0.27 * ui.primary_metric_config.scale * scale_ratio
+    match LevelConfig.ui_version:
+        case Version.v3:
+            base_h_unscaled = 0.27 * ui.primary_metric_config.scale
+            h = base_h_unscaled * scale_ratio
             w = h * 4.6
-        case 1:
-            h = 0.32 * ui.primary_metric_config.scale * scale_ratio
+        case Version.v1:
+            base_h_unscaled = 0.32 * ui.primary_metric_config.scale
+            h = base_h_unscaled * scale_ratio
             w = h * 4.6
 
-    screen_center = Vec2(x=screen().l + MARGIN + (w / 2), y=SCORE_BAR_BASE_Y)
+    y_shift = (base_h_unscaled - h) / 2
+
+    screen_center = Vec2(x=screen().l + UIMargin.score_bar_x * scale_ratio + (w / 2), y=UIMargin.score_bar_y + y_shift)
     return Quad(
         bl=Vec2(screen_center.x - w / 2, screen_center.y - h / 2),
         br=Vec2(screen_center.x + w / 2, screen_center.y - h / 2),
@@ -786,26 +895,27 @@ class ScoreGaugeType(IntEnum):
     MASK = 1
 
 
-def layout_score_gauge(gauge=0, score_type: ScoreGaugeType = ScoreGaugeType.NORMAL) -> Quad:
+def layout_score_gauge(gauge=0.0, score_type: ScoreGaugeType = ScoreGaugeType.NORMAL) -> Quad:
     ui = runtime_ui()
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
-    h = max(
-        (0.049 * ui.primary_metric_config.scale * scale_ratio),
-        1e-3,
+
+    bar_h_unscaled = (
+        0.27 * ui.primary_metric_config.scale
+        if LevelConfig.ui_version == Version.v3
+        else 0.32 * ui.primary_metric_config.scale
     )
-    w = max(
-        (h * 20 * ((1 - gauge) if score_type == ScoreGaugeType.MASK else 1)),
-        1e-3,
-    )  # c = 0-0.44 b = 0.44-0.6 a= 0.6-0.75 s=0.75-0.9
-    MARGIN = 0.3 if Options.version == 0 else 0.2  # noqa: N806
+    bar_h_current = bar_h_unscaled * scale_ratio
+    y_shift = (bar_h_unscaled - bar_h_current) / 2
+
+    # c = 0-0.44 b = 0.44-0.6 a= 0.6-0.75 s=0.75-0.9
 
     margin_offset = 0
     y_offset = 0
     h = 0
     w = 0
-    match Options.version:
-        case 0:
+    match LevelConfig.ui_version:
+        case Version.v3:
             margin_offset = 0.04
             y_offset = 0.008
             h = max(
@@ -816,7 +926,7 @@ def layout_score_gauge(gauge=0, score_type: ScoreGaugeType = ScoreGaugeType.NORM
                 (h * 20 * ((1 - gauge) if score_type == ScoreGaugeType.MASK else 1)),
                 1e-3,
             )
-        case 1:
+        case Version.v1:
             margin_offset = -0.155
             y_offset = 0.021
             h = max(
@@ -831,10 +941,10 @@ def layout_score_gauge(gauge=0, score_type: ScoreGaugeType = ScoreGaugeType.NORM
     bar_base_w = 0.27 * 4.6
     final_scale = ui.primary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
-    bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
+    bar_center_x = screen().l + UIMargin.score_bar_x * scale_ratio + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
-    center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
+    center_y = UIMargin.score_bar_y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
 
@@ -851,22 +961,25 @@ def layout_score_rank() -> Quad:
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
 
-    h = 0.22 * ui.primary_metric_config.scale * scale_ratio
-    w = h * 0.882
-
-    MARGIN = 0.3 if Options.version == 0 else 0.2  # noqa: N806
+    bar_h_unscaled = (
+        0.27 * ui.primary_metric_config.scale
+        if LevelConfig.ui_version == Version.v3
+        else 0.32 * ui.primary_metric_config.scale
+    )
+    bar_h_current = bar_h_unscaled * scale_ratio
+    y_shift = (bar_h_unscaled - bar_h_current) / 2
 
     y_offset = 0.015
     margin_offset = 1.138
     h = 0
     w = 0
-    match Options.version:
-        case 0:
+    match LevelConfig.ui_version:
+        case Version.v3:
             margin_offset = 1.138
             y_offset = 0.015
-            h = 0.22 * ui.primary_metric_config.scale * scale_ratio
-            w = h * 0.882
-        case 1:
+            h = 0.29 * ui.primary_metric_config.scale * scale_ratio
+            w = h * 0.772
+        case Version.v1:
             margin_offset = 1.102
             y_offset = 0.002
             h = 0.17 * ui.primary_metric_config.scale * scale_ratio
@@ -876,10 +989,10 @@ def layout_score_rank() -> Quad:
     final_scale = ui.primary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
 
-    bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
+    bar_center_x = screen().l + UIMargin.score_bar_x * scale_ratio + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
-    center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
+    center_y = UIMargin.score_bar_y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
 
@@ -896,21 +1009,27 @@ def layout_score_rank_text() -> Quad:
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
 
+    bar_h_unscaled = (
+        0.27 * ui.primary_metric_config.scale
+        if LevelConfig.ui_version == Version.v3
+        else 0.32 * ui.primary_metric_config.scale
+    )
+    bar_h_current = bar_h_unscaled * scale_ratio
+    y_shift = (bar_h_unscaled - bar_h_current) / 2
+
     h = 0.02 * ui.primary_metric_config.scale * scale_ratio
     w = h * 7.5
-
-    MARGIN = 0.3  # noqa: N806
 
     margin_offset = 1.138
     bar_base_w = 0.27 * 4.6
     final_scale = ui.primary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
 
-    bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
+    bar_center_x = screen().l + UIMargin.score_bar_x * scale_ratio + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
     y_offset = -0.1
-    center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
+    center_y = UIMargin.score_bar_y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
 
@@ -937,16 +1056,7 @@ def layout_fallback_judge_line() -> Quad:
 
 
 def layout_note_body_by_edges(l: float, r: float, h: float, travel: float):
-    p = 0.5
-    return transform_quad(
-        Quad(
-            bl=Vec2(l * (1 + h * p) * travel, (1 + h) * travel),
-            br=Vec2(r * (1 + h * p) * travel, (1 + h) * travel),
-            tl=Vec2(l * (1 - h * p) * travel, (1 - h) * travel),
-            tr=Vec2(r * (1 - h * p) * travel, (1 - h) * travel),
-        )
-    )
-    return perspective_rect(l=l, r=r, t=1 - h, b=1 + h, travel=travel)
+    return perspective_rect(l=l, r=r, t=1 - h, b=1 + h, travel=travel, p=Options.note_perspective)
 
 
 def layout_note_body_slices_by_edges(
@@ -1275,7 +1385,7 @@ def layout_combo_label(
     w: float,
     h: float,
 ) -> Quad:
-    return transform_quad(
+    return transform_static_quad(
         Quad(
             bl=Vec2(center.x - w, center.y + h),
             br=Vec2(center.x + w, center.y + h),
@@ -1291,7 +1401,7 @@ def layout_skill_bar(
     h: float,
 ) -> Quad:
     layout = +Quad
-    if Options.version == 1:
+    if LevelConfig.ui_version == Version.v1:
         h, w = transform_fixed_size(h, w)
         layout @= transform_quad(
             Quad(
@@ -1313,34 +1423,37 @@ def layout_skill_bar(
     return layout
 
 
-def layout_skill_judgment_line() -> Quad:
-    b = 1 + NOTE_H
-    t = 1 - NOTE_H
-    return perspective_rect(l=-6, r=6, t=t, b=b)
+def layout_skill_judgment_line(l: float = -6, r: float = 6, y_offset: float = 0.0) -> Quad:
+    b = 1 + DynamicLayout.note_h
+    t = 1 - DynamicLayout.note_h
+    travel = approach(1 - y_offset)
+    return perspective_rect(l=l, r=r, t=t, b=b, travel=travel)
 
 
-def layout_fever_cover_left() -> Quad:
-    p = perspective_rect(l=-6.5, r=0, t=0, b=get_perspective_y(-1))
-    safe_bl_x = min(screen().bl.x, p.bl.x)
+def layout_fever_cover(l, r) -> Quad:
+    p = perspective_rect(l=l, r=r, t=0, b=get_perspective_y(-1))
+    quad = +Quad
 
-    return Quad(
-        bl=Vec2(safe_bl_x, screen().bl.y),
-        br=p.bl,
-        tl=Vec2(screen().tl.x, p.tr.y),
-        tr=p.tl,
-    )
+    safe_l = screen().bl.x - screen().w
+    safe_r = screen().br.x + screen().w
+    safe_t = screen().tl.y + screen().h
+    safe_b = screen().bl.y - screen().h
 
-
-def layout_fever_cover_right() -> Quad:
-    p = perspective_rect(l=0, r=6.5, t=0, b=get_perspective_y(-1))
-    safe_br_x = max(screen().br.x, p.br.x)
-
-    return Quad(
-        bl=p.br,
-        br=Vec2(safe_br_x, screen().br.y),
-        tl=p.tr,
-        tr=Vec2(screen().tr.x, p.tl.y),
-    )
+    if r == 0:
+        quad @= Quad(
+            bl=Vec2(safe_l, safe_b),
+            br=p.bl,
+            tl=Vec2(safe_l, safe_t),
+            tr=p.tl,
+        )
+    else:
+        quad @= Quad(
+            bl=p.br,
+            br=Vec2(safe_r, safe_b),
+            tl=p.tr,
+            tr=Vec2(safe_r, safe_t),
+        )
+    return quad
 
 
 def layout_fever_cover_sky() -> Quad:
@@ -1361,10 +1474,18 @@ def layout_fever_gauge_right(t) -> Quad:
     return perspective_rect(l=6, r=6.5, t=t, b=get_perspective_y(-1))
 
 
+def layout_dynamic_fever_side(l: float, r: float, percentage: float, travel: float = 1.0) -> Quad:
+    t_val = lerp(LANE_B, LANE_T, percentage)
+
+    b_val = get_perspective_y(-1)
+
+    return perspective_rect(l=l, r=r, t=t_val, b=b_val, travel=travel)
+
+
 def layout_fever_text() -> Quad:
     center = 0.65
     rect = Rect(t=center - 0.2, b=center + 0.2, l=-1.5, r=1.5)
-    return transform_quad(rect)
+    return transform_static_quad(rect)
 
 
 def layout_fever_border() -> Rect:
@@ -1372,11 +1493,11 @@ def layout_fever_border() -> Rect:
 
 
 def transform_fixed_size(h, w):
-    target_width = w * DynamicLayout.fixed_w_scale
-    target_height = h * DynamicLayout.fixed_h_scale
+    target_width = w * Layout.fixed_w_scale
+    target_height = h * Layout.fixed_h_scale
 
-    width = target_width / DynamicLayout.w_scale
-    height = target_height / DynamicLayout.h_scale
+    width = target_width / Layout.w_scale
+    height = target_height / Layout.h_scale
 
     return height, width
 
