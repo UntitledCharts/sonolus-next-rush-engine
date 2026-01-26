@@ -480,6 +480,14 @@ def draw_life_number(number: int, z: float):
     MARGIN = 0.28 if LevelConfig.ui_version == SekaiVersion.v3 else 0.0  # noqa: N806
     LIFE_BAR_BASE_Y = 0.887 if LevelConfig.ui_version == SekaiVersion.v3 else 0.87  # noqa: N806
 
+    bar_h_unscaled = (
+        0.196 * ui.secondary_metric_config.scale
+        if LevelConfig.ui_version == SekaiVersion.v3
+        else 0.23 * ui.secondary_metric_config.scale
+    )
+    bar_h_current = bar_h_unscaled * scale_ratio
+    y_shift = (bar_h_unscaled - bar_h_current) / 2
+
     y_offset = 0
     margin_offset = 0
     h = 0
@@ -503,10 +511,10 @@ def draw_life_number(number: int, z: float):
     final_scale = ui.secondary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
 
-    bar_center_x = screen().r - MARGIN - (current_bar_w / 2)
+    bar_center_x = screen().r - MARGIN * scale_ratio - (current_bar_w / 2)
     number_center_x = bar_center_x + (margin_offset * final_scale)
 
-    center_y = LIFE_BAR_BASE_Y + (y_offset * final_scale)
+    center_y = LIFE_BAR_BASE_Y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=center_y)
 
@@ -543,6 +551,14 @@ def draw_score_bar_number(number: int, z: float):
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
     MARGIN = 0.3 if LevelConfig.ui_version == SekaiVersion.v3 else 0.05  # noqa: N806
 
+    bar_h_unscaled = (
+        0.27 * ui.primary_metric_config.scale
+        if LevelConfig.ui_version == SekaiVersion.v3
+        else 0.32 * ui.primary_metric_config.scale
+    )
+    bar_h_current = bar_h_unscaled * scale_ratio
+    y_shift = (bar_h_unscaled - bar_h_current) / 2
+
     margin_offset = 0
     y_offset = 0
     h = 0
@@ -566,10 +582,10 @@ def draw_score_bar_number(number: int, z: float):
     final_scale = ui.primary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
 
-    bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
+    bar_center_x = screen().l + MARGIN * scale_ratio + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
-    center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
+    center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
 
@@ -610,6 +626,14 @@ def draw_score_bar_raw_number(number: int, z: float, time: float):
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
     MARGIN = 0.3 if LevelConfig.ui_version == SekaiVersion.v3 else 0.05  # noqa: N806
 
+    bar_h_unscaled = (
+        0.27 * ui.primary_metric_config.scale
+        if LevelConfig.ui_version == SekaiVersion.v3
+        else 0.32 * ui.primary_metric_config.scale
+    )
+    bar_h_current = bar_h_unscaled * scale_ratio
+    y_shift = (bar_h_unscaled - bar_h_current) / 2
+
     margin_offset = 0
     y_offset = 0
     h = 0
@@ -633,10 +657,10 @@ def draw_score_bar_raw_number(number: int, z: float, time: float):
     final_scale = ui.primary_metric_config.scale * scale_ratio
     current_bar_w = bar_base_w * final_scale
 
-    bar_center_x = screen().l + MARGIN + (current_bar_w / 2)
+    bar_center_x = screen().l + MARGIN * scale_ratio + (current_bar_w / 2)
     number_center_x = bar_center_x - (margin_offset * final_scale)
 
-    center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale)
+    center_y = SCORE_BAR_BASE_Y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
 

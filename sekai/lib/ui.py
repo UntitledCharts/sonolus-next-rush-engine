@@ -1,4 +1,4 @@
-from sonolus.script.runtime import HorizontalAlign, is_preview, is_tutorial, runtime_ui, safe_area
+from sonolus.script.runtime import HorizontalAlign, aspect_ratio, is_preview, is_tutorial, runtime_ui, safe_area
 from sonolus.script.ui import (
     EaseType,
     UiAnimation,
@@ -64,7 +64,9 @@ ui_config = UiConfig(
 def init_ui(ui_version: SekaiVersion = SekaiVersion.v3):
     ui = runtime_ui()
 
-    gap = 0.05
+    scale_ratio = min(1, aspect_ratio() / (16 / 9))
+
+    gap = 0.05 * scale_ratio
     box = safe_area().shrink(Vec2(gap, gap))
     min_x_extent = min(box.r, -box.l)
     box.r = min_x_extent
@@ -76,7 +78,7 @@ def init_ui(ui_version: SekaiVersion = SekaiVersion.v3):
     custom_life_bar = not Options.custom_life_bar or not ActiveSkin.life.available or is_preview() or is_tutorial()
     custom_life_bar_margin = +Vec2(0, 0)
     if ActiveSkin.life.bar.available and ui_version == SekaiVersion.v3 and Options.custom_life_bar:
-        custom_life_bar_margin @= Vec2(0.26, 0)
+        custom_life_bar_margin @= Vec2(0.23 * scale_ratio, 0)
     custom_life_bar_scale = (
         1 if is_preview() or is_tutorial() or not ActiveSkin.life.bar.available or not Options.custom_life_bar else 1.5
     )
@@ -85,7 +87,7 @@ def init_ui(ui_version: SekaiVersion = SekaiVersion.v3):
     ui.menu.update(
         anchor=box.tr - custom_life_bar_margin,
         pivot=Vec2(1, 1),
-        dimensions=Vec2(0.15, 0.15) * ui.menu_config.scale * custom_life_bar_scale,
+        dimensions=Vec2(0.15, 0.15) * ui.menu_config.scale * custom_life_bar_scale * scale_ratio,
         alpha=ui.menu_config.alpha * show_ui * custom_life_bar,
         horizontal_align=HorizontalAlign.CENTER,
         background=True,
