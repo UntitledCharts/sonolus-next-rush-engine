@@ -11,7 +11,8 @@ from sonolus.script.runtime import is_replay, is_watch
 from sonolus.script.sprite import RenderMode, Sprite, SpriteGroup, StandardSprite, skin, sprite, sprite_group
 
 from sekai.lib.layout import AccuracyType, ComboType, FlickDirection, JudgmentType
-from sekai.lib.options import Options
+from sekai.lib.level_config import LevelConfig
+from sekai.lib.options import Options, SekaiVersion
 
 
 @skin
@@ -388,6 +389,10 @@ class BaseSkin:
     score_rank_text_b: Sprite = sprite("Score Rank Text B")
     score_rank_text_c: Sprite = sprite("Score Rank Text C")
     score_rank_text_d: Sprite = sprite("Score Rank Text D")
+
+    # sekai version checker
+    v3: Sprite = sprite("Never delete the sekai version checker=v3")
+    v1: Sprite = sprite("Never delete the sekai version checker=v1")
 
 
 EMPTY_SPRITE = Sprite(-1)
@@ -835,7 +840,7 @@ class LifeBarSpriteSet(Record):
 
     def get_sprite(self, bar_type: LifeBarType, life):
         result = +Sprite
-        if life < 200 and Options.version == 1:
+        if life < 200 and LevelConfig.ui_version == SekaiVersion.v1:
             match bar_type:
                 case LifeBarType.PAUSE:
                     result @= self.danger_pause
@@ -990,6 +995,20 @@ class ActiveConnectionSpriteSet(Record):
             normal=fallback,
             active=fallback,
         )
+
+
+class UIChecker(Record):
+    v1: Sprite
+    v3: Sprite
+
+    @property
+    def check(self):
+        result = 0
+        if self.v1.is_available:
+            result = SekaiVersion.v1
+        else:
+            result = SekaiVersion.v3
+        return result
 
 
 EMPTY_ACTIVE_CONNECTION_SPRITE_SET = ActiveConnectionSpriteSet(
@@ -1376,6 +1395,8 @@ class ActiveSkin:
     ui_number: UINumberSpriteSet
     life: LifeSpriteSet
     score: ScoreSpriteSet
+
+    ui_checker: UIChecker
 
 
 def init_skin():
@@ -1934,3 +1955,5 @@ def init_skin():
         rank=score_rank,
         rank_text=score_rank_text,
     )
+
+    ActiveSkin.ui_checker = UIChecker(v1=BaseSkin.v1, v3=BaseSkin.v3)
