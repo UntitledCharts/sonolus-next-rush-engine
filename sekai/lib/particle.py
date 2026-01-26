@@ -3,6 +3,8 @@ from sonolus.script.globals import level_data
 from sonolus.script.particle import Particle, StandardParticle, particle, particles
 from sonolus.script.record import Record
 
+from sekai.lib.options import SekaiVersion
+
 
 @particles
 class BaseParticles:
@@ -144,6 +146,10 @@ class BaseParticles:
     super_fever_start_effect: Particle = particle("Sekai Super Fever Effect")
     fever_border: Particle = particle("Sekai Fever Border")
 
+    # sekai version checker
+    v3: Particle = particle("Never delete the sekai version checker=v3")
+    v1: Particle = particle("Never delete the sekai version checker=v1")
+
 
 EMPTY_PARTICLE = Particle(-1)
 
@@ -215,6 +221,20 @@ class NoteParticleSet(Record):
         return result
 
 
+class UIChecker(Record):
+    v1: Particle
+    v3: Particle
+
+    @property
+    def check(self):
+        result = 0
+        if self.v1.is_available:
+            result = SekaiVersion.v1
+        else:
+            result = SekaiVersion.v3
+        return result
+
+
 EMPTY_NOTE_PARTICLE_SET = NoteParticleSet(
     circular=EMPTY_PARTICLE,
     circular_great=EMPTY_PARTICLE,
@@ -281,6 +301,8 @@ class ActiveParticles:
     super_fever_start_lane: Particle
     super_fever_start_effect: Particle
     fever_border: Particle
+
+    ui_checker: UIChecker
 
 
 def init_particles():
@@ -763,3 +785,5 @@ def init_particles():
     ActiveParticles.super_fever_start_lane @= BaseParticles.super_fever_start_lane
     ActiveParticles.super_fever_start_effect @= BaseParticles.super_fever_start_effect
     ActiveParticles.fever_border @= BaseParticles.fever_border
+
+    ActiveParticles.ui_checker @= UIChecker(v1=BaseParticles.v1, v3=BaseParticles.v3)

@@ -18,11 +18,11 @@ from sekai.lib.layer import (
     get_z,
 )
 from sekai.lib.layout import init_layout
-from sekai.lib.level_config import EngineRevision, init_level_config
+from sekai.lib.level_config import EngineRevision, init_level_config, init_particle_version, init_ui_version
 from sekai.lib.note import init_life, init_score
 from sekai.lib.options import Options
-from sekai.lib.particle import init_particles
-from sekai.lib.skin import init_skin
+from sekai.lib.particle import ActiveParticles, init_particles
+from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.stage import schedule_lane_sfx
 from sekai.lib.streams import Streams
 from sekai.lib.ui import init_ui
@@ -70,6 +70,8 @@ class WatchInitialization(WatchArchetype):
         init_particles()
         init_ui()
         init_buckets()
+        init_ui_version(ActiveSkin.ui_checker.check)
+        init_particle_version(ActiveParticles.ui_checker.check)
         init_score(note.WATCH_NOTE_ARCHETYPES)
         init_life(note.WATCH_NOTE_ARCHETYPES, self.initial_life)
 
