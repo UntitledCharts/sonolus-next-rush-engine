@@ -159,12 +159,6 @@ class NoteKind(IntEnum):
 
 def init_score(note_archetypes: Iterable[type[PlayArchetype | WatchArchetype]]):
     match LevelConfig.score_mode:
-        case ScoreMode.SEKAI:
-            level_score().update(
-                perfect_multiplier=1.0,
-                great_multiplier=0.7,
-                good_multiplier=0.5,
-            )
         case ScoreMode.WEIGHTED_COMBO | ScoreMode.UNWEIGHTED_COMBO:
             level_score().update(
                 perfect_multiplier=1.0,
@@ -184,7 +178,7 @@ def init_score(note_archetypes: Iterable[type[PlayArchetype | WatchArchetype]]):
             assert_never(LevelConfig.score_mode)
 
     match LevelConfig.score_mode:
-        case ScoreMode.WEIGHTED_COMBO | ScoreMode.WEIGHTED_FLAT | ScoreMode.SEKAI:
+        case ScoreMode.WEIGHTED_COMBO | ScoreMode.WEIGHTED_FLAT:
             for note_archetype in note_archetypes:
                 kind = cast(NoteKind, note_archetype.key)
                 match kind:
