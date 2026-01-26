@@ -657,6 +657,13 @@ class ComboLabelSpriteSet(Record):
         return self.normal.is_available
 
 
+class SekaiWindow(Record):
+    perfect: Interval
+    great: Interval
+    good: Interval
+    bad: Interval
+
+
 class JudgmentSpriteSet(Record):
     perfect: Sprite
     great: Sprite
@@ -665,22 +672,19 @@ class JudgmentSpriteSet(Record):
     miss: Sprite
     auto: Sprite
 
-    def get_bad(self, judgment: Judgment, windows_bad: Interval, accuracy: float, check_pass: bool):
+    def get_bad(self, judgment: Judgment, windows: SekaiWindow, accuracy: float):
         if Options.auto_judgment and is_watch() and not is_replay():
             return JudgmentType.AUTO
         elif (
-            judgment == Judgment.MISS
-            and windows_bad != Interval(-1, -1)
-            and (windows_bad.start <= accuracy <= windows_bad.end or windows_bad == Interval(0, 0))
-            and check_pass
+            windows.bad.start < accuracy < windows.bad.end and windows.good != windows.bad and judgment == Judgment.MISS
         ):
             return JudgmentType.BAD
         else:
             return judgment
 
-    def get_sprite(self, judgment_type: Judgment, windows_bad: Interval, accuracy: float, check_pass: bool):
+    def get_sprite(self, judgment_type: Judgment, windows: SekaiWindow, accuracy: float):
         result = +Sprite
-        match self.get_bad(judgment_type, windows_bad, accuracy, check_pass):
+        match self.get_bad(judgment_type, windows, accuracy):
             case JudgmentType.PERFECT:
                 result @= self.perfect
             case JudgmentType.GREAT:

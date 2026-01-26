@@ -98,9 +98,8 @@ class ComboJudge(WatchArchetype):
         draw_judgment_text(
             draw_time=self.spawn_time(),
             judgment=note.WatchBaseNote.at(self.note_index).judgment,
-            windows_bad=note.WatchBaseNote.at(self.note_index).judgment_window_bad,
+            windows=note.WatchBaseNote.at(self.note_index).judgment_window,
             accuracy=note.WatchBaseNote.at(self.note_index).accuracy,
-            check_pass=note.WatchBaseNote.at(self.note_index).played_hit_effects,
             z=self.z,
         )
 

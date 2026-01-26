@@ -2,11 +2,12 @@ from enum import IntEnum
 from math import cos, floor, pi
 
 from sonolus.script.bucket import Judgment, JudgmentWindow
-from sonolus.script.interval import Interval, clamp, unlerp, unlerp_clamped
+from sonolus.script.interval import clamp, unlerp, unlerp_clamped
 from sonolus.script.record import Record
 from sonolus.script.runtime import aspect_ratio, is_replay, is_watch, runtime_ui, screen, time
 from sonolus.script.vec import Vec2
 
+from sekai.lib.buckets import SekaiWindow
 from sekai.lib.layout import (
     SCORE_BAR_BASE_Y,
     ComboType,
@@ -374,9 +375,7 @@ class ComboNumberLayout(Record):
                 )
 
 
-def draw_judgment_text(
-    draw_time: float, judgment: Judgment, windows_bad: Interval, accuracy: float, check_pass: bool, z: float
-):
+def draw_judgment_text(draw_time: float, judgment: Judgment, windows: SekaiWindow, accuracy: float, z: float):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.judgment.available:
@@ -396,9 +395,9 @@ def draw_judgment_text(
     a = ui.judgment_config.alpha * unlerp_clamped(draw_time, draw_time + 0.064, time())
     s = unlerp_clamped(draw_time, draw_time + 0.064, time())
     layout = layout_combo_label(screen_center, w=w * s / 2, h=h * s / 2)
-    ActiveSkin.judgment.get_sprite(
-        judgment_type=judgment, windows_bad=windows_bad, accuracy=accuracy, check_pass=check_pass
-    ).draw(quad=layout, z=z, a=a)
+    ActiveSkin.judgment.get_sprite(judgment_type=judgment, windows=windows, accuracy=accuracy).draw(
+        quad=layout, z=z, a=a
+    )
 
 
 def draw_judgment_accuracy(judgment: Judgment, accuracy: float, windows: JudgmentWindow, wrong_way: bool, z: float):
