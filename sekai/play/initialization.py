@@ -1,6 +1,9 @@
 from math import floor
 
-from sonolus.script.archetype import EntityRef, PlayArchetype, callback, exported, imported
+from sonolus.script.archetype import EntityRef, PlayArchetype, callback, entity_info_at, exported, imported
+from sonolus.script.containers import sort_linked_entities
+from sonolus.script.globals import level_data, level_memory
+from sonolus.script.runtime import level_score
 
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import init_event_list
@@ -29,7 +32,7 @@ from sekai.lib.options import Options
 from sekai.lib.particle import ActiveParticles, init_particles
 from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.ui import init_ui
-from sekai.play import custom_elements, note
+from sekai.play import custom_elements, input_manager, note, static_stage
 from sekai.play.common import init_play_common
 from sekai.play.dynamic_stage import CameraChange
 from sekai.play.events import Fever, Skill
@@ -93,8 +96,8 @@ class Initialization(PlayArchetype):
         sorted_linked_list()
 
     def initialize(self):
-        StaticStage.spawn()
-        InputManager.spawn()
+        static_stage.StaticStage.spawn()
+        input_manager.InputManager.spawn()
         self.replay_revision = self.revision
 
     def spawn_order(self) -> float:
