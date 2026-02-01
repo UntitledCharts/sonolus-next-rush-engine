@@ -25,9 +25,9 @@ from sekai.lib.layout import (
     screen,
 )
 from sekai.lib.level_config import LevelConfig
-from sekai.lib.options import Options, SekaiVersion
+from sekai.lib.options import Options, SekaiVersion, SkillMode
 from sekai.lib.particle import ActiveParticles
-from sekai.lib.skin import ActiveSkin, SkillEffects
+from sekai.lib.skin import ActiveSkin
 
 
 def draw_fever_side_cover(z: float, time: float):
@@ -125,7 +125,7 @@ def spawn_fever_chance_particle():
         ActiveParticles.fever_chance_lane.spawn(layout_lane2, 1, False)
 
 
-def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillEffects, level: int):
+def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode, level: int):
     if Options.hide_ui >= 3:
         return
     if not Options.skill_effect:
@@ -163,11 +163,11 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillEffe
         w = h * 21
         layout @= layout_skill_bar(current_center, w, h)
     match effect:
-        case SkillEffects.SCORE:
+        case SkillMode.SCORE:
             ActiveSkin.skill_bar_score.draw(layout, z, anim)
-        case SkillEffects.HEAL:
+        case SkillMode.HEAL:
             ActiveSkin.skill_bar_life.draw(layout, z, anim)
-        case SkillEffects.JUDGMENT:
+        case SkillMode.JUDGMENT:
             ActiveSkin.skill_bar_judgment.draw(layout, z, anim)
 
     if LevelConfig.ui_version == SekaiVersion.v3:

@@ -26,15 +26,15 @@ from sekai.lib.events import (
     spawn_fever_chance_particle,
     spawn_fever_start_particle,
 )
-from sekai.lib.options import Options
-from sekai.lib.skin import ActiveSkin, SkillEffects
+from sekai.lib.options import Options, SkillMode
+from sekai.lib.skin import ActiveSkin
 from sekai.lib.streams import Streams
 from sekai.watch import custom_elements, initialization
 
 
 class Skill(WatchArchetype):
     beat: StandardImport.BEAT
-    effect: SkillEffects = imported(name="effect", default=SkillEffects.SCORE)
+    effect: SkillMode = imported(name="effect", default=SkillMode.LEVEL_DEFAULT)
     level: int = imported(name="level", default=1)
     start_time: float = entity_data()
     current_life: float = entity_data()
@@ -46,10 +46,11 @@ class Skill(WatchArchetype):
 
     @callback(order=-2)
     def preprocess(self):
+        self.effect = SkillMode.from_options(Options.skill_mode, self.effect)
         self.start_time = beat_to_time(self.beat)
         if Options.hide_ui != 3 and Options.skill_effect and ActiveSkin.skill_bar_score.is_available:
             Effects.skill.schedule(self.start_time)
-        if self.effect == SkillEffects.HEAL:
+        if self.effect == SkillMode.HEAL:
             add_life_scheduled(250, self.start_time)
 
     def initialize(self):
@@ -68,7 +69,7 @@ class Skill(WatchArchetype):
     def update_parallel(self):
         if time() < self.start_time + 3:
             draw_skill_bar(self.z, self.z2, time() - self.start_time, self.count, self.effect, self.level)
-        if time() < self.start_time + 6 and self.effect == SkillEffects.JUDGMENT:
+        if time() < self.start_time + 6 and self.effect == SkillMode.JUDGMENT:
             draw_judgment_effect(time() - self.start_time)
 
     def update_sequential(self):
