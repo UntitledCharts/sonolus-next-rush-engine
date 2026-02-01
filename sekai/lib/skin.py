@@ -12,7 +12,7 @@ from sonolus.script.sprite import RenderMode, Sprite, SpriteGroup, StandardSprit
 
 from sekai.lib.layout import AccuracyType, ComboType, FlickDirection, JudgmentType
 from sekai.lib.level_config import LevelConfig
-from sekai.lib.options import Options, SekaiVersion
+from sekai.lib.options import Options, SekaiVersion, SkillMode
 
 
 @skin
@@ -784,25 +784,19 @@ class SkillLevelSpriteSet(Record):
         return self.skill[0].is_available
 
 
-class SkillEffects(IntEnum):
-    SCORE = 0
-    HEAL = 1
-    JUDGMENT = 2
-
-
 class SkillValueSpriteSet(Record):
     score: Sprite
     heal: Sprite
     judgment: Sprite
 
-    def get_sprite(self, effect: SkillEffects):
+    def get_sprite(self, effect: SkillMode):
         result = +Sprite
         match effect:
-            case SkillEffects.SCORE:
+            case SkillMode.SCORE:
                 result @= self.score
-            case SkillEffects.HEAL:
+            case SkillMode.HEAL:
                 result @= self.heal
-            case SkillEffects.JUDGMENT:
+            case SkillMode.JUDGMENT:
                 result @= self.judgment
             case _:
                 assert_never(effect)
