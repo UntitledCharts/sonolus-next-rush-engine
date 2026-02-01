@@ -121,7 +121,7 @@ class FeverChance(WatchArchetype):
         return Fever.fever_start_time + 1
 
     def update_parallel(self):
-        if not is_replay() and not Options.forced_fever_chance and not self.force:
+        if not Options.forced_fever_chance and not self.force:
             return
         if is_skip():
             self.checker = 0
