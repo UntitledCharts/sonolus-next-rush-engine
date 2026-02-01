@@ -16,7 +16,6 @@ from sonolus.script.runtime import is_replay, level_score
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import init_event_list
 from sekai.lib.buckets import init_buckets
-from sekai.lib.events import SkillEffects
 from sekai.lib.layer import (
     LAYER_BACKGROUND_SIDE,
     LAYER_DAMAGE,
@@ -36,7 +35,7 @@ from sekai.lib.level_config import (
     init_ui_version,
 )
 from sekai.lib.note import init_life, init_score
-from sekai.lib.options import Options
+from sekai.lib.options import Options, SkillMode
 from sekai.lib.particle import ActiveParticles, init_particles
 from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.stage import schedule_lane_sfx
@@ -186,11 +185,9 @@ def setting_combo(head: int, skill: int) -> None:
 
     while ptr > 0:
         if skill_ptr > 0 and note.WatchBaseNote.at(ptr).target_time >= Skill.at(skill_ptr).start_time:
-            if Skill.at(skill_ptr).effect == SkillEffects.HEAL:
+            if Skill.at(skill_ptr).effect == SkillMode.HEAL:
                 skill_ptr = Skill.at(skill_ptr).next_ref.index
-            elif (
-                Skill.at(skill_ptr).effect == SkillEffects.SCORE or Skill.at(skill_ptr).effect == SkillEffects.JUDGMENT
-            ):
+            elif Skill.at(skill_ptr).effect == SkillMode.SCORE or Skill.at(skill_ptr).effect == SkillMode.JUDGMENT:
                 note.WatchBaseNote.at(ptr).entity_score_multiplier += (
                     note.WatchBaseNote.at(ptr).archetype_score_multiplier
                     + note.WatchBaseNote.at(ptr).entity_score_multiplier
@@ -404,7 +401,7 @@ def count_skill(head: int) -> None:
     while ptr > 0:
         Skill.at(ptr).count = count
         count += 1
-        if Skill.at(ptr).effect == SkillEffects.HEAL:
+        if Skill.at(ptr).effect == SkillMode.HEAL:
             life = clamp(life + 250, 0, 2000)
         Skill.at(ptr).current_life = life
         ptr = Skill.at(ptr).next_ref.index

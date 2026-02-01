@@ -8,7 +8,6 @@ from sonolus.script.runtime import level_score
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import init_event_list
 from sekai.lib.buckets import init_buckets
-from sekai.lib.events import SkillEffects
 from sekai.lib.layer import (
     LAYER_BACKGROUND_SIDE,
     LAYER_DAMAGE,
@@ -28,7 +27,7 @@ from sekai.lib.level_config import (
     init_ui_version,
 )
 from sekai.lib.note import init_life, init_score
-from sekai.lib.options import Options
+from sekai.lib.options import Options, SkillMode
 from sekai.lib.particle import ActiveParticles, init_particles
 from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.ui import init_ui
@@ -177,11 +176,9 @@ def setting_count(head: int, skill: int) -> None:
     custom_elements.ScoreIndicator.max_score = 1000000
     while ptr > 0:
         if skill_ptr > 0 and note.BaseNote.at(ptr).target_time >= Skill.at(skill_ptr).start_time:
-            if Skill.at(skill_ptr).effect == SkillEffects.HEAL:
+            if Skill.at(skill_ptr).effect == SkillMode.HEAL:
                 skill_ptr = Skill.at(skill_ptr).next_ref.index
-            elif (
-                Skill.at(skill_ptr).effect == SkillEffects.SCORE or Skill.at(skill_ptr).effect == SkillEffects.JUDGMENT
-            ):
+            elif Skill.at(skill_ptr).effect == SkillMode.SCORE or Skill.at(skill_ptr).effect == SkillMode.JUDGMENT:
                 note.BaseNote.at(ptr).entity_score_multiplier += (
                     note.BaseNote.at(ptr).archetype_score_multiplier + note.BaseNote.at(ptr).entity_score_multiplier
                 )
