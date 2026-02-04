@@ -48,7 +48,7 @@ class ParticleManager(WatchArchetype):
             return
         layout = layout_lane(self.lane, self.size)
         handle_critical_flick_lane_effect(
-            self.particles.lane.spawn(layout, duration=1 * Options.note_effect_duration), self.lane, self.target_time
+            self.particles.lane.spawn(layout, duration=1 / Options.effect_animation_speed), self.lane, self.target_time
         )
         self.check = True
 
