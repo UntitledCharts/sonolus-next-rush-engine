@@ -998,7 +998,7 @@ def draw_tutorial_note_slot_effects(
                 end_time=start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed,
                 lane=slot_lane,
             )
-    slot_glow_sprite = sprite_set.slot_glow
+    slot_glow_sprite = sprite_set.slot_glow.perfect
     if (
         slot_glow_sprite.is_available
         and time() < start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed
