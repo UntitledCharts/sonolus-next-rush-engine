@@ -11,7 +11,7 @@ from sonolus.script.ui import (
 )
 from sonolus.script.vec import Vec2
 
-from sekai.lib.layout import Layout
+from sekai.lib.layout import Layout, UIMargin
 from sekai.lib.options import Options, SekaiVersion
 from sekai.lib.skin import ActiveSkin
 
@@ -76,13 +76,16 @@ def init_ui(ui_version: SekaiVersion = SekaiVersion.v3):
     custom_combo_number = not Options.custom_combo or not ActiveSkin.combo_number.available
     custom_judgment = not Options.custom_judgment or not ActiveSkin.judgment.available
     custom_life_bar = not Options.custom_life_bar or not ActiveSkin.life.available or is_preview() or is_tutorial()
+    custom_score_bar = not Options.custom_score_bar or not ActiveSkin.score.available or is_preview() or is_tutorial()
     custom_life_bar_margin = +Vec2(0, 0)
-    if ActiveSkin.life.bar.available and ui_version == SekaiVersion.v3 and Options.custom_life_bar:
-        custom_life_bar_margin @= Vec2(0.23 * scale_ratio, 0)
+    custom_score_bar_margin = +Vec2(0, 0)
+    if not (Options.full_screen_ui and custom_life_bar):
+        custom_life_bar_margin @= Vec2(UIMargin.ui_x * scale_ratio, 0)
+    if not (Options.full_screen_ui and custom_score_bar):
+        custom_score_bar_margin @= Vec2(UIMargin.ui_x * scale_ratio, 0)
     custom_life_bar_scale = (
         1 if is_preview() or is_tutorial() or not ActiveSkin.life.bar.available or not Options.custom_life_bar else 1.5
     )
-    custom_score_bar = not Options.custom_score_bar or not ActiveSkin.score.available or is_preview() or is_tutorial()
 
     ui.menu.update(
         anchor=box.tr - custom_life_bar_margin,
@@ -93,7 +96,7 @@ def init_ui(ui_version: SekaiVersion = SekaiVersion.v3):
         background=True,
     )
     ui.primary_metric_bar.update(
-        anchor=box.tl,
+        anchor=box.tl + custom_score_bar_margin,
         pivot=Vec2(0, 1),
         dimensions=Vec2(0.75, 0.15) * ui.primary_metric_config.scale,
         alpha=ui.primary_metric_config.alpha * show_ui * custom_score_bar,
@@ -101,7 +104,7 @@ def init_ui(ui_version: SekaiVersion = SekaiVersion.v3):
         background=True,
     )
     ui.primary_metric_value.update(
-        anchor=box.tl + Vec2(0.715, -0.035) * ui.primary_metric_config.scale,
+        anchor=box.tl + custom_score_bar_margin + Vec2(0.715, -0.035) * ui.primary_metric_config.scale,
         pivot=Vec2(1, 1),
         dimensions=Vec2(0, 0.08) * ui.primary_metric_config.scale,
         alpha=ui.primary_metric_config.alpha * show_ui * custom_score_bar,
