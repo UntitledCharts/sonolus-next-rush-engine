@@ -26,7 +26,7 @@ from sekai.lib.layer import (
     LAYER_STAGE,
     get_z,
 )
-from sekai.lib.layout import init_layout
+from sekai.lib.layout import init_layout, init_ui_margin
 from sekai.lib.level_config import (
     EngineRevision,
     LevelConfig,
@@ -84,6 +84,7 @@ class WatchInitialization(WatchArchetype):
         init_skin()
         init_particles()
         init_ui_version(ActiveSkin.ui_checker.check)
+        init_ui_margin()
         init_ui(LevelConfig.ui_version)
         init_buckets()
         init_particle_version(ActiveParticles.ui_checker.check)

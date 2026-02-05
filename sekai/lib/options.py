@@ -336,6 +336,13 @@ class Options:
         description="Custom UI does not support disabling this feature. If it crashes, please disable the conflicting settings.",
         default=True,
     )
+    full_screen_ui: bool = toggle_option(
+        name="Full Screen UI",
+        scope="Rush",
+        description="UI is displayed in full-screen aspect ratio.",
+        advanced=True,
+        default=False,
+    )
     hide_ui: int = select_option(
         name="Hide UI",
         scope="Rush",
