@@ -84,7 +84,7 @@ class ComboJudge(PlayArchetype):
     target_time: float = entity_memory()
     spawn_time: float = entity_memory()
     judgment: Judgment = entity_memory()
-    accuracy: Judgment = entity_memory()
+    accuracy: float = entity_memory()
     windows: SekaiWindow = entity_memory()
     wrong_way: bool = entity_memory()
     my_judge_id: int = entity_memory()
