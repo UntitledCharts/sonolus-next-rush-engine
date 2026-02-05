@@ -29,7 +29,7 @@ from sekai.lib.events import (
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.skin import ActiveSkin
 from sekai.lib.streams import Streams
-from sekai.play import initialization
+from sekai.play import custom_elements, initialization
 
 
 @level_memory
@@ -46,6 +46,7 @@ class Skill(PlayArchetype):
     next_ref: EntityRef[Skill] = entity_data()
     z: float = entity_memory()
     z2: float = entity_memory()
+    check: bool = entity_memory()
     name = archetype_names.SKILL
 
     @callback(order=-2)
@@ -82,6 +83,9 @@ class Skill(PlayArchetype):
             return
         if not SkillActive.judgment and self.effect == SkillMode.JUDGMENT:
             SkillActive.judgment = True
+        if not self.check and custom_elements.LifeManager.life > 0:
+            custom_elements.LifeManager.life += 250
+        self.check = True
 
     @property
     def calc_time(self) -> float:
