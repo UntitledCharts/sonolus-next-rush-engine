@@ -231,16 +231,16 @@ def setting_combo(head: int, skill: int) -> None:
         current_note_weight = level_score().perfect_multiplier * (
             (
                 min(
-                    floor(count * inv_perfect_step) * level_score().consecutive_perfect_multiplier,
+                    floor(count * inv_perfect_step + 1e-9) * level_score().consecutive_perfect_multiplier,
                     (level_score().consecutive_perfect_cap * inv_perfect_step)
                     * level_score().consecutive_perfect_multiplier,
                 )
                 + min(
-                    floor(count * inv_great_step) * level_score().consecutive_great_multiplier,
+                    floor(count * inv_great_step + 1e-9) * level_score().consecutive_great_multiplier,
                     (level_score().consecutive_great_cap * inv_great_step) * level_score().consecutive_great_multiplier,
                 )
                 + min(
-                    floor(count * inv_good_step) * level_score().consecutive_good_multiplier,
+                    floor(count * inv_good_step + 1e-9) * level_score().consecutive_good_multiplier,
                     (level_score().consecutive_good_cap * inv_good_step) * level_score().consecutive_good_multiplier,
                 )
             )
@@ -316,16 +316,16 @@ def calculate_score(head: int, max_score: int, total_weight: float):
         note_raw_score = judgment_multiplier * (
             (
                 min(
-                    floor(perfect_step * inv_perfect_step) * level_score().consecutive_perfect_multiplier,
+                    floor(perfect_step * inv_perfect_step + 1e-9) * level_score().consecutive_perfect_multiplier,
                     (level_score().consecutive_perfect_cap * inv_perfect_step)
                     * level_score().consecutive_perfect_multiplier,
                 )
                 + min(
-                    floor(great_step * inv_great_step) * level_score().consecutive_great_multiplier,
+                    floor(great_step * inv_great_step + 1e-9) * level_score().consecutive_great_multiplier,
                     (level_score().consecutive_great_cap * inv_great_step) * level_score().consecutive_great_multiplier,
                 )
                 + min(
-                    floor(good_step * inv_good_step) * level_score().consecutive_good_multiplier,
+                    floor(good_step * inv_good_step + 1e-9) * level_score().consecutive_good_multiplier,
                     (level_score().consecutive_good_cap * inv_good_step) * level_score().consecutive_good_multiplier,
                 )
             )
@@ -355,17 +355,17 @@ def calculate_score(head: int, max_score: int, total_weight: float):
                 note_ideal_weight = level_score().perfect_multiplier * (
                     (
                         min(
-                            floor(count * inv_perfect_step) * level_score().consecutive_perfect_multiplier,
+                            floor(count * inv_perfect_step + 1e-9) * level_score().consecutive_perfect_multiplier,
                             (level_score().consecutive_perfect_cap * inv_perfect_step)
                             * level_score().consecutive_perfect_multiplier,
                         )
                         + min(
-                            floor(count * inv_great_step) * level_score().consecutive_great_multiplier,
+                            floor(count * inv_great_step + 1e-9) * level_score().consecutive_great_multiplier,
                             (level_score().consecutive_great_cap * inv_great_step)
                             * level_score().consecutive_great_multiplier,
                         )
                         + min(
-                            floor(count * inv_good_step) * level_score().consecutive_good_multiplier,
+                            floor(count * inv_good_step + 1e-9) * level_score().consecutive_good_multiplier,
                             (level_score().consecutive_good_cap * inv_good_step)
                             * level_score().consecutive_good_multiplier,
                         )

@@ -185,17 +185,18 @@ class ComboJudge(PlayArchetype):
         note_raw_score = judgment_multiplier * (
             (
                 min(
-                    floor(ScoreIndicator.perfect_step * inv_perfect_step)
+                    floor(ScoreIndicator.perfect_step * inv_perfect_step + 1e-9)
                     * level_score().consecutive_perfect_multiplier,
                     (level_score().consecutive_perfect_cap * inv_perfect_step)
                     * level_score().consecutive_perfect_multiplier,
                 )
                 + min(
-                    floor(ScoreIndicator.great_step * inv_great_step) * level_score().consecutive_great_multiplier,
+                    floor(ScoreIndicator.great_step * inv_great_step + 1e-9)
+                    * level_score().consecutive_great_multiplier,
                     (level_score().consecutive_great_cap * inv_great_step) * level_score().consecutive_great_multiplier,
                 )
                 + min(
-                    floor(ScoreIndicator.good_step * inv_good_step) * level_score().consecutive_good_multiplier,
+                    floor(ScoreIndicator.good_step * inv_good_step + 1e-9) * level_score().consecutive_good_multiplier,
                     (level_score().consecutive_good_cap * inv_good_step) * level_score().consecutive_good_multiplier,
                 )
             )
@@ -226,17 +227,17 @@ class ComboJudge(PlayArchetype):
                 note_ideal_weight = level_score().perfect_multiplier * (
                     (
                         min(
-                            floor(ideal_combo * inv_perfect_step) * level_score().consecutive_perfect_multiplier,
+                            floor(ideal_combo * inv_perfect_step + 1e-9) * level_score().consecutive_perfect_multiplier,
                             (level_score().consecutive_perfect_cap * inv_perfect_step)
                             * level_score().consecutive_perfect_multiplier,
                         )
                         + min(
-                            floor(ideal_combo * inv_great_step) * level_score().consecutive_great_multiplier,
+                            floor(ideal_combo * inv_great_step + 1e-9) * level_score().consecutive_great_multiplier,
                             (level_score().consecutive_great_cap * inv_great_step)
                             * level_score().consecutive_great_multiplier,
                         )
                         + min(
-                            floor(ideal_combo * inv_good_step) * level_score().consecutive_good_multiplier,
+                            floor(ideal_combo * inv_good_step + 1e-9) * level_score().consecutive_good_multiplier,
                             (level_score().consecutive_good_cap * inv_good_step)
                             * level_score().consecutive_good_multiplier,
                         )
