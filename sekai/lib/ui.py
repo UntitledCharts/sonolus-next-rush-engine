@@ -83,9 +83,7 @@ def init_ui(ui_version: SekaiVersion = SekaiVersion.v3):
         custom_life_bar_margin @= Vec2(UIMargin.ui_x * scale_ratio, 0)
     if not (Options.full_screen_ui and custom_score_bar):
         custom_score_bar_margin @= Vec2(UIMargin.ui_x * scale_ratio, 0)
-    custom_life_bar_scale = (
-        1 if is_preview() or is_tutorial() or not ActiveSkin.life.bar.available or not Options.custom_life_bar else 1.5
-    )
+    custom_life_bar_scale = 1 if custom_life_bar else 1.5
 
     ui.menu.update(
         anchor=box.tr - custom_life_bar_margin,
