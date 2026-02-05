@@ -189,11 +189,12 @@ def setting_combo(head: int, skill: int) -> None:
             if Skill.at(skill_ptr).effect == SkillMode.HEAL:
                 skill_ptr = Skill.at(skill_ptr).next_ref.index
             elif Skill.at(skill_ptr).effect == SkillMode.SCORE or Skill.at(skill_ptr).effect == SkillMode.JUDGMENT:
-                note.WatchBaseNote.at(ptr).entity_score_multiplier += (
-                    note.WatchBaseNote.at(ptr).archetype_score_multiplier
-                    + note.WatchBaseNote.at(ptr).entity_score_multiplier
-                )
-                if note.WatchBaseNote.at(ptr).target_time > Skill.at(skill_ptr).start_time + 6:
+                if note.WatchBaseNote.at(ptr).target_time <= Skill.at(skill_ptr).start_time + 6:
+                    note.WatchBaseNote.at(ptr).entity_score_multiplier += (
+                        note.WatchBaseNote.at(ptr).archetype_score_multiplier
+                        + note.WatchBaseNote.at(ptr).entity_score_multiplier
+                    )
+                else:
                     skill_ptr = Skill.at(skill_ptr).next_ref.index
 
         judgment = note.WatchBaseNote.at(ptr).judgment
