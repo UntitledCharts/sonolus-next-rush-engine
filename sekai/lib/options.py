@@ -147,7 +147,7 @@ class Options:
     ap_effect: bool = toggle_option(
         name="AP Effect",
         scope="Rush",
-        default=False,
+        default=True,
     )
     custom_accuracy: bool = toggle_option(
         name="Late/Fast/Flick",
@@ -451,6 +451,7 @@ class Options:
         StandardText.MIRROR,
         StandardText.EFFECT,
         StandardText.EFFECT_AUTO,
+        "Effect Animation Speed",
         StandardText.NOTE_EFFECT,
         StandardText.NOTE_EFFECT_SIZE,
         StandardText.MARKER_ANIMATION,
