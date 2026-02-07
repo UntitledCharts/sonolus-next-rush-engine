@@ -718,7 +718,7 @@ class BaseNote(PlayArchetype):
     def judge(self, actual_time: float):
         judgment = self.judgment_window.judge(actual_time, self.target_time)
         error = self.judgment_window.bad.clamp(actual_time - self.target_time)
-        self.result.judgment = judgment if not SkillActive.judgment and judgment != Judgment.MISS else Judgment.PERFECT
+        self.result.judgment = judgment if not SkillActive.judgment or judgment == Judgment.MISS else Judgment.PERFECT
         self.result.accuracy = error
         if self.result.bucket.id != -1:
             self.result.bucket_value = error * WINDOW_SCALE
@@ -731,7 +731,7 @@ class BaseNote(PlayArchetype):
         if judgment == Judgment.PERFECT:
             judgment = Judgment.GREAT
         error = self.judgment_window.bad.clamp(actual_time - self.target_time)
-        self.result.judgment = judgment if not SkillActive.judgment and judgment != Judgment.MISS else Judgment.PERFECT
+        self.result.judgment = judgment if not SkillActive.judgment or judgment == Judgment.MISS else Judgment.PERFECT
         if error in self.judgment_window.perfect:
             self.result.accuracy = self.judgment_window.perfect.end
         else:
