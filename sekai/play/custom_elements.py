@@ -34,6 +34,7 @@ def spawn_custom(
         spawn_time=time(),
         judgment=judgment,
         accuracy=accuracy,
+        windows=windows,
     )
     if judgment != Judgment.PERFECT and windows.bad.start < accuracy < windows.bad.end:
         JudgmentAccuracy.spawn(
@@ -86,7 +87,6 @@ class ComboJudge(PlayArchetype):
     judgment: Judgment = entity_memory()
     accuracy: float = entity_memory()
     windows: SekaiWindow = entity_memory()
-    wrong_way: bool = entity_memory()
     my_judge_id: int = entity_memory()
     index: int = entity_memory()
 
