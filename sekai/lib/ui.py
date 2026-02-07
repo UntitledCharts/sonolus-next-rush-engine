@@ -83,12 +83,12 @@ def init_ui(ui_version: SekaiVersion = SekaiVersion.v3):
         custom_life_bar_margin @= Vec2(UIMargin.ui_x * scale_ratio, 0)
     if not (Options.full_screen_ui and custom_score_bar):
         custom_score_bar_margin @= Vec2(UIMargin.ui_x * scale_ratio, 0)
-    custom_life_bar_scale = 1 if custom_life_bar else 1.5
+    custom_life_bar_scale = 1 if custom_life_bar else 1.5 * scale_ratio
 
     ui.menu.update(
         anchor=box.tr - custom_life_bar_margin,
         pivot=Vec2(1, 1),
-        dimensions=Vec2(0.15, 0.15) * ui.menu_config.scale * custom_life_bar_scale * scale_ratio,
+        dimensions=Vec2(0.15, 0.15) * ui.menu_config.scale * custom_life_bar_scale,
         alpha=ui.menu_config.alpha * show_ui * custom_life_bar,
         horizontal_align=HorizontalAlign.CENTER,
         background=True,
