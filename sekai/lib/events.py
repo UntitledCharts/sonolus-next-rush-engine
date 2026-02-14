@@ -2,7 +2,7 @@ from sonolus.script.interval import lerp, unlerp_clamped
 from sonolus.script.quad import Quad
 from sonolus.script.vec import Vec2
 
-from sekai.lib.layer import LAYER_SLOT_EFFECT, get_z
+from sekai.lib.layer import LAYER_JUDGMENT_SKILL, get_z
 from sekai.lib.layout import (
     LANE_B,
     LANE_T,
@@ -230,5 +230,5 @@ def draw_judgment_effect(time):
 
     anim = enter_progress - exit_progress
     layout = layout_skill_judgment_line()
-    z = get_z(LAYER_SLOT_EFFECT)
+    z = get_z(LAYER_JUDGMENT_SKILL)
     ActiveSkin.skill_judgment_line.draw(layout, z=z, a=anim)
