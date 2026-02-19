@@ -11,7 +11,6 @@ from sonolus.script.runtime import is_replay, is_watch
 from sonolus.script.sprite import RenderMode, Sprite, SpriteGroup, StandardSprite, skin, sprite, sprite_group
 
 from sekai.lib.layout import AccuracyType, ComboType, FlickDirection, JudgmentType
-from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SekaiVersion, SkillMode
 
 
@@ -369,11 +368,12 @@ class BaseSkin:
     life_bar_pause: Sprite = sprite("Life Bar Pause")
     life_bar_skip: Sprite = sprite("Life Bar Skip")
     life_bar_disable: Sprite = sprite("Life Bar Disable")
-    life_bar_danger_pause: Sprite = sprite("Life Bar Danger Pause")
-    life_bar_danger_skip: Sprite = sprite("Life Bar Danger Skip")
-    life_bar_danger_disable: Sprite = sprite("Life Bar Danger Disable")
+    life_bar_normal_background: Sprite = sprite("Life Bar Normal Background")
+    life_bar_danger_background: Sprite = sprite("Life Bar Danger Background")
     life_bar_gauge_normal: Sprite = sprite("Life Bar Gauge Normal")
     life_bar_gauge_danger: Sprite = sprite("Life Bar Gauge Danger")
+    life_bar_gauge_normal_edge: Sprite = sprite("Life Bar Gauge Normal Edge")
+    life_bar_gauge_danger_edge: Sprite = sprite("Life Bar Gauge Danger Edge")
     score_bar: Sprite = sprite("Score Bar")
     score_bar_panel: Sprite = sprite("Score Bar Panel")
     score_bar_gauge: Sprite = sprite("Score Bar Gauge")
@@ -822,38 +822,32 @@ class LifeBarType(IntEnum):
     PAUSE = 0
     SKIP = 1
     DISABLE = 2
+    BACKGROUND = 3
 
 
 class LifeBarSpriteSet(Record):
     pause: Sprite
-    danger_pause: Sprite
     skip: Sprite
-    danger_skip: Sprite
     disable: Sprite
-    danger_disable: Sprite
+    normal_background: Sprite
+    danger_background: Sprite
 
     def get_sprite(self, bar_type: LifeBarType, life):
         result = +Sprite
-        if life < 200 and LevelConfig.ui_version == SekaiVersion.v1:
-            match bar_type:
-                case LifeBarType.PAUSE:
-                    result @= self.danger_pause
-                case LifeBarType.SKIP:
-                    result @= self.danger_skip
-                case LifeBarType.DISABLE:
-                    result @= self.danger_disable
-                case _:
-                    assert_never(bar_type)
-        else:
-            match bar_type:
-                case LifeBarType.PAUSE:
-                    result @= self.pause
-                case LifeBarType.SKIP:
-                    result @= self.skip
-                case LifeBarType.DISABLE:
-                    result @= self.disable
-                case _:
-                    assert_never(bar_type)
+        match bar_type:
+            case LifeBarType.PAUSE:
+                result @= self.pause
+            case LifeBarType.SKIP:
+                result @= self.skip
+            case LifeBarType.DISABLE:
+                result @= self.disable
+            case LifeBarType.BACKGROUND:
+                if life > 200:
+                    result @= self.normal_background
+                else:
+                    result @= self.danger_background
+            case _:
+                assert_never(bar_type)
         return result
 
     @property
@@ -864,11 +858,18 @@ class LifeBarSpriteSet(Record):
 class LifeGaugeSpriteSet(Record):
     normal: Sprite
     danger: Sprite
+    normal_edge: Sprite
+    danger_edge: Sprite
 
-    def get_sprite(self, life: int):
+    def get_sprite(self, life: int, edge: bool = False):
         result = +Sprite
         if life > 200:
-            result @= self.normal
+            if edge:
+                result @= self.normal_edge
+            else:
+                result @= self.normal
+        elif edge:
+            result @= self.danger_edge
         else:
             result @= self.danger
         return result
@@ -1272,13 +1273,17 @@ slot_glow_critical_down_flick_sprites = SlotGlowSpriteSet(
 )
 life_bar = LifeBarSpriteSet(
     pause=BaseSkin.life_bar_pause,
-    danger_pause=BaseSkin.life_bar_danger_pause,
     skip=BaseSkin.life_bar_skip,
-    danger_skip=BaseSkin.life_bar_danger_skip,
     disable=BaseSkin.life_bar_disable,
-    danger_disable=BaseSkin.life_bar_danger_disable,
+    normal_background=BaseSkin.life_bar_normal_background,
+    danger_background=BaseSkin.life_bar_danger_background,
 )
-life_gauge = LifeGaugeSpriteSet(normal=BaseSkin.life_bar_gauge_normal, danger=BaseSkin.life_bar_gauge_danger)
+life_gauge = LifeGaugeSpriteSet(
+    normal=BaseSkin.life_bar_gauge_normal,
+    danger=BaseSkin.life_bar_gauge_danger,
+    normal_edge=BaseSkin.life_bar_gauge_normal_edge,
+    danger_edge=BaseSkin.life_bar_gauge_danger_edge,
+)
 score_gauge = ScoreGaugeSpriteSet(
     normal=BaseSkin.score_bar_gauge, mask=BaseSkin.score_bar_mask, cover=BaseSkin.score_bar_cover
 )
