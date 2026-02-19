@@ -425,7 +425,15 @@ def draw_stage_and_accessories(
         z1=z_layer_score,
         z2=z_layer_score_glow,
     )
-    draw_life_bar(life, z_layer_score, z_layer_score_glow, last_time)
+    draw_life_bar(
+        life,
+        z_layer_score,
+        z_layer_score_glow,
+        z_layer_score_bar,
+        z_layer_score_bar_mask,
+        z_layer_score_bar_rate,
+        last_time,
+    )
     draw_score_bar(
         score,
         note_score,
@@ -943,7 +951,15 @@ def draw_auto_play(z_judgment):
         ActiveSkin.auto_live.draw(layout, z=z_judgment, a=a)
 
 
-def draw_life_bar(life, z_layer_score, z_layer_score_glow, last_time):
+def draw_life_bar(
+    life,
+    z_layer_score,
+    z_layer_score_glow,
+    z_layer_score_bar,
+    z_layer_score_bar_mask,
+    z_layer_score_bar_rate,
+    last_time,
+):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.ui_number.available:
@@ -954,17 +970,21 @@ def draw_life_bar(life, z_layer_score, z_layer_score_glow, last_time):
         return
     draw_life_number(
         life,
-        z_layer_score_glow,
+        z_layer_score_bar_rate,
     )
     bar_layout = layout_life_bar()
     if is_multiplayer():
-        ActiveSkin.life.bar.get_sprite(LifeBarType.DISABLE, life).draw(bar_layout, z=z_layer_score)
+        ActiveSkin.life.bar.get_sprite(LifeBarType.DISABLE, life).draw(bar_layout, z=z_layer_score_bar_mask)
     elif last_time < time() and is_play():
-        ActiveSkin.life.bar.get_sprite(LifeBarType.SKIP, life).draw(bar_layout, z=z_layer_score)
+        ActiveSkin.life.bar.get_sprite(LifeBarType.SKIP, life).draw(bar_layout, z=z_layer_score_bar_mask)
     else:
-        ActiveSkin.life.bar.get_sprite(LifeBarType.PAUSE, life).draw(bar_layout, z=z_layer_score)
+        ActiveSkin.life.bar.get_sprite(LifeBarType.PAUSE, life).draw(bar_layout, z=z_layer_score_bar_mask)
+    ActiveSkin.life.bar.get_sprite(LifeBarType.BACKGROUND, life).draw(bar_layout, z=z_layer_score)
     gauge_layout = layout_life_gauge(life)
     ActiveSkin.life.gauge.get_sprite(life).draw(gauge_layout, z_layer_score_glow)
+    if life > 0:
+        edge_layout = layout_life_gauge(life, True)
+        ActiveSkin.life.gauge.get_sprite(life, True).draw(edge_layout, z_layer_score_bar)
 
 
 def draw_score_bar(
