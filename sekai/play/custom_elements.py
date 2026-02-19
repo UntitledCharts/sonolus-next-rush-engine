@@ -27,6 +27,7 @@ def spawn_custom(
     wrong_way: bool,
     target_time: float,
     index: int,
+    played_hit_effects: bool,
 ):
     ComboJudge.spawn(
         index=index,
@@ -36,7 +37,7 @@ def spawn_custom(
         accuracy=accuracy,
         windows=windows,
     )
-    if judgment != Judgment.PERFECT and windows.bad.start < accuracy < windows.bad.end:
+    if judgment != Judgment.PERFECT and played_hit_effects:
         JudgmentAccuracy.spawn(
             spawn_time=time(),
             judgment=judgment,
