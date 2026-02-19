@@ -504,6 +504,7 @@ class BaseNote(PlayArchetype):
                 wrong_way=self.wrong_way,
                 target_time=self.target_time,
                 index=self.index,
+                played_hit_effects=self.should_play_hit_effects,
             )
 
     def handle_tap_input(self):
