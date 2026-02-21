@@ -10,7 +10,6 @@ from sonolus.script.timing import beat_to_time
 from sekai.lib.connector import ConnectorKind, ConnectorLayer
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.layer import (
-    LAYER_NOTE_ARROW,
     LAYER_NOTE_TICK,
     get_z,
 )
@@ -18,9 +17,9 @@ from sekai.lib.layout import FlickDirection
 from sekai.lib.note import (
     NoteKind,
     get_attach_params,
+    get_flick_layer,
     get_note_body_layer,
     get_note_sprite_set,
-    is_critical,
     map_note_kind,
     mirror_flick_direction,
 )
@@ -202,10 +201,10 @@ def draw_note_arrow(
     y: float,
 ):
     z = get_z(
-        LAYER_NOTE_ARROW,
+        get_flick_layer(kind),
         time=get_adjusted_time(target_time, col),
         lane=lane,
-        etc=direction + 6 * (not is_critical(kind)),
+        etc=direction,
     )
     match sprites.render_type:
         case ArrowRenderType.NORMAL:
