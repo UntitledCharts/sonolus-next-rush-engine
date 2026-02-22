@@ -224,7 +224,7 @@ def init_life(
 ):
     for note_archetype in note_archetypes:
         init_note_life(note_archetype)
-    level_life().update(initial=initial_life, maximum=max(2000, initial_life))
+    level_life().update(initial=initial_life, maximum=max(2000, initial_life * 2))
 
 
 def init_note_life(archetype: type[PlayArchetype | WatchArchetype]):
