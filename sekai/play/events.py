@@ -85,6 +85,9 @@ class Skill(PlayArchetype):
             SkillActive.judgment = True
         if not self.check and custom_elements.LifeManager.life > 0 and self.effect == SkillMode.HEAL:
             custom_elements.LifeManager.life += 250
+            custom_elements.LifeManager.life = clamp(
+                custom_elements.LifeManager.life, 0, custom_elements.LifeManager.max_life
+            )
         self.check = True
 
     @property

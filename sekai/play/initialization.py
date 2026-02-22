@@ -93,6 +93,10 @@ class Initialization(PlayArchetype):
         LayerCache.skill_bar = get_z(layer=LAYER_SKILL_BAR)
         LayerCache.skill_etc = get_z(layer=LAYER_SKILL_ETC)
 
+        custom_elements.LifeManager.life = self.initial_life
+        custom_elements.LifeManager.initial_life = self.initial_life
+        custom_elements.LifeManager.max_life = max(2000, self.initial_life * 2)
+
         sorted_linked_list()
 
     def initialize(self):
@@ -227,8 +231,6 @@ def setting_count(head: int, skill: int) -> None:
 
     if Options.custom_score == 2:
         custom_elements.ScoreIndicator.percentage = 100
-
-    custom_elements.LifeManager.life = 1000
 
 
 def count_skill(head: int) -> None:
