@@ -80,6 +80,8 @@ class ScoreIndicator:
 @level_memory
 class LifeManager:
     life: int
+    initial_life: int
+    max_life: int
 
 
 class ComboJudge(PlayArchetype):
@@ -292,7 +294,7 @@ class ComboJudge(PlayArchetype):
                     note.BaseNote.at(self.index).archetype_life.miss_increment
                     + note.BaseNote.at(self.index).entity_life.miss_increment
                 )
-        LifeManager.life = clamp(LifeManager.life, 0, 2000)
+        LifeManager.life = clamp(LifeManager.life, 0, LifeManager.max_life)
 
 
 @level_memory

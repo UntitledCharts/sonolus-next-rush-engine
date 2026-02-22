@@ -101,7 +101,9 @@ class WatchInitialization(WatchArchetype):
         LayerCache.skill_bar = get_z(layer=LAYER_SKILL_BAR)
         LayerCache.skill_etc = get_z(layer=LAYER_SKILL_ETC)
 
-        custom_elements.LifeManager.life = 1000
+        custom_elements.LifeManager.life = self.initial_life
+        custom_elements.LifeManager.initial_life = self.initial_life
+        custom_elements.LifeManager.max_life = max(2000, self.initial_life * 2)
 
         init_event_list(self.first_camera_ref)
         WatchStaticStage.spawn()
@@ -399,11 +401,11 @@ def calculate_score(head: int, max_score: int, total_weight: float):
 def count_skill(head: int) -> None:
     ptr = head
     count = 0
-    life = 1000
+    life = custom_elements.LifeManager.initial_life
     while ptr > 0:
         Skill.at(ptr).count = count
         count += 1
         if Skill.at(ptr).effect == SkillMode.HEAL:
-            life = clamp(life + 250, 0, 2000)
+            life = clamp(life + 250, 0, custom_elements.LifeManager.max_life)
         Skill.at(ptr).current_life = life
         ptr = Skill.at(ptr).next_ref.index
