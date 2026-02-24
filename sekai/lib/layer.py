@@ -54,7 +54,6 @@ def get_z(
     etc: int = 0,
     *,
     invert_time: bool = False,
-    symmetrical_lane: bool = False,
 ) -> float:
     quantized_time = (runtime.time() * 256) // 256
     return make_comparable_float(
@@ -62,8 +61,9 @@ def get_z(
         quantize_to_step(
             time - quantized_time if invert_time else quantized_time - time, start=-30, stop=30, step=1 / 256
         ),
-        quantize_to_step(abs(lane) + (1 / 16) * (lane > 0 and not symmetrical_lane), start=0, stop=16, step=1 / 16),
+        quantize_to_step(abs(lane), start=0, stop=16, step=1 / 8),
         quantize_to_step(etc, start=0, stop=12, step=1),
+        quantize_to_step(lane > 0, start=0, stop=2, step=1),
     )
 
 
