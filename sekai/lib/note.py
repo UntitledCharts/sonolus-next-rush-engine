@@ -919,18 +919,21 @@ def get_note_haptic_feedback(kind: NoteKind, judgment: Judgment) -> HapticType:
         return HapticType.NONE
     match kind:
         case (
+            NoteKind.NORM_FLICK
+            | NoteKind.CRIT_FLICK
+            | NoteKind.NORM_HEAD_FLICK
+            | NoteKind.CRIT_HEAD_FLICK
+            | NoteKind.NORM_TAIL_FLICK
+            | NoteKind.CRIT_TAIL_FLICK
+        ):
+            return HapticType.HEAVY
+        case (
             NoteKind.NORM_TAP
             | NoteKind.NORM_HEAD_TAP
             | NoteKind.NORM_TAIL_TAP
             | NoteKind.CRIT_TAP
             | NoteKind.CRIT_HEAD_TAP
             | NoteKind.CRIT_TAIL_TAP
-            | NoteKind.NORM_FLICK
-            | NoteKind.CRIT_FLICK
-            | NoteKind.NORM_HEAD_FLICK
-            | NoteKind.CRIT_HEAD_FLICK
-            | NoteKind.NORM_TAIL_FLICK
-            | NoteKind.CRIT_TAIL_FLICK
             | NoteKind.NORM_RELEASE
             | NoteKind.CRIT_RELEASE
             | NoteKind.NORM_HEAD_RELEASE
@@ -938,7 +941,7 @@ def get_note_haptic_feedback(kind: NoteKind, judgment: Judgment) -> HapticType:
             | NoteKind.NORM_TAIL_RELEASE
             | NoteKind.CRIT_TAIL_RELEASE
         ):
-            return HapticType.HEAVY
+            return HapticType.MEDIUM
         case (
             NoteKind.NORM_TRACE
             | NoteKind.CRIT_TRACE
