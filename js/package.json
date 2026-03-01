@@ -36,10 +36,10 @@
     "@sonolus/core": "~7.15.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.2",
+    "@biomejs/biome": "~2.4.4",
     "@sonolus/sonolus.js": "~9.7.0",
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.3.3",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.56.0"
+    "typescript-eslint": "^8.56.1"
   }
 }
