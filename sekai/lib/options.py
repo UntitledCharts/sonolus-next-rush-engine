@@ -42,17 +42,14 @@ class SkillMode(IntEnum):
 
     @classmethod
     def from_options(cls, option_val: int, legacy_val: int) -> "SkillMode":
-        if option_val == 1:
-            return cls.SCORE
-        if option_val == 2:
-            return cls.HEAL
-        if option_val == 3:
-            return cls.JUDGMENT
+        option_map = {1: cls.SCORE, 2: cls.HEAL, 3: cls.JUDGMENT}
+        legacy_map = {1: cls.HEAL, 2: cls.JUDGMENT}
 
-        if legacy_val == 1:
-            return cls.HEAL
-        if legacy_val == 2:
-            return cls.JUDGMENT
+        if option_val in {1, 2, 3}:
+            return option_map[option_val]
+
+        if legacy_val in {1, 2}:
+            return legacy_map[legacy_val]
 
         return cls.SCORE
 
