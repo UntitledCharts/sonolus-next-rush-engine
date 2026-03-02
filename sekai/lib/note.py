@@ -351,6 +351,8 @@ def draw_slide_note_head(
     size: float,
     target_time: float,
     visual_progress: float = 1.0,
+    *,
+    not_sekai_p: bool = False,
 ):
     if Options.hidden > 0:
         return
@@ -364,7 +366,7 @@ def draw_slide_note_head(
     travel = approach(visual_progress)
     sprite_set = get_note_sprite_set(kind, FlickDirection.UP_OMNI)
     etc = get_active_connector_z_offset(connector_kind, False)
-    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, etc)
+    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, etc, not_sekai_p)
     draw_note_tick(sprite_set.tick, lane, travel, target_time, etc)
 
 
@@ -536,27 +538,34 @@ def get_note_body_layer(kind: NoteKind) -> int:
 
 
 def draw_note_body(
-    sprites: BodySpriteSet, kind: NoteKind, lane: float, size: float, travel: float, target_time: float, etc: int = 0
+    sprites: BodySpriteSet,
+    kind: NoteKind,
+    lane: float,
+    size: float,
+    travel: float,
+    target_time: float,
+    etc: int = 0,
+    not_sekai_p: bool = False,
 ):
     layer = get_note_body_layer(kind)
     a = get_alpha(target_time)
     z = get_z(layer, time=target_time, lane=lane, etc=etc)
     match sprites.render_type:
         case BodyRenderType.NORMAL:
-            left_layout, middle_layout, right_layout = layout_regular_note_body(lane, size, travel)
+            left_layout, middle_layout, right_layout = layout_regular_note_body(lane, size, travel, not_sekai_p)
             sprites.left.draw(left_layout, z=z, a=a)
             sprites.middle.draw(middle_layout, z=z, a=a)
             sprites.right.draw(right_layout, z=z, a=a)
         case BodyRenderType.SLIM:
-            left_layout, middle_layout, right_layout = layout_slim_note_body(lane, size, travel)
+            left_layout, middle_layout, right_layout = layout_slim_note_body(lane, size, travel, not_sekai_p)
             sprites.left.draw(left_layout, z=z, a=a)
             sprites.middle.draw(middle_layout, z=z, a=a)
             sprites.right.draw(right_layout, z=z, a=a)
         case BodyRenderType.NORMAL_FALLBACK:
-            layout = layout_regular_note_body_fallback(lane, size, travel)
+            layout = layout_regular_note_body_fallback(lane, size, travel, not_sekai_p)
             sprites.middle.draw(layout, z=z, a=a)
         case BodyRenderType.SLIM_FALLBACK:
-            layout = layout_slim_note_body_fallback(lane, size, travel)
+            layout = layout_slim_note_body_fallback(lane, size, travel, not_sekai_p)
             sprites.middle.draw(layout, z=z, a=a)
 
 
