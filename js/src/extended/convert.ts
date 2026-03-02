@@ -325,7 +325,7 @@ export const extendedToLevelData = (data: ExtendedLevelData, offset = 0): LevelD
         if (tsg) note.set('#TIMESCALE_GROUP', tsg)
 
         const attachRef = getField(e, 'attach')
-        if (attachRef !== undefined && attachRef !== -1 && attachRef !== 0 && attachRef !== '0') {
+        if (attachRef !== undefined) {
             const attachConn = getConn(attachRef)
             if (attachConn && attachConn.refs['head'] && attachConn.refs['tail']) {
                 note.set('attachHead', attachConn.refs['head'])
@@ -335,7 +335,7 @@ export const extendedToLevelData = (data: ExtendedLevelData, offset = 0): LevelD
         }
 
         const slideRef = getField(e, 'slide')
-        if (slideRef !== undefined && slideRef !== -1 && slideRef !== 0 && slideRef !== '0') {
+        if (slideRef !== undefined) {
             const slideConn = getConn(slideRef)
             if (slideConn && slideConn.refs['activeHead']) {
                 note.set('activeHead', slideConn.refs['activeHead'])
