@@ -45,13 +45,7 @@ class SkillMode(IntEnum):
         option_map = {1: cls.SCORE, 2: cls.HEAL, 3: cls.JUDGMENT}
         legacy_map = {1: cls.HEAL, 2: cls.JUDGMENT}
 
-        if option_val in {1, 2, 3}:
-            return option_map[option_val]
-
-        if legacy_val in {1, 2}:
-            return legacy_map[legacy_val]
-
-        return cls.SCORE
+        return option_map.get(option_val, legacy_map.get(legacy_val, cls.SCORE))
 
 
 class Version(IntEnum):
