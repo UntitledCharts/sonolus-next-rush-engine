@@ -21,6 +21,7 @@ from sekai.lib.layer import (
 )
 from sekai.lib.layout import layout_lane_area, refresh_layout, touch_to_lane
 from sekai.lib.level_config import LevelConfig
+from sekai.lib.options import Options
 from sekai.lib.stage import draw_stage_and_accessories, play_lane_hit_effects
 from sekai.lib.streams import Streams
 from sekai.play import custom_elements, initialization, input_manager
@@ -94,14 +95,20 @@ class StaticStage(PlayArchetype):
             lane = touch_to_lane(touch.position)
             rounded_lane = clamp(round(lane - 0.5) + 0.5, -5.5, 5.5)
             if touch.started:
-                play_lane_hit_effects(rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6)
+                play_lane_hit_effects(
+                    rounded_lane,
+                    sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6 or not Options.prevent_empty_lane_sfx,
+                )
                 if not empty_lanes.is_full():
                     empty_lanes.append(rounded_lane)
             else:
                 prev_lane = touch_to_lane(touch.prev_position)
                 prev_rounded_lane = clamp(round(prev_lane - 0.5) + 0.5, -5.5, 5.5)
                 if rounded_lane != prev_rounded_lane:
-                    play_lane_hit_effects(rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6)
+                    play_lane_hit_effects(
+                        rounded_lane,
+                        sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6 or not Options.prevent_empty_lane_sfx,
+                    )
                     if not empty_lanes.is_full():
                         empty_lanes.append(rounded_lane)
         if len(empty_lanes) > 0:
