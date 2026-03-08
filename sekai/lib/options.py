@@ -220,6 +220,11 @@ class Options:
         scope="Sekai",
         default=False,
     )
+    prevent_empty_lane_sfx: bool = toggle_option(
+        name="Prevent Empty Lane Effect Overwrite",
+        scope="Rush",
+        default=False,
+    )
     tap_haptics_enabled: bool = toggle_option(
         name=StandardText.HAPTIC,
         scope="Sekai",
@@ -278,7 +283,6 @@ class Options:
         step=0.05,
         unit=StandardText.PERCENTAGE_UNIT,
     )
-
     stage_cover_mode: StageCoverMode = select_option(
         name="Stage Cover Mode",
         advanced=True,
