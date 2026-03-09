@@ -8,7 +8,7 @@ from sonolus.script import runtime
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
 from sonolus.script.interval import remap
 from sonolus.script.record import Record
-from sonolus.script.timing import TimescaleEase, beat_to_bpm, beat_to_time
+from sonolus.script.timing import TimescaleEase, beat_to_time
 
 from sekai.lib import archetype_names
 from sekai.lib.options import Options
@@ -32,6 +32,9 @@ class TimescaleChangeLike(Protocol):
     timescale_ease: TimescaleEase
     hide_notes: bool
     next_ref: EntityRef
+
+    cached_time: float
+    cached_skip_time: float
 
     @classmethod
     def at(cls, index: int) -> TimescaleChangeLike: ...
@@ -63,6 +66,8 @@ class TimeToScaledTime(Record):
     last_ease: TimescaleEase
     first_change_index: int
     next_change_index: int
+    next_time: float
+    next_timescale: float
 
     def init(self, next_index: int):
         self.first_change_index = next_index
@@ -74,6 +79,8 @@ class TimeToScaledTime(Record):
         self.last_scaled_time = MIN_START_TIME
         self.last_ease = TimescaleEase.NONE
         self.next_change_index = self.first_change_index
+        self.next_time = MIN_START_TIME
+        self.next_timescale = 1.0
 
     def get(self, time: float) -> CompositeTime:
         result = +CompositeTime
@@ -82,9 +89,30 @@ class TimeToScaledTime(Record):
             return result
         if time < self.last_time:
             self.reset()
+        if self.next_time > MIN_START_TIME and time < self.next_time:  # if caching
+            if abs(self.next_time - self.last_time) < 1e-6:
+                result.base = self.last_scaled_time
+                return result
+            match self.last_ease:
+                case TimescaleEase.NONE:
+                    result.base = self.last_scaled_time
+                    result.delta = (time - self.last_time) * self.last_timescale
+                    return result
+                case TimescaleEase.LINEAR:
+                    avg_timescale = (
+                        self.last_timescale
+                        + remap(self.last_time, self.next_time, self.last_timescale, self.next_timescale, time)
+                    ) / 2
+                    result.base = self.last_scaled_time
+                    result.delta = (time - self.last_time) * avg_timescale
+                    return result
+                case _:
+                    assert_never(self.last_ease)
         for change in iter_timescale_changes(self.next_change_index):
             next_timescale = change.timescale
             next_time = beat_to_time(change.beat)
+            next_time = change.cached_time
+            self.next_timescale = next_timescale
             match self.last_ease:
                 case TimescaleEase.NONE:
                     next_scaled_time = self.last_scaled_time + (next_time - self.last_time) * self.last_timescale
@@ -95,7 +123,7 @@ class TimeToScaledTime(Record):
                     )
                 case _:
                     assert_never(self.last_ease)
-            skip_scaled_time = change.timescale_skip * 60 / beat_to_bpm(change.beat)
+            skip_scaled_time = change.cached_skip_time
             if time == next_time:
                 result.base = next_scaled_time + skip_scaled_time
                 return result
@@ -123,6 +151,9 @@ class TimeToScaledTime(Record):
             self.last_scaled_time = next_scaled_time + skip_scaled_time
             self.last_ease = change.timescale_ease
             self.next_change_index = change.next_ref.index
+        self.next_time = inf
+        self.next_timescale = self.last_timescale
+
         result.base = self.last_scaled_time
         result.delta = (time - self.last_time) * self.last_timescale
         return result
@@ -133,6 +164,7 @@ class TimeToLastChangeIndex(Record):
     first_change_index: int
     current_change_index: int
     next_change_index: int
+    next_time: float
 
     def init(self, next_index: int):
         self.first_change_index = next_index
@@ -142,17 +174,22 @@ class TimeToLastChangeIndex(Record):
         self.last_time = MIN_START_TIME
         self.current_change_index = 0
         self.next_change_index = self.first_change_index
+        self.next_time = MIN_START_TIME
 
     def get(self, time: float) -> int:
         if time < self.last_time:
             self.reset()
+        if self.next_time > MIN_START_TIME and time < self.next_time:
+            return self.current_change_index
         for change in iter_timescale_changes(self.next_change_index):
             next_time = beat_to_time(change.beat)
+            self.next_time = next_time
             if time < next_time:
                 return self.current_change_index
             self.last_time = next_time
             self.current_change_index = change.index
             self.next_change_index = change.next_ref.index
+        self.next_time = inf
         return self.current_change_index
 
 
@@ -185,7 +222,7 @@ class ScaledTimeToFirstTime(Record):
         self.last_query_scaled_time = scaled_time
         for change in iter_timescale_changes(self.next_change_index):
             next_timescale = change.timescale
-            next_time = beat_to_time(change.beat)
+            next_time = change.cached_time
             match self.last_ease:
                 case TimescaleEase.NONE:
                     next_scaled_time = self.last_scaled_time + (next_time - self.last_time) * self.last_timescale
