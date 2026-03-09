@@ -9,6 +9,7 @@ from sonolus.script.archetype import (
     shared_memory,
 )
 from sonolus.script.runtime import time
+from sonolus.script.timing import beat_to_bpm, beat_to_time
 
 from sekai.lib import archetype_names
 from sekai.lib.timescale import (
@@ -30,11 +31,23 @@ class TimescaleChange(PlayArchetype):
     hide_notes: bool = imported(name="hideNotes")
     next_ref: EntityRef[TimescaleChange] = imported(name="next")
 
+    cached_time: float = shared_memory()
+    cached_skip_time: float = shared_memory()
+
     def spawn_order(self) -> float:
         return 1e8
 
     def should_spawn(self) -> bool:
         return False
+
+    @callback(order=-3)
+    def preprocess(self):
+        self.cached_time = beat_to_time(self.beat)
+
+        if self.timescale_skip != 0.0:
+            self.cached_skip_time = self.timescale_skip * 60.0 / beat_to_bpm(self.beat)
+        else:
+            self.cached_skip_time = 0.0
 
 
 class TimescaleGroup(PlayArchetype):
@@ -72,8 +85,10 @@ class TimescaleGroup(PlayArchetype):
             return
         self.last_updated = time()
         self.current_scaled_time = self.time_to_scaled_time.get(time())
-        self.last_change.index = self.time_to_last_change_index.get(time())
-        if self.last_change.index > 0:
-            self.hide_notes = self.last_change.get().hide_notes
-        else:
-            self.hide_notes = False
+        new_change_index = self.time_to_last_change_index.get(time())
+        if self.last_change.index != new_change_index:
+            self.last_change.index = new_change_index
+            if self.last_change.index > 0:
+                self.hide_notes = self.last_change.get().hide_notes
+            else:
+                self.hide_notes = False
