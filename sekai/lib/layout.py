@@ -1084,6 +1084,7 @@ def layout_regular_note_body(
         h=DynamicLayout.note_h,
         edge_w=NOTE_EDGE_W,
         travel=travel,
+        not_sekai_p=not_sekai_p,
     )
 
 
