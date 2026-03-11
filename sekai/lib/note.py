@@ -351,8 +351,6 @@ def draw_slide_note_head(
     size: float,
     target_time: float,
     visual_progress: float = 1.0,
-    *,
-    not_sekai_p: bool = False,
 ):
     if Options.hidden > 0:
         return
@@ -545,27 +543,30 @@ def draw_note_body(
     travel: float,
     target_time: float,
     etc: int = 0,
-    not_sekai_p: bool = False,
 ):
     layer = get_note_body_layer(kind)
     a = get_alpha(target_time)
     z = get_z(layer, time=target_time, lane=lane, etc=etc)
     match sprites.render_type:
         case BodyRenderType.NORMAL:
-            left_layout, middle_layout, right_layout = layout_regular_note_body(lane, size, travel, not_sekai_p)
+            left_layout, middle_layout, right_layout = layout_regular_note_body(
+                lane, size, travel, lane - size < -6 or lane + size > 6
+            )
             sprites.left.draw(left_layout, z=z, a=a)
             sprites.middle.draw(middle_layout, z=z, a=a)
             sprites.right.draw(right_layout, z=z, a=a)
         case BodyRenderType.SLIM:
-            left_layout, middle_layout, right_layout = layout_slim_note_body(lane, size, travel, not_sekai_p)
+            left_layout, middle_layout, right_layout = layout_slim_note_body(
+                lane, size, travel, lane - size < -6 or lane + size > 6
+            )
             sprites.left.draw(left_layout, z=z, a=a)
             sprites.middle.draw(middle_layout, z=z, a=a)
             sprites.right.draw(right_layout, z=z, a=a)
         case BodyRenderType.NORMAL_FALLBACK:
-            layout = layout_regular_note_body_fallback(lane, size, travel, not_sekai_p)
+            layout = layout_regular_note_body_fallback(lane, size, travel, lane - size < -6 or lane + size > 6)
             sprites.middle.draw(layout, z=z, a=a)
         case BodyRenderType.SLIM_FALLBACK:
-            layout = layout_slim_note_body_fallback(lane, size, travel, not_sekai_p)
+            layout = layout_slim_note_body_fallback(lane, size, travel, lane - size < -6 or lane + size > 6)
             sprites.middle.draw(layout, z=z, a=a)
 
 
