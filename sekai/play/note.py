@@ -662,11 +662,6 @@ class BaseNote(PlayArchetype):
                     current_touch_id = touch.id
             elif not has_correct_direction_touch:
                 current_touch_id = touch.id
-                if not has_correct_direction_touch:
-                    has_correct_direction_touch = True
-                    current_touch_id = touch.id
-            elif not has_correct_direction_touch:
-                current_touch_id = touch.id
         if not has_touch:
             return
 
