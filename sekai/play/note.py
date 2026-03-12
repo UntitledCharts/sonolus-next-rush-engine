@@ -127,6 +127,9 @@ class BaseNote(PlayArchetype):
     best_touch_time: float = entity_memory()
     best_touch_matches_direction: bool = entity_memory()
 
+    best_touch_id: int = entity_memory()
+    touch_survived_to_target: bool = entity_memory()
+
     should_play_hit_effects: bool = entity_memory()
 
     hitbox: Hitbox = shared_memory()
@@ -134,6 +137,8 @@ class BaseNote(PlayArchetype):
     # Check wrong way
     wrong_way: bool = entity_memory()
     wrong_way_check: bool = exported()
+
+    pending_post_judge: bool = entity_memory()
 
     end_time: float = exported()
     played_hit_effects: bool = exported()
@@ -182,6 +187,8 @@ class BaseNote(PlayArchetype):
         self.result.bucket = get_note_bucket(self.kind)
 
         self.best_touch_time = DEFAULT_BEST_TOUCH_TIME
+        self.best_touch_id = -1
+        self.touch_survived_to_target = False
 
         if self.is_attached:
             attach_head = self.attach_head_ref.get()
@@ -271,6 +278,10 @@ class BaseNote(PlayArchetype):
 
         update_timescale_group(self.timescale_group)
 
+        if self.pending_post_judge:
+            self.pending_post_judge = False
+            self.post_judge()
+            return
         if self.should_do_delayed_trigger():
             if self.best_touch_matches_direction:
                 self.judge(self.best_touch_time)
@@ -437,6 +448,24 @@ class BaseNote(PlayArchetype):
             )
         )
 
+    @property
+    def is_slide_end_flick(self) -> bool:
+        return self.kind in (
+            NoteKind.NORM_TAIL_FLICK,
+            NoteKind.CRIT_TAIL_FLICK,
+            NoteKind.NORM_TAIL_TRACE_FLICK,
+            NoteKind.CRIT_TAIL_TRACE_FLICK,
+        )
+
+    @property
+    def is_trace_flick(self) -> bool:
+        return self.kind in (
+            NoteKind.NORM_TRACE_FLICK,
+            NoteKind.CRIT_TRACE_FLICK,
+            NoteKind.NORM_HEAD_TRACE_FLICK,
+            NoteKind.CRIT_HEAD_TRACE_FLICK,
+        )
+
     def should_do_delayed_trigger(self) -> bool:
         # Don't trigger if the previous frame was before the target time.
         # This gives the regular touch handling a chance to trigger on time the first time we pass the target time.
@@ -446,6 +475,28 @@ class BaseNote(PlayArchetype):
         # Don't trigger if we never had a touch recorded.
         if self.best_touch_time == DEFAULT_BEST_TOUCH_TIME:
             return False
+
+        if self.is_trace_flick or self.is_slide_end_flick:
+            is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
+
+            if self.is_slide_end_flick and is_just_reached:
+                return False
+
+            if self.best_touch_matches_direction:
+                return True
+
+            if self.best_touch_id != -1:
+                last_resolved_time = NoteMemory.flick_resolved_times[self.best_touch_id % 32]
+                if last_resolved_time > self.target_time:
+                    return True
+                has_ongoing_touch = any(t.id == self.best_touch_id and not t.ended for t in touches())
+
+                if not has_ongoing_touch:
+                    return self.touch_survived_to_target
+
+                return False
+            else:
+                return False
 
         # Give until the end of the perfect window to give a right-way touch if we've only had wrong-way touches.
         # After that, wrong-way has no impact anyway.
@@ -583,6 +634,7 @@ class BaseNote(PlayArchetype):
             return
         has_touch = False
         has_correct_direction_touch = False
+        current_touch_id = -1
         for touch in touches():
             if not self.check_touch_is_eligible_for_trace(touch):
                 continue
@@ -592,18 +644,34 @@ class BaseNote(PlayArchetype):
             has_touch = True
             if self.check_direction_matches(touch.angle):
                 has_correct_direction_touch = True
+                current_touch_id = touch.id
+            elif not has_correct_direction_touch:
+                current_touch_id = touch.id
         if not has_touch:
             return
-        if offset_adjusted_time() >= self.target_time:
-            if has_correct_direction_touch:
-                if offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time():
+
+        if self.is_slide_end_flick and offset_adjusted_time() < self.target_time:
+            has_correct_direction_touch = False
+
+        is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
+
+        if is_just_reached:
+            check_id = current_touch_id if self.best_touch_id == -1 else self.best_touch_id
+            if check_id != -1 and any(t.id == check_id and not t.ended for t in touches()):
+                self.touch_survived_to_target = True
+
+        if offset_adjusted_time() >= self.target_time and has_correct_direction_touch:
+            if self.is_slide_end_flick and is_just_reached:
+                pass
+            else:
+                if current_touch_id != -1:
+                    NoteMemory.flick_resolved_times[current_touch_id % 32] = time()
+                if is_just_reached:
                     self.complete()
                 else:
                     self.judge(offset_adjusted_time())
                 return
-            elif offset_adjusted_time() > self.target_time + self.judgment_window.perfect.end:
-                self.judge_wrong_way(offset_adjusted_time())
-                return
+
         # Either pre-target, or post-target within perfect window with wrong direction
         current_abs_error = abs(self.best_touch_time - self.target_time)
         if not self.best_touch_matches_direction:
@@ -614,6 +682,7 @@ class BaseNote(PlayArchetype):
         if incoming_abs_error < current_abs_error:
             self.best_touch_time = offset_adjusted_time()
             self.best_touch_matches_direction = has_correct_direction_touch
+            self.best_touch_id = current_touch_id
 
     def handle_tick_input(self):
         has_touch = False
@@ -642,7 +711,30 @@ class BaseNote(PlayArchetype):
         else:
             self.complete_damage()
 
+    def judge_slide_end_good_late(self):
+        self.result.judgment = (
+            Judgment.GOOD if not SkillActive.judgment or Judgment.GOOD == Judgment.MISS else Judgment.PERFECT
+        )
+        self.result.accuracy = self.judgment_window.good.end
+        if self.result.bucket.id != -1:
+            self.result.bucket_value = self.result.accuracy * WINDOW_SCALE
+        self.despawn = True
+        self.should_play_hit_effects = True
+        self.wrong_way = False
+        self.pending_post_judge = True
+
     def handle_late_miss(self):
+        if (
+            (self.is_slide_end_flick or self.is_trace_flick)
+            and self.best_touch_time != DEFAULT_BEST_TOUCH_TIME
+            and not self.best_touch_matches_direction
+        ):
+            if self.is_slide_end_flick:
+                self.judge_slide_end_good_late()
+            else:
+                self.fail_late()
+            return
+
         kind = self.kind
         match kind:
             case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK:
@@ -942,6 +1034,7 @@ class BaseNote(PlayArchetype):
 class NoteMemory:
     active_tap_input_notes: VarArray[EntityRef[BaseNote], Dim[256]]
     active_release_input_notes: VarArray[EntityRef[BaseNote], Dim[256]]
+    flick_resolved_times: VarArray[float, Dim[32]]
 
 
 NormalTapNote = BaseNote.derive(archetype_names.NORMAL_TAP_NOTE, is_scored=True, key=NoteKind.NORM_TAP)
