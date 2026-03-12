@@ -477,11 +477,6 @@ class BaseNote(PlayArchetype):
             return False
 
         if self.is_trace_flick or self.is_slide_end_flick:
-            is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
-
-            if self.is_slide_end_flick and is_just_reached:
-                return False
-
             if self.best_touch_matches_direction:
                 return True
 
@@ -490,11 +485,7 @@ class BaseNote(PlayArchetype):
                 if last_resolved_time > self.target_time:
                     return True
                 has_ongoing_touch = any(t.id == self.best_touch_id and not t.ended for t in touches())
-
-                if not has_ongoing_touch:
-                    return self.touch_survived_to_target
-
-                return False
+                return not has_ongoing_touch
             else:
                 return False
 
@@ -643,8 +634,9 @@ class BaseNote(PlayArchetype):
                 continue
             has_touch = True
             if self.check_direction_matches(touch.angle):
-                has_correct_direction_touch = True
-                current_touch_id = touch.id
+                if not has_correct_direction_touch:
+                    has_correct_direction_touch = True
+                    current_touch_id = touch.id
             elif not has_correct_direction_touch:
                 current_touch_id = touch.id
         if not has_touch:
@@ -655,22 +647,14 @@ class BaseNote(PlayArchetype):
 
         is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
 
-        if is_just_reached:
-            check_id = current_touch_id if self.best_touch_id == -1 else self.best_touch_id
-            if check_id != -1 and any(t.id == check_id and not t.ended for t in touches()):
-                self.touch_survived_to_target = True
-
         if offset_adjusted_time() >= self.target_time and has_correct_direction_touch:
-            if self.is_slide_end_flick and is_just_reached:
-                pass
+            if current_touch_id != -1:
+                NoteMemory.flick_resolved_times[current_touch_id % 32] = self.target_time
+            if is_just_reached:
+                self.complete()
             else:
-                if current_touch_id != -1:
-                    NoteMemory.flick_resolved_times[current_touch_id % 32] = time()
-                if is_just_reached:
-                    self.complete()
-                else:
-                    self.judge(offset_adjusted_time())
-                return
+                self.judge(offset_adjusted_time())
+            return
 
         # Either pre-target, or post-target within perfect window with wrong direction
         current_abs_error = abs(self.best_touch_time - self.target_time)
