@@ -280,7 +280,7 @@ class BaseNote(PlayArchetype):
             return
         is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
         if is_just_reached and self.best_touch_matches_direction:
-            if self.is_trace_flick:
+            if self.is_trace or self.is_trace_flick:
                 self.complete()
                 return
             elif self.is_slide_end_flick:
@@ -467,6 +467,17 @@ class BaseNote(PlayArchetype):
         )
 
     @property
+    def is_trace(self) -> bool:
+        return self.kind in (
+            NoteKind.NORM_TRACE,
+            NoteKind.CRIT_TRACE,
+            NoteKind.NORM_HEAD_TRACE,
+            NoteKind.CRIT_HEAD_TRACE,
+            NoteKind.NORM_TAIL_TRACE,
+            NoteKind.CRIT_TAIL_TRACE,
+        )
+
+    @property
     def is_slide_end_flick(self) -> bool:
         return self.kind in (
             NoteKind.NORM_TAIL_FLICK,
@@ -494,7 +505,7 @@ class BaseNote(PlayArchetype):
         if self.best_touch_time == DEFAULT_BEST_TOUCH_TIME:
             return False
 
-        if self.is_trace_flick or self.is_slide_end_flick:
+        if self.is_trace or self.is_trace_flick or self.is_slide_end_flick:
             if self.is_slide_end_flick and self.best_touch_id != -1:
                 has_ongoing_touch = any(t.id == self.best_touch_id and not t.ended for t in touches())
                 if has_ongoing_touch:
@@ -511,6 +522,8 @@ class BaseNote(PlayArchetype):
                 return not has_ongoing_touch
             else:
                 return False
+
+        # The following is the code for next sekai. (Not used in this engine)
 
         # Give until the end of the perfect window to give a right-way touch if we've only had wrong-way touches.
         # After that, wrong-way has no impact anyway.
