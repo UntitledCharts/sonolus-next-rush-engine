@@ -110,7 +110,6 @@ class TimeToScaledTime(Record):
                     assert_never(self.last_ease)
         for change in iter_timescale_changes(self.next_change_index):
             next_timescale = change.timescale
-            next_time = beat_to_time(change.beat)
             next_time = change.cached_time
             self.next_timescale = next_timescale
             match self.last_ease:
