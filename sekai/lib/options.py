@@ -336,7 +336,7 @@ class Options:
         scope="Rush",
         description="UI is displayed in full-screen aspect ratio.",
         advanced=True,
-        default=False,
+        default=True,
     )
     hide_ui: int = select_option(
         name="Hide UI",
