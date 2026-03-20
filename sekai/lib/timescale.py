@@ -8,7 +8,7 @@ from sonolus.script import runtime
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
 from sonolus.script.interval import remap
 from sonolus.script.record import Record
-from sonolus.script.timing import TimescaleEase, beat_to_time
+from sonolus.script.timing import TimescaleEase
 
 from sekai.lib import archetype_names
 from sekai.lib.options import Options
@@ -181,7 +181,7 @@ class TimeToLastChangeIndex(Record):
         if self.next_time > MIN_START_TIME and time < self.next_time:
             return self.current_change_index
         for change in iter_timescale_changes(self.next_change_index):
-            next_time = beat_to_time(change.beat)
+            next_time = change.cached_time
             self.next_time = next_time
             if time < next_time:
                 return self.current_change_index
