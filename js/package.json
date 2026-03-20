@@ -33,13 +33,13 @@
     "build": "tsc -p . && node ./build.js"
   },
   "dependencies": {
-    "@sonolus/core": "~7.15.0"
+    "@sonolus/core": "~7.15.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "~2.4.6",
-    "@sonolus/sonolus.js": "~9.7.0",
-    "@types/node": "^25.4.0",
+    "@biomejs/biome": "~2.4.8",
+    "@sonolus/sonolus.js": "~9.7.1",
+    "@types/node": "^25.5.0",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.57.0"
+    "typescript-eslint": "^8.57.1"
   }
 }
