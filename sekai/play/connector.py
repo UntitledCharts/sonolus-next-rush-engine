@@ -134,7 +134,9 @@ class Connector(PlayArchetype):
 
     @callback(order=-1)
     def update_sequential(self):
-        if time() >= self.end_time:
+        current_time = time()
+
+        if current_time >= self.end_time:
             self.despawn = True
             return
 
@@ -143,7 +145,7 @@ class Connector(PlayArchetype):
         update_timescale_group(self.segment_head.timescale_group)
 
         if self.active_head_ref.index > 0:
-            if time() in self.input_active_interval:
+            if current_time in self.input_active_interval:
                 input_lane, input_size = self.get_attached_params(offset_adjusted_time())
                 head = self.head
                 tail = self.tail
@@ -168,7 +170,7 @@ class Connector(PlayArchetype):
                 for touch in touches():
                     if not touch.ended and bounds.contains_point(touch.position):
                         if not self.active_connector_info.is_active:
-                            self.active_connector_info.active_start_time = time()
+                            self.active_connector_info.active_start_time = current_time
                         self.active_connector_info.is_active = True
                         self.delay = False
                         break
@@ -177,8 +179,8 @@ class Connector(PlayArchetype):
                         self.active_connector_info.is_active = False
                     else:
                         self.delay = True
-            if time() in self.visual_active_interval:
-                visual_lane, visual_size = self.get_attached_params(time())
+            if current_time in self.visual_active_interval:
+                visual_lane, visual_size = self.get_attached_params(current_time)
                 head = self.head
                 tail = self.tail
                 self.active_connector_info.visual_lane = visual_lane
@@ -209,17 +211,20 @@ class Connector(PlayArchetype):
                     input_manager.disallow_empty(touch)
 
     def update_parallel(self):
-        if time() < self.visual_active_interval.end or self.segment_head.segment_through_judge_line:
+        current_time = time()
+        adj_time = offset_adjusted_time()
+
+        if current_time < self.visual_active_interval.end or self.segment_head.segment_through_judge_line:
             head = self.head
             tail = self.tail
             segment_head = self.segment_head
             segment_tail = self.segment_tail
             if self.active_head_ref.index > 0:
                 active_head = self.active_head
-                if time() < active_head.target_time:
+                if current_time < active_head.target_time:
                     visual_state = ConnectorVisualState.WAITING
                 elif (
-                    offset_adjusted_time() < beat_to_time(active_head.beat + START_LENIENCY_BEATS)
+                    adj_time < beat_to_time(active_head.beat + START_LENIENCY_BEATS)
                     or self.active_connector_info.is_active
                 ):
                     visual_state = ConnectorVisualState.ACTIVE
@@ -229,7 +234,7 @@ class Connector(PlayArchetype):
                 visual_state = ConnectorVisualState.WAITING
             if visual_state != self.last_visual_state:
                 self.last_visual_state = visual_state
-                Streams.connector_visual_states[self.index][offset_adjusted_time()] = visual_state
+                Streams.connector_visual_states[self.index][adj_time] = visual_state
             if group_hide_notes(segment_head.timescale_group):
                 return
             if self.active_tail_ref.index > 0 and self.active_tail.is_despawned:
@@ -350,16 +355,19 @@ class SlideManager(PlayArchetype):
         self.last_effect_kind = ConnectorKind.NONE
 
     def update_parallel(self):
+        current_time = time()
+        adj_time = offset_adjusted_time()
+
         connector_effect_kind_stream = Streams.connector_effect_kinds[self.active_head.index]
-        if time() >= self.active_tail.target_time or self.active_tail.is_despawned:
+        if current_time >= self.active_tail.target_time or self.active_tail.is_despawned:
             destroy_looped_particle(self.circular_particle)
             destroy_looped_particle(self.linear_particle)
             destroy_looped_sfx(self.sfx)
-            connector_effect_kind_stream[offset_adjusted_time()] = ConnectorKind.NONE
+            connector_effect_kind_stream[adj_time] = ConnectorKind.NONE
             self.last_effect_kind = ConnectorKind.NONE
             self.despawn = True
             return
-        if time() < self.active_head.target_time:
+        if current_time < self.active_head.target_time:
             return
         info = self.active_head.active_connector_info
         match info.connector_kind:
@@ -387,20 +395,20 @@ class SlideManager(PlayArchetype):
                 )
                 update_connector_sfx(self.sfx, info.connector_kind, replace)
                 if self.last_effect_kind != info.connector_kind:
-                    connector_effect_kind_stream[offset_adjusted_time()] = info.connector_kind
+                    connector_effect_kind_stream[adj_time] = info.connector_kind
                     self.last_effect_kind = info.connector_kind
                 trail_period = CONNECTOR_TRAIL_SPAWN_PERIOD / Options.effect_animation_speed
-                if time() >= self.next_trail_spawn_time:
+                if current_time >= self.next_trail_spawn_time:
                     self.next_trail_spawn_time = max(
                         self.next_trail_spawn_time + trail_period,
-                        time() + trail_period / 2,
+                        current_time + trail_period / 2,
                     )
                     spawn_linear_connector_trail_particle(info.connector_kind, info.visual_lane, info.visual_y_offset)
                 slot_period = CONNECTOR_SLOT_SPAWN_PERIOD / Options.effect_animation_speed
-                if time() >= self.next_slot_spawn_time:
+                if current_time >= self.next_slot_spawn_time:
                     self.next_slot_spawn_time = max(
                         self.next_slot_spawn_time + slot_period,
-                        time() + slot_period / 2,
+                        current_time + slot_period / 2,
                     )
                     spawn_connector_slot_particles(
                         info.connector_kind, info.visual_lane, info.visual_size, info.visual_y_offset
@@ -417,7 +425,7 @@ class SlideManager(PlayArchetype):
                 destroy_looped_particle(self.circular_particle)
                 destroy_looped_particle(self.linear_particle)
                 if self.last_effect_kind != ConnectorKind.NONE:
-                    connector_effect_kind_stream[offset_adjusted_time()] = ConnectorKind.NONE
+                    connector_effect_kind_stream[adj_time] = ConnectorKind.NONE
                     self.last_effect_kind = ConnectorKind.NONE
         match info.connector_kind:
             case (
@@ -433,7 +441,6 @@ class SlideManager(PlayArchetype):
                     info.visual_size,
                     self.active_head.target_time,
                     1.0 - info.visual_y_offset,
-                    not_sekai_p=True,
                 )
             case _:
                 pass

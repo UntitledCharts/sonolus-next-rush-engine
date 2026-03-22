@@ -43,6 +43,8 @@ class Skill(WatchArchetype):
     z2: float = entity_memory()
     count: int = shared_memory()
     next_ref: EntityRef[Skill] = entity_data()
+    end_time_3: float = entity_memory()
+    end_time_6: float = entity_memory()
 
     @callback(order=-2)
     def preprocess(self):
@@ -67,10 +69,12 @@ class Skill(WatchArchetype):
             return 1e8
 
     def update_parallel(self):
-        if time() < self.start_time + 3:
-            draw_skill_bar(self.z, self.z2, time() - self.start_time, self.count, self.effect, self.level)
-        if time() < self.start_time + 6 and self.effect == SkillMode.JUDGMENT:
-            draw_judgment_effect(time() - self.start_time)
+        current_time = time()
+        elapsed = current_time - self.start_time
+        if current_time < self.end_time_3:
+            draw_skill_bar(self.z, self.z2, elapsed, self.count, self.effect, self.level)
+        if current_time < self.end_time_6 and self.effect == SkillMode.JUDGMENT:
+            draw_judgment_effect(elapsed)
 
     def update_sequential(self):
         if not is_replay():
@@ -124,17 +128,18 @@ class FeverChance(WatchArchetype):
     def update_parallel(self):
         if not Options.forced_fever_chance and not self.force:
             return
+        current_time = time()
         if is_skip():
             self.checker = 0
-            if time() <= self.start_time:
+            if current_time <= self.start_time:
                 self.percentage = 0
         if self.checker >= 2:
             return
-        if time() >= Fever.fever_start_time:
+        if current_time >= Fever.fever_start_time:
             spawn_fever_start_particle(self.percentage)
             self.checker = 2
             return
-        if time() >= Fever.fever_chance_time and not self.checker:
+        if current_time >= Fever.fever_chance_time and not self.checker:
             spawn_fever_chance_particle()
             self.checker = 1
         self.percentage = (
@@ -144,11 +149,12 @@ class FeverChance(WatchArchetype):
                 0.9 if not Fever.fever_chance_cant_super_fever or self.percentage >= 0.9 else 0.89,
             )
             if not is_replay()
-            else Streams.fever_chance_counter[self.index][time()]
+            else Streams.fever_chance_counter[self.index][current_time]
         )
+        elapsed = current_time - self.start_time
         if Options.fever_effect == 0:
-            draw_fever_side_cover(self.z, time() - self.start_time)
-        draw_fever_side_bar(self.z2, time() - self.start_time)
+            draw_fever_side_cover(self.z, elapsed)
+        draw_fever_side_bar(self.z2, elapsed)
         draw_fever_gauge(self.z3, self.percentage)
 
     @callback(order=3)

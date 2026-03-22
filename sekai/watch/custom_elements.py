@@ -83,25 +83,26 @@ class ComboJudge(WatchArchetype):
             return 1e8
 
     def update_parallel(self):
+        current_note = note.WatchBaseNote.at(self.note_index)
         draw_combo_label(
-            ap=note.WatchBaseNote.at(self.note_index).ap,
+            ap=current_note.ap,
             z=self.z,
             z1=self.z1,
-            combo=note.WatchBaseNote.at(self.note_index).combo,
+            combo=current_note.combo,
         )
         draw_combo_number(
             draw_time=self.spawn_time(),
-            ap=note.WatchBaseNote.at(self.note_index).ap,
-            combo=note.WatchBaseNote.at(self.note_index).combo,
+            ap=current_note.ap,
+            combo=current_note.combo,
             z=self.z,
             z1=self.z1,
             z2=self.z2,
         )
         draw_judgment_text(
             draw_time=self.spawn_time(),
-            judgment=note.WatchBaseNote.at(self.note_index).judgment,
-            windows=note.WatchBaseNote.at(self.note_index).judgment_window,
-            accuracy=note.WatchBaseNote.at(self.note_index).accuracy,
+            judgment=current_note.judgment,
+            windows=current_note.judgment_window,
+            accuracy=current_note.accuracy,
             z=self.z,
         )
 
@@ -109,14 +110,15 @@ class ComboJudge(WatchArchetype):
     def update_sequential(self):
         if self.checker:
             return
-        if Fever.fever_chance_time <= note.WatchBaseNote.at(self.note_index).calc_time < Fever.fever_start_time:
-            Fever.fever_chance_current_combo = note.WatchBaseNote.at(self.note_index).count - Fever.fever_first_count
+        current_note = note.WatchBaseNote.at(self.note_index)
+        if Fever.fever_chance_time <= current_note.calc_time < Fever.fever_start_time:
+            Fever.fever_chance_current_combo = current_note.count - Fever.fever_first_count
 
         if Options.custom_score > 0 or Options.custom_score_bar:
-            ScoreIndicator.score = note.WatchBaseNote.at(self.note_index).score
-            ScoreIndicator.percentage = note.WatchBaseNote.at(self.note_index).percentage
-            ScoreIndicator.ap = note.WatchBaseNote.at(self.note_index).ap
-            note_score = note.WatchBaseNote.at(self.note_index).note_raw_score
+            ScoreIndicator.score = current_note.score
+            ScoreIndicator.percentage = current_note.percentage
+            ScoreIndicator.ap = current_note.ap
+            note_score = current_note.note_raw_score
             ScoreIndicator.note_score = note_score if note_score > 0 else ScoreIndicator.note_score
             ScoreIndicator.note_time = self.spawn_time() if note_score > 0 else ScoreIndicator.note_time
 
@@ -141,20 +143,19 @@ class JudgmentAccuracy(WatchArchetype):
         return note.WatchBaseNote.at(self.note_index).calc_time
 
     def despawn_time(self):
-        if (
-            self.next_ref.index > 0
-            and note.WatchBaseNote.at(self.note_index).calc_time + 0.5 >= self.next_ref.get().calc_time
-        ):
+        current_note = note.WatchBaseNote.at(self.note_index)
+        if self.next_ref.index > 0 and current_note.calc_time + 0.5 >= self.next_ref.get().calc_time:
             return self.next_ref.get().calc_time
         else:
-            return note.WatchBaseNote.at(self.note_index).calc_time + 0.5
+            return current_note.calc_time + 0.5
 
     def update_parallel(self):
+        current_note = note.WatchBaseNote.at(self.note_index)
         draw_judgment_accuracy(
-            judgment=note.WatchBaseNote.at(self.note_index).judgment,
-            windows=note.WatchBaseNote.at(self.note_index).judgment_window,
-            accuracy=note.WatchBaseNote.at(self.note_index).accuracy,
-            wrong_way=note.WatchBaseNote.at(self.note_index).wrong_way_check,
+            judgment=current_note.judgment,
+            windows=current_note.judgment_window,
+            accuracy=current_note.accuracy,
+            wrong_way=current_note.wrong_way_check,
             z=self.z,
         )
 
@@ -174,13 +175,11 @@ class DamageFlash(WatchArchetype):
         return note.WatchBaseNote.at(self.note_index).calc_time
 
     def despawn_time(self):
-        if (
-            self.next_ref.index > 0
-            and note.WatchBaseNote.at(self.note_index).calc_time + 0.35 >= self.next_ref.get().calc_time
-        ):
+        current_note = note.WatchBaseNote.at(self.note_index)
+        if self.next_ref.index > 0 and current_note.calc_time + 0.35 >= self.next_ref.get().calc_time:
             return self.next_ref.get().calc_time
         else:
-            return note.WatchBaseNote.at(self.note_index).calc_time + 0.35
+            return current_note.calc_time + 0.35
 
     def update_parallel(self):
         draw_damage_flash(draw_time=self.spawn_time(), z=self.z)
