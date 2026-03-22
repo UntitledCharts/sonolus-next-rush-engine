@@ -664,14 +664,15 @@ class BaseNote(PlayArchetype):
 
         is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
 
-        if offset_adjusted_time() >= self.target_time and has_correct_direction_touch:
+        if offset_adjusted_time() >= self.target_time:
             if current_touch_id != -1:
                 NoteMemory.flick_resolved_times[current_touch_id % 32] = self.target_time
-            if is_just_reached:
-                self.complete()
-            else:
-                self.judge(offset_adjusted_time())
-            return
+            if has_correct_direction_touch:
+                if is_just_reached:
+                    self.complete()
+                else:
+                    self.judge(offset_adjusted_time())
+                return
 
         # Either pre-target, or post-target within perfect window with wrong direction
         current_abs_error = abs(self.best_touch_time - self.target_time)
