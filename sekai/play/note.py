@@ -14,7 +14,7 @@ from sonolus.script.archetype import (
     imported,
     shared_memory,
 )
-from sonolus.script.array import Dim
+from sonolus.script.array import Array, Dim
 from sonolus.script.bucket import Bucket, Judgment
 from sonolus.script.containers import VarArray
 from sonolus.script.globals import level_memory
@@ -498,7 +498,7 @@ class BaseNote(PlayArchetype):
             if self.best_touch_matches_direction:
                 return True
 
-            if self.best_touch_id != -1:
+            if self.best_touch_id > 0:
                 last_resolved_time = NoteMemory.flick_resolved_times[self.best_touch_id % 32]
                 if last_resolved_time > self.target_time:
                     return True
@@ -665,7 +665,7 @@ class BaseNote(PlayArchetype):
         is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
 
         if offset_adjusted_time() >= self.target_time:
-            if current_touch_id != -1:
+            if current_touch_id > 0:
                 NoteMemory.flick_resolved_times[current_touch_id % 32] = self.target_time
             if has_correct_direction_touch:
                 if is_just_reached:
@@ -1037,7 +1037,7 @@ class BaseNote(PlayArchetype):
 class NoteMemory:
     active_tap_input_notes: VarArray[EntityRef[BaseNote], Dim[256]]
     active_release_input_notes: VarArray[EntityRef[BaseNote], Dim[256]]
-    flick_resolved_times: VarArray[float, Dim[32]]
+    flick_resolved_times: Array[float, Dim[32]]
 
 
 NormalTapNote = BaseNote.derive(archetype_names.NORMAL_TAP_NOTE, is_scored=True, key=NoteKind.NORM_TAP)
