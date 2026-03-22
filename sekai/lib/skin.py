@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import IntEnum
-from typing import Self, assert_never
+from typing import TYPE_CHECKING, Self, assert_never
 
 from sonolus.script.bucket import Judgment
 from sonolus.script.globals import level_data
@@ -12,6 +12,9 @@ from sonolus.script.sprite import RenderMode, Sprite, SpriteGroup, StandardSprit
 
 from sekai.lib.layout import AccuracyType, ComboType, FlickDirection, JudgmentType
 from sekai.lib.options import Options, SekaiVersion, SkillMode
+
+if TYPE_CHECKING:
+    from sekai.lib.buckets import SekaiWindow
 
 
 @skin
@@ -662,13 +665,6 @@ class ComboLabelSpriteSet(Record):
         return self.normal.is_available
 
 
-class SekaiWindow(Record):
-    perfect: Interval
-    great: Interval
-    good: Interval
-    bad: Interval
-
-
 class JudgmentSpriteSet(Record):
     perfect: Sprite
     great: Sprite
@@ -798,6 +794,8 @@ class SkillValueSpriteSet(Record):
                 result @= self.heal
             case SkillMode.JUDGMENT:
                 result @= self.judgment
+            case SkillMode.LEVEL_DEFAULT:
+                pass
             case _:
                 assert_never(effect)
         return result

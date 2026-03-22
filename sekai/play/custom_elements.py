@@ -79,7 +79,7 @@ class ScoreIndicator:
 
 @level_memory
 class LifeManager:
-    life: int
+    life: float
     initial_life: int
     max_life: int
 

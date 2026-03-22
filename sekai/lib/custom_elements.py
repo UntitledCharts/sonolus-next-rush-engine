@@ -1,7 +1,7 @@
 from enum import IntEnum
 from math import cos, floor, pi
 
-from sonolus.script.bucket import Judgment, JudgmentWindow
+from sonolus.script.bucket import Judgment
 from sonolus.script.interval import clamp, unlerp, unlerp_clamped
 from sonolus.script.record import Record
 from sonolus.script.runtime import aspect_ratio, is_replay, is_watch, runtime_ui, screen, time
@@ -401,7 +401,7 @@ def draw_judgment_text(draw_time: float, judgment: Judgment, windows: SekaiWindo
     )
 
 
-def draw_judgment_accuracy(judgment: Judgment, accuracy: float, windows: JudgmentWindow, wrong_way: bool, z: float):
+def draw_judgment_accuracy(judgment: Judgment, accuracy: float, windows: SekaiWindow, wrong_way: bool, z: float):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.accuracy_warning.available:
@@ -711,7 +711,7 @@ class UILayout(Record):
             tr=Vec2(r, t),
         )
 
-    def draw_number(self, z, a=1):
+    def draw_number(self, z, a: float = 1):
         s_inv = 0
 
         item_count = self.core.digit_count
