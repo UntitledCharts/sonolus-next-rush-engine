@@ -47,6 +47,8 @@ class Skill(PlayArchetype):
     z: float = entity_memory()
     z2: float = entity_memory()
     check: bool = entity_memory()
+    end_time_3: float = entity_memory()
+    end_time_6: float = entity_memory()
     name = archetype_names.SKILL
 
     @callback(order=-2)
@@ -69,16 +71,18 @@ class Skill(PlayArchetype):
         return time() >= self.start_time
 
     def update_parallel(self):
-        if time() < self.start_time + 3:
-            draw_skill_bar(self.z, self.z2, time() - self.start_time, self.count, self.effect, self.level)
-        if (time() >= self.start_time + 3 and self.effect != SkillMode.JUDGMENT) or time() >= self.start_time + 6:
+        current_time = time()
+        elapsed = current_time - self.start_time
+        if current_time < self.end_time_3:
+            draw_skill_bar(self.z, self.z2, elapsed, self.count, self.effect, self.level)
+        if (current_time >= self.end_time_3 and self.effect != SkillMode.JUDGMENT) or current_time >= self.end_time_6:
             self.despawn = True
             return
         if self.effect == SkillMode.JUDGMENT:
-            draw_judgment_effect(time() - self.start_time)
+            draw_judgment_effect(elapsed)
 
     def update_sequential(self):
-        if time() >= self.start_time + 6:
+        if time() >= self.end_time_6:
             SkillActive.judgment = False
             return
         if not SkillActive.judgment and self.effect == SkillMode.JUDGMENT:
@@ -139,11 +143,14 @@ class FeverChance(PlayArchetype):
         if not is_multiplayer() and not Options.forced_fever_chance and not self.force:
             self.despawn = True
             return
-        if time() >= Fever.fever_start_time:
+
+        current_time = time()
+        elapsed = current_time - self.start_time
+        if current_time >= Fever.fever_start_time:
             spawn_fever_start_particle(self.percentage)
             self.despawn = True
             return
-        if time() >= Fever.fever_chance_time and not self.checker:
+        if current_time >= Fever.fever_chance_time and not self.checker:
             spawn_fever_chance_particle()
             self.checker = True
         self.percentage = clamp(
@@ -153,8 +160,8 @@ class FeverChance(PlayArchetype):
         )
         Streams.fever_chance_counter[self.index][offset_adjusted_time()] = self.percentage
         if Options.fever_effect == 0:
-            draw_fever_side_cover(self.z, time() - self.start_time)
-        draw_fever_side_bar(self.z2, time() - self.start_time)
+            draw_fever_side_cover(self.z, elapsed)
+        draw_fever_side_bar(self.z2, elapsed)
         draw_fever_gauge(self.z3, self.percentage)
 
     @callback(order=3)

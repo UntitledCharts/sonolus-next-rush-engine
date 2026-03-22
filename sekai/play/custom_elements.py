@@ -157,20 +157,21 @@ class ComboJudge(PlayArchetype):
         if Options.custom_score == 0 and not Options.custom_score_bar:
             return
         # score = judgmentMultiplier * (consecutiveJudgmentMultiplier + archetypeMultiplier + entityMultiplier)
+        ls = level_score()
         judgment_multiplier = 0
         match self.judgment:
             case Judgment.PERFECT:
-                judgment_multiplier = level_score().perfect_multiplier
+                judgment_multiplier = ls.perfect_multiplier
                 ScoreIndicator.perfect_step += 1
                 ScoreIndicator.great_step += 1
                 ScoreIndicator.good_step += 1
             case Judgment.GREAT:
-                judgment_multiplier = level_score().great_multiplier
+                judgment_multiplier = ls.great_multiplier
                 ScoreIndicator.perfect_step = 0
                 ScoreIndicator.great_step += 1
                 ScoreIndicator.good_step += 1
             case Judgment.GOOD:
-                judgment_multiplier = level_score().good_multiplier
+                judgment_multiplier = ls.good_multiplier
                 ScoreIndicator.perfect_step = 0
                 ScoreIndicator.great_step = 0
                 ScoreIndicator.good_step += 1
@@ -180,31 +181,28 @@ class ComboJudge(PlayArchetype):
                 ScoreIndicator.great_step = 0
                 ScoreIndicator.good_step = 0
 
-        inv_perfect_step = (
-            1.0 / level_score().consecutive_perfect_step if level_score().consecutive_perfect_step > 0 else 0.0
-        )
-        inv_great_step = 1.0 / level_score().consecutive_great_step if level_score().consecutive_great_step > 0 else 0.0
-        inv_good_step = 1.0 / level_score().consecutive_good_step if level_score().consecutive_good_step > 0 else 0.0
+        current_note = note.BaseNote.at(self.index)
+
+        inv_perfect_step = 1.0 / ls.consecutive_perfect_step if ls.consecutive_perfect_step > 0 else 0.0
+        inv_great_step = 1.0 / ls.consecutive_great_step if ls.consecutive_great_step > 0 else 0.0
+        inv_good_step = 1.0 / ls.consecutive_good_step if ls.consecutive_good_step > 0 else 0.0
         note_raw_score = judgment_multiplier * (
             (
                 min(
-                    floor(ScoreIndicator.perfect_step * inv_perfect_step + 1e-9)
-                    * level_score().consecutive_perfect_multiplier,
-                    (level_score().consecutive_perfect_cap * inv_perfect_step)
-                    * level_score().consecutive_perfect_multiplier,
+                    floor(ScoreIndicator.perfect_step * inv_perfect_step + 1e-9) * ls.consecutive_perfect_multiplier,
+                    (ls.consecutive_perfect_cap * inv_perfect_step) * ls.consecutive_perfect_multiplier,
                 )
                 + min(
-                    floor(ScoreIndicator.great_step * inv_great_step + 1e-9)
-                    * level_score().consecutive_great_multiplier,
-                    (level_score().consecutive_great_cap * inv_great_step) * level_score().consecutive_great_multiplier,
+                    floor(ScoreIndicator.great_step * inv_great_step + 1e-9) * ls.consecutive_great_multiplier,
+                    (ls.consecutive_great_cap * inv_great_step) * ls.consecutive_great_multiplier,
                 )
                 + min(
-                    floor(ScoreIndicator.good_step * inv_good_step + 1e-9) * level_score().consecutive_good_multiplier,
-                    (level_score().consecutive_good_cap * inv_good_step) * level_score().consecutive_good_multiplier,
+                    floor(ScoreIndicator.good_step * inv_good_step + 1e-9) * ls.consecutive_good_multiplier,
+                    (ls.consecutive_good_cap * inv_good_step) * ls.consecutive_good_multiplier,
                 )
             )
-            + note.BaseNote.at(self.index).archetype_score_multiplier
-            + note.BaseNote.at(self.index).entity_score_multiplier
+            + current_note.archetype_score_multiplier
+            + current_note.entity_score_multiplier
         )
         raw_calc = (note_raw_score * ScoreIndicator.max_score) / ScoreIndicator.total_weight
         note_score = raw_calc
@@ -226,27 +224,24 @@ class ComboJudge(PlayArchetype):
             case 1:
                 ScoreIndicator.percentage = (ScoreIndicator.current_raw_score / ScoreIndicator.total_weight) * 100.0
             case 2:
-                ideal_combo = note.BaseNote.at(self.index).count
-                note_ideal_weight = level_score().perfect_multiplier * (
+                ideal_combo = current_note.count
+                note_ideal_weight = ls.perfect_multiplier * (
                     (
                         min(
-                            floor(ideal_combo * inv_perfect_step + 1e-9) * level_score().consecutive_perfect_multiplier,
-                            (level_score().consecutive_perfect_cap * inv_perfect_step)
-                            * level_score().consecutive_perfect_multiplier,
+                            floor(ideal_combo * inv_perfect_step + 1e-9) * ls.consecutive_perfect_multiplier,
+                            (ls.consecutive_perfect_cap * inv_perfect_step) * ls.consecutive_perfect_multiplier,
                         )
                         + min(
-                            floor(ideal_combo * inv_great_step + 1e-9) * level_score().consecutive_great_multiplier,
-                            (level_score().consecutive_great_cap * inv_great_step)
-                            * level_score().consecutive_great_multiplier,
+                            floor(ideal_combo * inv_great_step + 1e-9) * ls.consecutive_great_multiplier,
+                            (ls.consecutive_great_cap * inv_great_step) * ls.consecutive_great_multiplier,
                         )
                         + min(
-                            floor(ideal_combo * inv_good_step + 1e-9) * level_score().consecutive_good_multiplier,
-                            (level_score().consecutive_good_cap * inv_good_step)
-                            * level_score().consecutive_good_multiplier,
+                            floor(ideal_combo * inv_good_step + 1e-9) * ls.consecutive_good_multiplier,
+                            (ls.consecutive_good_cap * inv_good_step) * ls.consecutive_good_multiplier,
                         )
                     )
-                    + note.BaseNote.at(self.index).archetype_score_multiplier
-                    + note.BaseNote.at(self.index).entity_score_multiplier
+                    + current_note.archetype_score_multiplier
+                    + current_note.entity_score_multiplier
                 )
                 y2 = note_ideal_weight - ScoreIndicator.processed_weight_compensation
                 t2 = ScoreIndicator.processed_weight + y2
@@ -273,27 +268,21 @@ class ComboJudge(PlayArchetype):
             return
         if LifeManager.life == 0:
             return
+        current_note = note.BaseNote.at(self.index)
+
         match self.judgment:
             case Judgment.PERFECT:
                 LifeManager.life += (
-                    note.BaseNote.at(self.index).archetype_life.perfect_increment
-                    + note.BaseNote.at(self.index).entity_life.perfect_increment
+                    current_note.archetype_life.perfect_increment + current_note.entity_life.perfect_increment
                 )
             case Judgment.GREAT:
                 LifeManager.life += (
-                    note.BaseNote.at(self.index).archetype_life.great_increment
-                    + note.BaseNote.at(self.index).entity_life.great_increment
+                    current_note.archetype_life.great_increment + current_note.entity_life.great_increment
                 )
             case Judgment.GOOD:
-                LifeManager.life += (
-                    note.BaseNote.at(self.index).archetype_life.good_increment
-                    + note.BaseNote.at(self.index).entity_life.good_increment
-                )
+                LifeManager.life += current_note.archetype_life.good_increment + current_note.entity_life.good_increment
             case Judgment.MISS:
-                LifeManager.life += (
-                    note.BaseNote.at(self.index).archetype_life.miss_increment
-                    + note.BaseNote.at(self.index).entity_life.miss_increment
-                )
+                LifeManager.life += current_note.archetype_life.miss_increment + current_note.entity_life.miss_increment
         LifeManager.life = clamp(LifeManager.life, 0, LifeManager.max_life)
 
 

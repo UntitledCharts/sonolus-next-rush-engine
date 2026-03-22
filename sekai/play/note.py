@@ -416,55 +416,39 @@ class BaseNote(PlayArchetype):
                 )
 
     def tick_trigger(self):
-        return (
-            self.kind in (NoteKind.NORM_TICK, NoteKind.CRIT_TICK)
-            and (
-                (
-                    not self.is_attached
-                    and (
-                        (
-                            self.tick_head_ref.index > 0
-                            and (
-                                self.tick_head_ref.get().active_connector_info.is_active
-                                and time() >= self.input_interval.start
-                            )
-                        )
-                        or (self.tick_tail_ref.index > 0 and self.tick_tail_ref.get().is_despawned)
-                    )
+        current_time = time()
+
+        if self.kind in (NoteKind.NORM_TICK, NoteKind.CRIT_TICK):
+            if not self.is_attached:
+                head = self.tick_head_ref
+                tail = self.tick_tail_ref
+                return (
+                    head.index > 0
+                    and current_time >= self.input_interval.start
+                    and head.get().active_connector_info.is_active
+                ) or (tail.index > 0 and tail.get().is_despawned)
+            else:
+                attach_head = self.attach_head_ref.get()
+                head = attach_head.tick_head_ref
+                tail = attach_head.tick_tail_ref
+                return (
+                    head.index > 0
+                    and current_time >= self.input_interval.start
+                    and head.get().active_connector_info.is_active
+                ) or (tail.index > 0 and tail.get().is_despawned)
+
+        elif self.kind == NoteKind.HIDE_TICK and self.attach_head_ref.index > 0:
+            attach_head = self.attach_head_ref.get()
+            tail = attach_head.tick_tail_ref
+            head = attach_head.tick_head_ref
+            if tail.index > 0:
+                tail_note = tail.get()
+                return (
+                    tail_note.is_despawned
+                    or (tail_note.kind == NoteKind.ANCHOR and current_time >= tail_note.target_time)
+                    or (head.get().active_connector_info.is_active and current_time >= self.input_interval.start)
                 )
-                or (
-                    self.is_attached
-                    and (
-                        (
-                            self.attach_head_ref.get().tick_head_ref.index > 0
-                            and (
-                                self.attach_head_ref.get().tick_head_ref.get().active_connector_info.is_active
-                                and time() >= self.input_interval.start
-                            )
-                        )
-                        or (
-                            self.attach_head_ref.get().tick_tail_ref.index > 0
-                            and self.attach_head_ref.get().tick_tail_ref.get().is_despawned
-                        )
-                    )
-                )
-            )
-        ) or (
-            self.kind == NoteKind.HIDE_TICK
-            and self.attach_head_ref.index > 0
-            and self.attach_head_ref.get().tick_tail_ref.index > 0
-            and (
-                self.attach_head_ref.get().tick_tail_ref.get().is_despawned
-                or (
-                    self.attach_head_ref.get().tick_tail_ref.get().kind == NoteKind.ANCHOR
-                    and time() >= self.attach_head_ref.get().tick_tail_ref.get().target_time
-                )
-                or (
-                    self.attach_head_ref.get().tick_head_ref.get().active_connector_info.is_active
-                    and time() >= self.input_interval.start
-                )
-            )
-        )
+        return False
 
     @property
     def is_trace(self) -> bool:
@@ -896,6 +880,7 @@ class BaseNote(PlayArchetype):
     @property
     def progress(self) -> float:
         if self.is_attached:
+            current_time = time()
             attach_head = self.attach_head_ref.get()
             attach_tail = self.attach_tail_ref.get()
             head_progress = (
@@ -904,7 +889,7 @@ class BaseNote(PlayArchetype):
                     group_scaled_time(attach_head.timescale_group),
                     group_force_note_speed(attach_head.timescale_group),
                 )
-                if time() < attach_head.target_time
+                if current_time < attach_head.target_time
                 else 1.0
             )
             tail_progress = progress_to(
@@ -914,8 +899,8 @@ class BaseNote(PlayArchetype):
             )
             head_frac = (
                 0.0
-                if time() < attach_head.target_time
-                else unlerp_clamped(attach_head.target_time, attach_tail.target_time, time())
+                if current_time < attach_head.target_time
+                else unlerp_clamped(attach_head.target_time, attach_tail.target_time, current_time)
             )
             tail_frac = 1.0
             frac = self.attach_frac
