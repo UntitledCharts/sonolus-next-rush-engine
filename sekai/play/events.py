@@ -140,29 +140,33 @@ class FeverChance(PlayArchetype):
         return time() >= self.start_time
 
     def update_parallel(self):
-        if not is_multiplayer() and not Options.forced_fever_chance and not self.force:
-            self.despawn = True
-            return
-
         current_time = time()
         elapsed = current_time - self.start_time
+
+        show_ui = is_multiplayer() or Options.forced_fever_chance or self.force
+
         if current_time >= Fever.fever_start_time:
-            spawn_fever_start_particle(self.percentage)
+            if show_ui:
+                spawn_fever_start_particle(self.percentage)
             self.despawn = True
             return
         if current_time >= Fever.fever_chance_time and not self.checker:
-            spawn_fever_chance_particle()
+            if show_ui:
+                spawn_fever_chance_particle()
             self.checker = True
         self.percentage = clamp(
             Fever.fever_chance_current_combo / self.counter,
             0,
             0.9 if not Fever.fever_chance_cant_super_fever or self.percentage >= 0.9 else 0.89,
         )
+
         Streams.fever_chance_counter[self.index][offset_adjusted_time()] = self.percentage
-        if Options.fever_effect == 0:
-            draw_fever_side_cover(self.z, elapsed)
-        draw_fever_side_bar(self.z2, elapsed)
-        draw_fever_gauge(self.z3, self.percentage)
+
+        if show_ui:
+            if Options.fever_effect == 0:
+                draw_fever_side_cover(self.z, elapsed)
+            draw_fever_side_bar(self.z2, elapsed)
+            draw_fever_gauge(self.z3, self.percentage)
 
     @callback(order=3)
     def update_sequential(self):
