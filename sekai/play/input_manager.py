@@ -4,7 +4,6 @@ from sonolus.script.archetype import PlayArchetype, callback
 from sonolus.script.array import Array, Dim
 from sonolus.script.containers import ArrayMap, ArraySet
 from sonolus.script.globals import level_memory
-from sonolus.script.iterator import maybe_next
 from sonolus.script.runtime import Touch, time, touches
 
 from sekai.lib import archetype_names
@@ -61,21 +60,16 @@ class InputManager(PlayArchetype):
 def update_input_state():
     old_disallowed_empty_touches = +InputState.disallowed_empty_touches
     InputState.disallowed_empty_touches.clear()
-    for existing_id in old_disallowed_empty_touches:
-        maybe_touch = maybe_next(touch for touch in touches() if touch.id == existing_id)
-        if maybe_touch.is_nothing:
-            continue
-        touch = maybe_touch.get()
-        disallow_empty(touch)
 
     old_disallowed_release_touches = +InputState.disallowed_release_touches
     InputState.disallowed_release_touches.clear()
-    for existing_id, until_time in old_disallowed_release_touches.items():
-        maybe_touch = maybe_next(touch for touch in touches() if touch.id == existing_id)
-        if maybe_touch.is_nothing:
-            continue
-        touch = maybe_touch.get()
-        InputState.disallowed_release_touches[touch.id] = until_time
+
+    for touch in touches():
+        if touch.id in old_disallowed_empty_touches:
+            disallow_empty(touch)
+
+        if touch.id in old_disallowed_release_touches:
+            InputState.disallowed_release_touches[touch.id] = old_disallowed_release_touches[touch.id]
 
 
 def preassign_taps():
