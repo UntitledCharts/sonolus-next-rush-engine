@@ -37,7 +37,7 @@ def spawn_custom(
         accuracy=accuracy,
         windows=windows,
     )
-    if judgment != Judgment.PERFECT and played_hit_effects:
+    if Options.custom_accuracy and judgment != Judgment.PERFECT and played_hit_effects:
         JudgmentAccuracy.spawn(
             spawn_time=time(),
             judgment=judgment,
@@ -45,7 +45,7 @@ def spawn_custom(
             windows=windows,
             wrong_way=wrong_way,
         )
-    if judgment == Judgment.MISS:
+    if Options.custom_damage and judgment == Judgment.MISS:
         DamageFlash.spawn(spawn_time=time())
 
 
@@ -312,9 +312,6 @@ class JudgmentAccuracy(PlayArchetype):
         if time() >= self.spawn_time + 0.5:
             self.despawn = True
             return
-        if not Options.custom_accuracy:
-            self.despawn = True
-            return
         draw_judgment_accuracy(
             judgment=self.judgment,
             accuracy=self.accuracy,
@@ -352,9 +349,6 @@ class DamageFlash(PlayArchetype):
             self.despawn = True
             return
         if time() >= self.spawn_time + 0.35:
-            self.despawn = True
-            return
-        if not Options.custom_damage:
             self.despawn = True
             return
         draw_damage_flash(draw_time=self.spawn_time, z=self.z)
