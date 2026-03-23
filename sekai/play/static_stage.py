@@ -95,20 +95,14 @@ class StaticStage(PlayArchetype):
             lane = touch_to_lane(touch.position)
             rounded_lane = clamp(round(lane - 0.5) + 0.5, -5.5, 5.5)
             if touch.started:
-                play_lane_hit_effects(
-                    rounded_lane,
-                    sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6 or not Options.prevent_empty_lane_sfx,
-                )
+                play_lane_hit_effects(rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6)
                 if not empty_lanes.is_full():
                     empty_lanes.append(rounded_lane)
             else:
                 prev_lane = touch_to_lane(touch.prev_position)
                 prev_rounded_lane = clamp(round(prev_lane - 0.5) + 0.5, -5.5, 5.5)
                 if rounded_lane != prev_rounded_lane:
-                    play_lane_hit_effects(
-                        rounded_lane,
-                        sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6 or not Options.prevent_empty_lane_sfx,
-                    )
+                    play_lane_hit_effects(rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6)
                     if not empty_lanes.is_full():
                         empty_lanes.append(rounded_lane)
         if len(empty_lanes) > 0:
