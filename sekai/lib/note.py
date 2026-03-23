@@ -24,6 +24,7 @@ from sekai.lib.buckets import (
     SLIDE_END_NORMAL_WINDOW,
     SLIDE_END_TRACE_CRITICAL_WINDOW,
     SLIDE_END_TRACE_NORMAL_WINDOW,
+    SLIDE_TICK_JUDGMENT_WINDOW,
     TAP_CRITICAL_WINDOW,
     TAP_CRITICAL_WINDOW_BAD,
     TAP_NORMAL_WINDOW,
@@ -72,7 +73,7 @@ from sekai.lib.layout import (
     progress_to,
 )
 from sekai.lib.level_config import LevelConfig
-from sekai.lib.options import Options, ScoreMode, SekaiVersion, VibrateMode
+from sekai.lib.options import Options, ScoreMode, Version, VibrateMode
 from sekai.lib.particle import (
     EMPTY_NOTE_PARTICLE_SET,
     ActiveParticles,
@@ -364,7 +365,7 @@ def draw_slide_note_head(
     travel = approach(visual_progress)
     sprite_set = get_note_sprite_set(kind, FlickDirection.UP_OMNI)
     etc = get_active_connector_z_offset(connector_kind, False)
-    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, etc, not_sekai_p)
+    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, etc)
     draw_note_tick(sprite_set.tick, lane, travel, target_time, etc)
 
 
@@ -871,7 +872,7 @@ def play_note_hit_effects(
                     NoteKind.CRIT_TAIL_FLICK,
                     NoteKind.CRIT_TAIL_TRACE_FLICK,
                 )
-                and LevelConfig.particle_version == SekaiVersion.v1
+                and LevelConfig.particle_version == Version.v1
                 else 22.5
             )
             match direction:
@@ -1054,7 +1055,7 @@ def draw_tutorial_note_slot_effects(
         )
 
 
-def get_note_window(kind: NoteKind) -> SekaiWindow:
+def get_note_window(kind: NoteKind, is_connector_tick) -> SekaiWindow:
     result = +SekaiWindow
     match kind:
         case NoteKind.NORM_TAP | NoteKind.NORM_HEAD_TAP | NoteKind.NORM_TAIL_TAP:
@@ -1089,7 +1090,12 @@ def get_note_window(kind: NoteKind) -> SekaiWindow:
             result @= TRACE_FLICK_NORMAL_WINDOW
         case NoteKind.CRIT_TAIL_TRACE_FLICK:
             result @= TRACE_FLICK_CRITICAL_WINDOW
-        case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK | NoteKind.ANCHOR | NoteKind.DAMAGE:
+        case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK:
+            if is_connector_tick:
+                result @= EMPTY_JUDGMENT_WINDOW
+            else:
+                result @= SLIDE_TICK_JUDGMENT_WINDOW
+        case NoteKind.ANCHOR | NoteKind.DAMAGE:
             result @= EMPTY_JUDGMENT_WINDOW
         case _:
             assert_never(kind)
