@@ -264,9 +264,87 @@ class BaseNote(PlayArchetype):
             return False
         return time() >= self.start_time
 
-    @property
-    def calc_time(self) -> float:
-        return self.target_time
+    def initialize(self):
+        if self.is_scored:
+            leniency = get_leniency(self.kind)
+            hitbox_l = self.lane - self.size
+            hitbox_r = self.lane + self.size
+            if self.kind in {NoteKind.NORM_TICK, NoteKind.CRIT_TICK, NoteKind.HIDE_TICK}:
+                window_start = self.target_time + self.judgment_window.good.start
+                window_end = self.target_time + self.judgment_window.good.end
+
+                # Scan backward to cover connector positions from window start to this tick
+                current_ref = +EntityRef[BaseNote]
+                if self.is_attached:
+                    current_ref @= self.attach_head_ref
+                    attach_tail = self.attach_tail_ref.get()
+                    last_lane = attach_tail.lane
+                    last_size = attach_tail.size
+                    last_time = attach_tail.target_time
+                else:
+                    current_ref @= self.prev_ref
+                    last_lane = self.lane
+                    last_size = self.size
+                    last_time = self.target_time
+                while current_ref.index > 0:
+                    current = current_ref.get()
+                    if not current.is_attached:
+                        if current.target_time <= window_start:
+                            ease_progress = ease(
+                                current.connector_ease,
+                                unlerp_epsilon(current.target_time, last_time, window_start),
+                            )
+                            lane = lerp(current.lane, last_lane, ease_progress)
+                            size = lerp(current.size, last_size, ease_progress)
+                            hitbox_l = min(hitbox_l, lane - size)
+                            hitbox_r = max(hitbox_r, lane + size)
+                            break
+                        lane = current.lane
+                        size = current.size
+                        hitbox_l = min(hitbox_l, lane - size)
+                        hitbox_r = max(hitbox_r, lane + size)
+                        last_lane = lane
+                        last_size = size
+                        last_time = current.target_time
+                    current_ref @= current.prev_ref
+
+                # Scan forward to cover connector positions from this tick to window end
+                if self.is_attached:
+                    current_ref @= self.attach_tail_ref
+                    attach_head = self.attach_head_ref.get()
+                    last_lane = attach_head.lane
+                    last_size = attach_head.size
+                    last_time = attach_head.target_time
+                    last_ease = attach_head.connector_ease
+                else:
+                    current_ref @= self.next_ref
+                    last_lane = self.lane
+                    last_size = self.size
+                    last_time = self.target_time
+                    last_ease = self.connector_ease
+                while current_ref.index > 0:
+                    current = current_ref.get()
+                    if not current.is_attached:
+                        if current.target_time >= window_end:
+                            ease_progress = ease(last_ease, unlerp_epsilon(last_time, current.target_time, window_end))
+                            lane = lerp(last_lane, current.lane, ease_progress)
+                            size = lerp(last_size, current.size, ease_progress)
+                            hitbox_l = min(hitbox_l, lane - size)
+                            hitbox_r = max(hitbox_r, lane + size)
+                            break
+                        lane = current.lane
+                        size = current.size
+                        hitbox_l = min(hitbox_l, lane - size)
+                        hitbox_r = max(hitbox_r, lane + size)
+                        last_lane = lane
+                        last_size = size
+                        last_time = current.target_time
+                        last_ease = current.connector_ease
+                    current_ref @= current.next_ref
+            hitbox_l -= leniency
+            hitbox_r += leniency
+            self.hitbox_l = hitbox_l
+            self.hitbox_r = hitbox_r
 
     def update_sequential(self):
         if self.despawn:
@@ -544,6 +622,15 @@ class BaseNote(PlayArchetype):
                 pivot_lane=self.visual_pivot_lane,
                 half_offset=self.visual_half_offset,
             )
+            if Options.lane_effect_enabled:
+                particles = get_note_particles(self.kind, self.direction)
+                if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
+                    ParticleManager.spawn(
+                        particles=particles,
+                        lane=self.lane,
+                        size=self.size,
+                        spawn_time=time(),
+                    )
             if Options.lane_effect_enabled:
                 particles = get_note_particles(self.kind, self.direction)
                 if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
