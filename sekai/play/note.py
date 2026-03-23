@@ -27,15 +27,7 @@ from sekai.lib import archetype_names
 from sekai.lib.buckets import WINDOW_SCALE, SekaiWindow
 from sekai.lib.connector import ActiveConnectorInfo, ConnectorKind, ConnectorLayer
 from sekai.lib.ease import EaseType, ease
-from sekai.lib.layout import (
-    DynamicLayout,
-    FlickDirection,
-    Hitbox,
-    Layout,
-    compute_hitbox_at_time,
-    layout_lane,
-    progress_to,
-)
+from sekai.lib.layout import DynamicLayout, FlickDirection, Hitbox, Layout, compute_hitbox_at_time, progress_to
 from sekai.lib.note import (
     NoteEffectKind,
     NoteKind,
@@ -109,9 +101,6 @@ class BaseNote(PlayArchetype):
     target_scaled_time: CompositeTime = entity_data()
     target_y_offset: float = entity_data()
 
-    input_interval: Interval = shared_memory()
-    unadjusted_input_interval: Interval = shared_memory()
-
     # The id of the tap that activated this note, for tap notes and flicks or released the note, for release notes.
     # This is set by the input manager rather than the note itself.
     captured_touch_id: int = shared_memory()
@@ -135,6 +124,8 @@ class BaseNote(PlayArchetype):
     hitbox: Hitbox = shared_memory()
 
     pending_post_judge: bool = entity_memory()
+    managing_despawn: bool = entity_memory()
+    pending_despawn: bool = shared_memory()
 
     # Check wrong way
     wrong_way: bool = entity_memory()
@@ -145,7 +136,15 @@ class BaseNote(PlayArchetype):
 
     @property
     def judgment_window(self) -> SekaiWindow:
-        return get_note_window(self.kind)
+        return get_note_window(self.kind, self.active_head_ref.index > 0 or self.is_attached)
+
+    @property
+    def unadjusted_input_interval(self) -> Interval:
+        return self.judgment_window.bad + self.target_time
+
+    @property
+    def input_interval(self) -> Interval:
+        return self.judgment_window.bad + self.target_time + input_offset()
 
     def init_data(self):
         if self.data_init_done:
@@ -161,9 +160,6 @@ class BaseNote(PlayArchetype):
             self.direction = mirror_flick_direction(self.direction)
 
         self.target_time = beat_to_time(self.beat)
-        window = get_note_window(self.kind)
-        self.input_interval = window.bad + self.target_time + input_offset()
-        self.unadjusted_input_interval = window.bad + self.target_time
 
         if not self.is_attached:
             self.target_scaled_time = group_time_to_scaled_time(self.timescale_group, self.target_time)
@@ -234,26 +230,6 @@ class BaseNote(PlayArchetype):
             stage.start_time = min(stage.start_time, self.start_time - 1.0)
             stage.end_time = max(stage.end_time, self.target_time + 1.0)
 
-        match self.direction:
-            case FlickDirection.UP_OMNI | FlickDirection.DOWN_OMNI:
-                self.direction_check_needed = False
-                self.target_angle = 0
-            case FlickDirection.UP_LEFT:
-                self.direction_check_needed = True
-                self.target_angle = pi / 2 + 1
-            case FlickDirection.UP_RIGHT:
-                self.direction_check_needed = True
-                self.target_angle = pi / 2 - 1
-            case FlickDirection.DOWN_LEFT:
-                self.direction_check_needed = True
-                self.target_angle = -pi / 2 - 1
-            case FlickDirection.DOWN_RIGHT:
-                self.direction_check_needed = True
-                self.target_angle = -pi / 2 + 1
-            case _:
-                self.direction_check_needed = False
-                self.target_angle = 0
-
     def spawn_order(self) -> float:
         if DISABLE_NOTES or self.kind == NoteKind.ANCHOR:
             return 1e8
@@ -264,90 +240,14 @@ class BaseNote(PlayArchetype):
             return False
         return time() >= self.start_time
 
-    def initialize(self):
-        if self.is_scored:
-            leniency = get_leniency(self.kind)
-            hitbox_l = self.lane - self.size
-            hitbox_r = self.lane + self.size
-            if self.kind in {NoteKind.NORM_TICK, NoteKind.CRIT_TICK, NoteKind.HIDE_TICK}:
-                window_start = self.target_time + self.judgment_window.good.start
-                window_end = self.target_time + self.judgment_window.good.end
-
-                # Scan backward to cover connector positions from window start to this tick
-                current_ref = +EntityRef[BaseNote]
-                if self.is_attached:
-                    current_ref @= self.attach_head_ref
-                    attach_tail = self.attach_tail_ref.get()
-                    last_lane = attach_tail.lane
-                    last_size = attach_tail.size
-                    last_time = attach_tail.target_time
-                else:
-                    current_ref @= self.prev_ref
-                    last_lane = self.lane
-                    last_size = self.size
-                    last_time = self.target_time
-                while current_ref.index > 0:
-                    current = current_ref.get()
-                    if not current.is_attached:
-                        if current.target_time <= window_start:
-                            ease_progress = ease(
-                                current.connector_ease,
-                                unlerp_epsilon(current.target_time, last_time, window_start),
-                            )
-                            lane = lerp(current.lane, last_lane, ease_progress)
-                            size = lerp(current.size, last_size, ease_progress)
-                            hitbox_l = min(hitbox_l, lane - size)
-                            hitbox_r = max(hitbox_r, lane + size)
-                            break
-                        lane = current.lane
-                        size = current.size
-                        hitbox_l = min(hitbox_l, lane - size)
-                        hitbox_r = max(hitbox_r, lane + size)
-                        last_lane = lane
-                        last_size = size
-                        last_time = current.target_time
-                    current_ref @= current.prev_ref
-
-                # Scan forward to cover connector positions from this tick to window end
-                if self.is_attached:
-                    current_ref @= self.attach_tail_ref
-                    attach_head = self.attach_head_ref.get()
-                    last_lane = attach_head.lane
-                    last_size = attach_head.size
-                    last_time = attach_head.target_time
-                    last_ease = attach_head.connector_ease
-                else:
-                    current_ref @= self.next_ref
-                    last_lane = self.lane
-                    last_size = self.size
-                    last_time = self.target_time
-                    last_ease = self.connector_ease
-                while current_ref.index > 0:
-                    current = current_ref.get()
-                    if not current.is_attached:
-                        if current.target_time >= window_end:
-                            ease_progress = ease(last_ease, unlerp_epsilon(last_time, current.target_time, window_end))
-                            lane = lerp(last_lane, current.lane, ease_progress)
-                            size = lerp(last_size, current.size, ease_progress)
-                            hitbox_l = min(hitbox_l, lane - size)
-                            hitbox_r = max(hitbox_r, lane + size)
-                            break
-                        lane = current.lane
-                        size = current.size
-                        hitbox_l = min(hitbox_l, lane - size)
-                        hitbox_r = max(hitbox_r, lane + size)
-                        last_lane = lane
-                        last_size = size
-                        last_time = current.target_time
-                        last_ease = current.connector_ease
-                    current_ref @= current.next_ref
-            hitbox_l -= leniency
-            hitbox_r += leniency
-            self.hitbox_l = hitbox_l
-            self.hitbox_r = hitbox_r
+    @property
+    def calc_time(self) -> float:
+        return self.target_time
 
     def update_sequential(self):
         if self.despawn:
+            return
+        if self.pending_despawn:
             return
 
         update_timescale_group(self.timescale_group)
@@ -367,25 +267,11 @@ class BaseNote(PlayArchetype):
                     self.complete()
                     return
 
-        hitbox_start = self.input_interval.start
-        if Options.show_hitboxes:
-            hitbox_start = min(hitbox_start, self.target_time - HITBOX_DRAW_MIN_EARLY_WINDOW)
-        if self.is_scored and time() >= hitbox_start:
-            self.hitbox @= compute_hitbox(
-                self.lane,
-                self.size,
-                get_leniency(self.kind),
-                self.target_y_offset,
-            )
-
         if self.should_do_delayed_trigger():
             if self.best_touch_matches_direction:
                 self.judge(self.best_touch_time)
             else:
                 self.judge_wrong_way(self.best_touch_time)
-            return
-        if self.tick_trigger():
-            self.complete()
             return
         if self.is_scored and time() in self.input_interval and self.captured_touch_id == 0:
             if has_tap_input(self.kind):
@@ -402,6 +288,8 @@ class BaseNote(PlayArchetype):
         if not self.is_scored:
             return
         if self.despawn:
+            return
+        if self.pending_despawn:
             return
         if time() < self.input_interval.start:
             return
@@ -462,13 +350,25 @@ class BaseNote(PlayArchetype):
     def update_parallel(self):
         if self.despawn:
             return
+        if self.managing_despawn:
+            self.despawn = True
+            return
+        if self.pending_despawn:
+            self.managing_despawn = True
+            return
         if not self.is_scored and time() >= self.target_time:
             self.despawn = True
             return
         if time() < self.visual_start_time:
             return
+        if self.tick_trigger():
+            self.complete_parallel()
+            return
         if time() > self.input_interval.end:
-            self.handle_late_miss()
+            if self.tick_trigger():
+                self.complete_parallel()
+            else:
+                self.handle_late_miss()
             return
         if is_head(self.kind) and time() > self.target_time:
             return
@@ -494,39 +394,35 @@ class BaseNote(PlayArchetype):
                 )
 
     def tick_trigger(self):
-        current_time = time()
-
-        if self.kind in (NoteKind.NORM_TICK, NoteKind.CRIT_TICK):
+        if self.kind in (NoteKind.NORM_TICK, NoteKind.CRIT_TICK, NoteKind.HIDE_TICK):
+            head = +EntityRef[BaseNote]
+            tail = +EntityRef[BaseNote]
             if not self.is_attached:
-                head = self.tick_head_ref
-                tail = self.tick_tail_ref
-                return (
-                    head.index > 0
-                    and current_time >= self.input_interval.start
-                    and head.get().active_connector_info.is_active
-                ) or (tail.index > 0 and tail.get().is_despawned)
+                head @= self.tick_head_ref
+                tail @= self.tick_tail_ref
             else:
                 attach_head = self.attach_head_ref.get()
-                head = attach_head.tick_head_ref
-                tail = attach_head.tick_tail_ref
-                return (
-                    head.index > 0
-                    and current_time >= self.input_interval.start
-                    and head.get().active_connector_info.is_active
-                ) or (tail.index > 0 and tail.get().is_despawned)
-
-        elif self.kind == NoteKind.HIDE_TICK and self.attach_head_ref.index > 0:
-            attach_head = self.attach_head_ref.get()
-            tail = attach_head.tick_tail_ref
-            head = attach_head.tick_head_ref
-            if tail.index > 0:
-                tail_note = tail.get()
-                return (
-                    tail_note.is_despawned
-                    or (tail_note.kind == NoteKind.ANCHOR and current_time >= tail_note.target_time)
-                    or (head.get().active_connector_info.is_active and current_time >= self.input_interval.start)
-                )
+                head @= attach_head.tick_head_ref
+                tail @= attach_head.tick_tail_ref
+            return (
+                head.index > 0 and time() >= self.input_interval.start and head.get().active_connector_info.is_active
+            ) or (tail.index > 0 and (tail.get().is_despawned or tail.get().pending_despawn))
         return False
+
+    @property
+    def is_tail(self) -> bool:
+        return self.kind in (
+            NoteKind.NORM_TAIL_TAP,
+            NoteKind.CRIT_TAIL_TAP,
+            NoteKind.NORM_TAIL_FLICK,
+            NoteKind.CRIT_TAIL_FLICK,
+            NoteKind.NORM_TAIL_TRACE,
+            NoteKind.CRIT_TAIL_TRACE,
+            NoteKind.NORM_TAIL_TRACE_FLICK,
+            NoteKind.CRIT_TAIL_TRACE_FLICK,
+            NoteKind.NORM_TAIL_RELEASE,
+            NoteKind.CRIT_TAIL_RELEASE,
+        )
 
     @property
     def is_trace(self) -> bool:
@@ -585,7 +481,7 @@ class BaseNote(PlayArchetype):
             else:
                 return False
 
-        # The following is the code for next sekai. (Not used in this engine)
+        # The following is the code for next sekai.
 
         # Give until the end of the perfect window to give a right-way touch if we've only had wrong-way touches.
         # After that, wrong-way has no impact anyway.
@@ -622,28 +518,20 @@ class BaseNote(PlayArchetype):
                 pivot_lane=self.visual_pivot_lane,
                 half_offset=self.visual_half_offset,
             )
-            if Options.lane_effect_enabled:
-                particles = get_note_particles(self.kind, self.direction)
-                if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
-                    ParticleManager.spawn(
-                        particles=particles,
-                        lane=self.lane,
-                        size=self.size,
-                        spawn_time=time(),
-                    )
-            if Options.lane_effect_enabled:
-                particles = get_note_particles(self.kind, self.direction)
-                if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
-                    layout = layout_lane(self.lane, self.size)
-                    ParticleManager.spawn(
-                        particle=particles.lane.spawn(layout, duration=1 / Options.effect_animation_speed),
-                        lane=self.lane,
-                        spawn_time=time(),
-                    )
         if self.is_scored:
             self.result.haptic = get_note_haptic_feedback(self.kind, self.result.judgment)
         self.end_time = offset_adjusted_time()
         self.played_hit_effects = self.should_play_hit_effects
+
+        if self.is_scored and Options.lane_effect_enabled and self.should_play_hit_effects:
+            particles = get_note_particles(self.kind, self.direction)
+            if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
+                ParticleManager.spawn(
+                    particles=particles,
+                    lane=self.lane,
+                    size=self.size,
+                    spawn_time=time(),
+                )
         if self.is_scored:
             self.wrong_way_check = self.wrong_way
             spawn_custom(
@@ -659,12 +547,6 @@ class BaseNote(PlayArchetype):
     def handle_tap_input(self):
         if time() > self.input_interval.end:
             return
-
-        hitbox = self.get_full_hitbox()
-        for empty_touch in touches():
-            if hitbox.contains_point(empty_touch.position) and empty_touch.started:
-                input_manager.disallow_empty(empty_touch)
-
         if self.captured_touch_id == 0:
             return
         touch = next(tap for tap in touches() if tap.id == self.captured_touch_id)
@@ -687,19 +569,21 @@ class BaseNote(PlayArchetype):
         # Another touch is allowed to flick the note as long as it started after the start of the input interval,
         # so we don't care which touch matched the tap id, just that the tap id is set.
 
+        wrong_way_touch_time = -1.0
+
         for touch in touches():
             if self.check_touch_is_eligible_for_trace(touch) and touch.started:
                 input_manager.disallow_empty(touch)
-            if not self.check_touch_is_eligible_for_flick(touch):
+            if not self.check_touch_touch_is_eligible_for_flick(touch):
                 continue
             if not self.check_direction_matches(touch.angle):
+                if wrong_way_touch_time < 0:
+                    wrong_way_touch_time = touch.time
                 continue
             self.judge(touch.time)
             return
-        for touch in touches():
-            if not self.check_touch_is_eligible_for_flick(touch):
-                continue
-            self.judge_wrong_way(touch.time)
+        if wrong_way_touch_time >= 0:
+            self.judge_wrong_way(wrong_way_touch_time)
             return
 
     def handle_trace_input(self):
@@ -709,6 +593,12 @@ class BaseNote(PlayArchetype):
             return
         has_touch = False
         for touch in touches():
+            if (
+                self.kind in (NoteKind.NORM_TAIL_FLICK, NoteKind.CRIT_TAIL_FLICK)
+                and touch.started
+                and touch.id != self.captured_touch_id
+            ):
+                continue
             if not self.check_touch_is_eligible_for_trace(touch):
                 continue
             input_manager.disallow_empty(touch)
@@ -748,14 +638,11 @@ class BaseNote(PlayArchetype):
                 current_touch_id = touch.id
         if not has_touch:
             return
-
-        is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
-
         if offset_adjusted_time() >= self.target_time:
             if current_touch_id > 0:
                 NoteMemory.flick_resolved_times[current_touch_id % 32] = self.target_time
             if has_correct_direction_touch:
-                if is_just_reached:
+                if offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time():
                     self.complete()
                 else:
                     self.judge(offset_adjusted_time())
@@ -774,19 +661,27 @@ class BaseNote(PlayArchetype):
             self.best_touch_id = current_touch_id
 
     def handle_tick_input(self):
-        has_touch = False
-        for touch in touches():
-            if not self.hitbox.bounds.contains_point(touch.position):
-                continue
-            input_manager.disallow_empty(touch)
-            has_touch = True
-        if has_touch:
-            if offset_adjusted_time() >= self.target_time:
+        if self.tick_head_ref.index > 0 or (self.is_attached and self.attach_head_ref.index > 0):
+            for touch in touches():
+                if not self.hitbox.bounds.contains_point(touch.position):
+                    continue
+                input_manager.disallow_empty(touch)
                 self.complete()
-            else:
-                # Always judge as perfect accuracy for ticks if touched.
-                self.best_touch_time = self.target_time
-                self.best_touch_matches_direction = True
+                return
+        else:
+            has_touch = False
+            for touch in touches():
+                if not self.hitbox.bounds.contains_point(touch.position):
+                    continue
+                input_manager.disallow_empty(touch)
+                has_touch = True
+            if has_touch:
+                if offset_adjusted_time() >= self.target_time:
+                    self.complete()
+                else:
+                    # Always judge as perfect accuracy for ticks if touched.
+                    self.best_touch_time = self.target_time
+                    self.best_touch_matches_direction = True
 
     def handle_damage_input(self):
         has_touch = False
@@ -868,36 +763,47 @@ class BaseNote(PlayArchetype):
             case _:
                 assert_never(kind)
 
-    def check_touch_is_eligible_for_flick(self, touch: Touch) -> bool:
+    def check_touch_touch_is_eligible_for_flick(self, touch: Touch) -> bool:
+        if touch.start_time < self.captured_touch_time or touch.speed < Layout.flick_speed_threshold:
+            return False
+        is_captured = self.captured_touch_id != 0 and touch.id == self.captured_touch_id
         return (
-            touch.start_time >= self.captured_touch_time
-            and touch.speed >= Layout.flick_speed_threshold
-            and (
-                self.hitbox.bounds.contains_point(touch.position)
-                or self.hitbox.bounds.contains_point(touch.prev_position)
-            )
+            is_captured
+            or self.hitbox.bounds.contains_point(touch.position)
+            or self.hitbox.bounds.contains_point(touch.prev_position)
         )
 
     def check_touch_is_eligible_for_trace(self, touch: Touch) -> bool:
         # Note that this does not check the time, since time may not be updated if the touch is stationary.
-        return self.hitbox.bounds.contains_point(touch.position)
+        is_captured = self.best_touch_id != -1 and touch.id == self.best_touch_id
+        return is_captured or self.hitbox.bounds.contains_point(touch.position)
 
     def check_touch_is_eligible_for_trace_flick(self, touch: Touch) -> bool:
+        if touch.time < self.unadjusted_input_interval.start or touch.speed < Layout.flick_speed_threshold:
+            return False
+        is_captured = self.best_touch_id != -1 and touch.id == self.best_touch_id
         return (
-            touch.time >= self.unadjusted_input_interval.start
-            and touch.speed >= Layout.flick_speed_threshold
-            and (
-                self.hitbox.bounds.contains_point(touch.position)
-                or self.hitbox.bounds.contains_point(touch.prev_position)
-            )
+            is_captured
+            or self.hitbox.bounds.contains_point(touch.position)
+            or self.hitbox.bounds.contains_point(touch.prev_position)
         )
 
     def check_direction_matches(self, angle: float) -> bool:
-        if not self.direction_check_needed:
-            return True
-
         leniency = pi / 2
-        angle_diff = abs((angle + DynamicLayout.rotate - self.target_angle + pi) % (2 * pi) - pi)
+        match self.direction:
+            case FlickDirection.UP_OMNI | FlickDirection.DOWN_OMNI:
+                return True
+            case FlickDirection.UP_LEFT:
+                target_angle = pi / 2 + 1
+            case FlickDirection.UP_RIGHT:
+                target_angle = pi / 2 - 1
+            case FlickDirection.DOWN_LEFT:
+                target_angle = -pi / 2 - 1
+            case FlickDirection.DOWN_RIGHT:
+                target_angle = -pi / 2 + 1
+            case _:
+                assert_never(self.direction)
+        angle_diff = abs((angle + DynamicLayout.rotate - target_angle + pi) % (2 * pi) - pi)
         return angle_diff <= leniency
 
     def judge(self, actual_time: float):
@@ -907,7 +813,10 @@ class BaseNote(PlayArchetype):
         self.result.accuracy = error
         if self.result.bucket.id != -1:
             self.result.bucket_value = error * WINDOW_SCALE
-        self.despawn = True
+        if self.is_tail:
+            self.pending_despawn = True
+        else:
+            self.despawn = True
         self.should_play_hit_effects = True
         self.post_judge()
 
@@ -923,7 +832,10 @@ class BaseNote(PlayArchetype):
             self.result.accuracy = error
         if self.result.bucket.id != -1:
             self.result.bucket_value = error * WINDOW_SCALE
-        self.despawn = True
+        if self.is_tail:
+            self.pending_despawn = True
+        else:
+            self.despawn = True
         self.should_play_hit_effects = True
         self.wrong_way = not SkillActive.judgment and judgment != Judgment.MISS
         self.post_judge()
@@ -933,9 +845,20 @@ class BaseNote(PlayArchetype):
         self.result.accuracy = 0
         if self.result.bucket.id != -1:
             self.result.bucket_value = 0
-        self.despawn = True
+        if self.is_tail:
+            self.pending_despawn = True
+        else:
+            self.despawn = True
         self.should_play_hit_effects = True
         self.post_judge()
+
+    def complete_parallel(self):
+        self.result.judgment = Judgment.PERFECT
+        self.result.accuracy = 0
+        if self.result.bucket.id != -1:
+            self.result.bucket_value = 0
+        self.despawn = True
+        self.should_play_hit_effects = True
 
     def complete_damage(self):
         self.result.judgment = Judgment.PERFECT
@@ -991,7 +914,7 @@ class BaseNote(PlayArchetype):
                 else unlerp_clamped(attach_head.target_time, attach_tail.target_time, current_time)
             )
             tail_frac = 1.0
-            frac = self.attach_frac
+            frac = unlerp_clamped(attach_head.target_time, attach_tail.target_time, self.target_time)
             return remap_clamped(head_frac, tail_frac, head_progress, tail_progress, frac)
         else:
             return progress_to(
@@ -1090,14 +1013,18 @@ class BaseNote(PlayArchetype):
     @property
     def head_ease_frac(self) -> float:
         if self.is_attached:
-            return self.attach_frac
+            return unlerp_clamped(
+                self.attach_head_ref.get().target_time, self.attach_tail_ref.get().target_time, self.target_time
+            )
         else:
             return 0.0
 
     @property
     def tail_ease_frac(self) -> float:
         if self.is_attached:
-            return self.attach_frac
+            return unlerp_clamped(
+                self.attach_head_ref.get().target_time, self.attach_tail_ref.get().target_time, self.target_time
+            )
         else:
             return 1.0
 
