@@ -129,6 +129,13 @@ class FeverChance(WatchArchetype):
         if not Options.forced_fever_chance and not self.force:
             return
         current_time = time()
+        current_stream = Streams.fever_chance_counter[self.index]
+        if (
+            is_replay()
+            and not current_stream.has_previous_key(current_time)
+            and not current_stream.has_next_key(current_time)
+        ):
+            return
         if is_skip():
             self.checker = 0
             if current_time <= self.start_time:
@@ -149,7 +156,7 @@ class FeverChance(WatchArchetype):
                 0.9 if not Fever.fever_chance_cant_super_fever or self.percentage >= 0.9 else 0.89,
             )
             if not is_replay()
-            else Streams.fever_chance_counter[self.index][current_time]
+            else current_stream[current_time]
         )
         elapsed = current_time - self.start_time
         if Options.fever_effect == 0:
