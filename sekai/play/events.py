@@ -18,6 +18,7 @@ from sonolus.script.timing import beat_to_time
 from sekai.lib import archetype_names
 from sekai.lib.effect import Effects
 from sekai.lib.events import (
+    Fever,
     draw_fever_gauge,
     draw_fever_side_bar,
     draw_fever_side_cover,
@@ -97,16 +98,6 @@ class Skill(PlayArchetype):
     @property
     def calc_time(self) -> float:
         return self.start_time
-
-
-@level_memory
-class Fever:
-    fever_chance_time: float
-    fever_start_time: float
-    fever_chance_current_combo: int
-    fever_chance_cant_super_fever: bool
-    fever_last_count: int
-    fever_first_count: int
 
 
 class FeverChance(PlayArchetype):

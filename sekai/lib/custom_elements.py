@@ -2,6 +2,7 @@ from enum import IntEnum
 from math import cos, floor, pi
 
 from sonolus.script.bucket import Judgment
+from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp, unlerp, unlerp_clamped
 from sonolus.script.record import Record
 from sonolus.script.runtime import aspect_ratio, is_replay, is_watch, runtime_ui, screen, time
@@ -21,6 +22,40 @@ from sekai.lib.options import Options, SekaiVersion
 from sekai.lib.skin import (
     ActiveSkin,
 )
+
+
+@level_memory
+class LifeManager:
+    life: float
+    initial_life: int
+    max_life: int
+    decrease_life: int
+    first: float
+
+
+@level_memory
+class ScoreIndicator:
+    score: float
+    note_score: float
+    note_time: float
+    percentage: float
+    ap: bool
+    first: float
+
+    # Play
+    total_weight: float
+    total_weight_compensation: float
+    acc_sum: float
+    acc_compensation: float
+    processed_weight: float
+    processed_weight_compensation: float
+    max_score: int
+    current_raw_score: float
+    raw_score_compensation: float
+    count: int
+    perfect_step: int
+    great_step: int
+    good_step: int
 
 
 def draw_combo_label(ap: bool, z: float, z1: float, combo: int):
