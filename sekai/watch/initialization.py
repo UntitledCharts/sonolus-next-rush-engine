@@ -8,14 +8,14 @@ from sonolus.script.archetype import (
     imported,
 )
 from sonolus.script.bucket import Judgment
-from sonolus.script.containers import sort_linked_entities
-from sonolus.script.globals import level_data, level_memory
 from sonolus.script.interval import clamp
 from sonolus.script.runtime import is_replay, level_score
 
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import init_event_list
 from sekai.lib.buckets import init_buckets
+from sekai.lib.custom_elements import LifeManager
+from sekai.lib.initialization import LastNote, LayerCache, calculate_note_weight, sort_entities_by_time
 from sekai.lib.layer import (
     LAYER_BACKGROUND_SIDE,
     LAYER_DAMAGE,
@@ -44,24 +44,6 @@ from sekai.watch import custom_elements, note
 from sekai.watch.dynamic_stage import WatchCameraChange
 from sekai.watch.events import Fever, Skill
 from sekai.watch.static_stage import WatchScheduledLaneEffect, WatchStaticStage
-
-
-@level_memory
-class LayerCache:
-    judgment: float
-    judgment1: float
-    judgment2: float
-    damage: float
-    fever_chance_cover: float
-    fever_chance_side: float
-    fever_chance_gauge: float
-    skill_bar: float
-    skill_etc: float
-
-
-@level_data
-class LastNote:
-    last_time: float
 
 
 class WatchInitialization(WatchArchetype):
@@ -100,9 +82,9 @@ class WatchInitialization(WatchArchetype):
         LayerCache.skill_bar = get_z(layer=LAYER_SKILL_BAR)
         LayerCache.skill_etc = get_z(layer=LAYER_SKILL_ETC)
 
-        custom_elements.LifeManager.life = self.initial_life
-        custom_elements.LifeManager.initial_life = self.initial_life
-        custom_elements.LifeManager.max_life = max(2000, self.initial_life * 2)
+        LifeManager.life = self.initial_life
+        LifeManager.initial_life = self.initial_life
+        LifeManager.max_life = max(2000, self.initial_life * 2)
 
         init_event_list(self.first_camera_ref)
         WatchStaticStage.spawn()
@@ -123,11 +105,11 @@ def sorted_linked_list():
 
     sorted_skill_head = +EntityRef[Skill]
     if skill_length > 0:
-        sorted_skill_head @= sort_entities(skill_head, Skill)
+        sorted_skill_head @= sort_entities_by_time(skill_head, Skill)
         count_skill(sorted_skill_head.index)
 
     if note_length > 0:
-        sorted_note_head = sort_entities(note_head, note.WatchBaseNote)
+        sorted_note_head = sort_entities_by_time(note_head, note.WatchBaseNote)
         setting_combo(sorted_note_head.index, sorted_skill_head.index)
 
 
@@ -159,15 +141,6 @@ def initial_list(entity_count):
     return note_head, note_length, skill_head, skill_length
 
 
-def sort_entities(index: int, entity_cls):
-    head = entity_cls.at(index)
-    return sort_linked_entities(
-        head.ref(),
-        get_value=lambda head: head.calc_time,
-        get_next_ref=lambda head: head.next_ref,
-    )
-
-
 def setting_combo(head: int, skill: int) -> None:
     ptr = head
     skill_ptr = skill
@@ -179,11 +152,6 @@ def setting_combo(head: int, skill: int) -> None:
     total_weight = 0.0
     total_weight_compensation = 0.0
     current_note_weight = 0.0
-    inv_perfect_step = (
-        1.0 / level_score().consecutive_perfect_step if level_score().consecutive_perfect_step > 0 else 0.0
-    )
-    inv_great_step = 1.0 / level_score().consecutive_great_step if level_score().consecutive_great_step > 0 else 0.0
-    inv_good_step = 1.0 / level_score().consecutive_good_step if level_score().consecutive_good_step > 0 else 0.0
 
     while ptr > 0:
         if skill_ptr > 0 and note.WatchBaseNote.at(ptr).target_time >= Skill.at(skill_ptr).start_time:
@@ -230,24 +198,12 @@ def setting_combo(head: int, skill: int) -> None:
             )
             Fever.fever_last_count = max(note.WatchBaseNote.at(ptr).count, Fever.fever_last_count)
 
-        current_note_weight = level_score().perfect_multiplier * (
-            (
-                min(
-                    floor(count * inv_perfect_step + 1e-9) * level_score().consecutive_perfect_multiplier,
-                    (level_score().consecutive_perfect_cap * inv_perfect_step)
-                    * level_score().consecutive_perfect_multiplier,
-                )
-                + min(
-                    floor(count * inv_great_step + 1e-9) * level_score().consecutive_great_multiplier,
-                    (level_score().consecutive_great_cap * inv_great_step) * level_score().consecutive_great_multiplier,
-                )
-                + min(
-                    floor(count * inv_good_step + 1e-9) * level_score().consecutive_good_multiplier,
-                    (level_score().consecutive_good_cap * inv_good_step) * level_score().consecutive_good_multiplier,
-                )
-            )
-            + note.WatchBaseNote.at(ptr).archetype_score_multiplier
-            + note.WatchBaseNote.at(ptr).entity_score_multiplier
+        current_note_weight = level_score().perfect_multiplier * calculate_note_weight(
+            perfect_step=count,
+            great_step=count,
+            good_step=count,
+            archetype_multiplier=note.WatchBaseNote.at(ptr).archetype_score_multiplier,
+            entity_multiplier=note.WatchBaseNote.at(ptr).entity_score_multiplier,
         )
 
         y = current_note_weight - total_weight_compensation
@@ -400,11 +356,11 @@ def calculate_score(head: int, max_score: int, total_weight: float):
 def count_skill(head: int) -> None:
     ptr = head
     count = 0
-    life = custom_elements.LifeManager.initial_life
+    life = LifeManager.initial_life
     while ptr > 0:
         Skill.at(ptr).count = count
         count += 1
         if Skill.at(ptr).effect == SkillMode.HEAL:
-            life = clamp(life + 250, 0, custom_elements.LifeManager.max_life)
+            life = clamp(life + 250, 0, LifeManager.max_life)
         Skill.at(ptr).current_life = life
         ptr = Skill.at(ptr).next_ref.index

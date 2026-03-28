@@ -1,3 +1,4 @@
+from sonolus.script.globals import level_memory
 from sonolus.script.interval import lerp, unlerp_clamped
 from sonolus.script.quad import Quad
 from sonolus.script.vec import Vec2
@@ -28,6 +29,16 @@ from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SekaiVersion, SkillMode
 from sekai.lib.particle import ActiveParticles
 from sekai.lib.skin import ActiveSkin
+
+
+@level_memory
+class Fever:
+    fever_chance_time: float
+    fever_start_time: float
+    fever_chance_current_combo: int
+    fever_chance_cant_super_fever: bool
+    fever_last_count: int
+    fever_first_count: int
 
 
 def draw_fever_side_cover(z: float, time: float):

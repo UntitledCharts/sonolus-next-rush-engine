@@ -1,5 +1,3 @@
-from math import floor
-
 from sonolus.script.archetype import PlayArchetype, callback, entity_memory
 from sonolus.script.bucket import Judgment
 from sonolus.script.globals import level_memory
@@ -9,12 +7,15 @@ from sonolus.script.runtime import level_score, time
 from sekai.lib import archetype_names
 from sekai.lib.buckets import SekaiWindow
 from sekai.lib.custom_elements import (
+    LifeManager,
+    ScoreIndicator,
     draw_combo_label,
     draw_combo_number,
     draw_damage_flash,
     draw_judgment_accuracy,
     draw_judgment_text,
 )
+from sekai.lib.initialization import calculate_note_weight
 from sekai.lib.options import Options
 from sekai.play import initialization, note
 from sekai.play.events import Fever
@@ -54,34 +55,6 @@ class ComboJudgeMemory:
     ap: bool
     combo_check: int
     latest_judge_id: int
-
-
-@level_memory
-class ScoreIndicator:
-    score: float
-    note_score: float
-    note_time: float
-    percentage: float
-    total_weight: float
-    total_weight_compensation: float
-    acc_sum: float
-    acc_compensation: float
-    processed_weight: float
-    processed_weight_compensation: float
-    max_score: int
-    current_raw_score: float
-    raw_score_compensation: float
-    count: int
-    perfect_step: int
-    great_step: int
-    good_step: int
-
-
-@level_memory
-class LifeManager:
-    life: float
-    initial_life: int
-    max_life: int
 
 
 class ComboJudge(PlayArchetype):
@@ -183,26 +156,12 @@ class ComboJudge(PlayArchetype):
 
         current_note = note.BaseNote.at(self.index)
 
-        inv_perfect_step = 1.0 / ls.consecutive_perfect_step if ls.consecutive_perfect_step > 0 else 0.0
-        inv_great_step = 1.0 / ls.consecutive_great_step if ls.consecutive_great_step > 0 else 0.0
-        inv_good_step = 1.0 / ls.consecutive_good_step if ls.consecutive_good_step > 0 else 0.0
-        note_raw_score = judgment_multiplier * (
-            (
-                min(
-                    floor(ScoreIndicator.perfect_step * inv_perfect_step + 1e-9) * ls.consecutive_perfect_multiplier,
-                    (ls.consecutive_perfect_cap * inv_perfect_step) * ls.consecutive_perfect_multiplier,
-                )
-                + min(
-                    floor(ScoreIndicator.great_step * inv_great_step + 1e-9) * ls.consecutive_great_multiplier,
-                    (ls.consecutive_great_cap * inv_great_step) * ls.consecutive_great_multiplier,
-                )
-                + min(
-                    floor(ScoreIndicator.good_step * inv_good_step + 1e-9) * ls.consecutive_good_multiplier,
-                    (ls.consecutive_good_cap * inv_good_step) * ls.consecutive_good_multiplier,
-                )
-            )
-            + current_note.archetype_score_multiplier
-            + current_note.entity_score_multiplier
+        note_raw_score = judgment_multiplier * calculate_note_weight(
+            perfect_step=ScoreIndicator.perfect_step,
+            great_step=ScoreIndicator.great_step,
+            good_step=ScoreIndicator.good_step,
+            archetype_multiplier=current_note.archetype_score_multiplier,
+            entity_multiplier=current_note.entity_score_multiplier,
         )
         raw_calc = (note_raw_score * ScoreIndicator.max_score) / ScoreIndicator.total_weight
         note_score = raw_calc
@@ -225,23 +184,12 @@ class ComboJudge(PlayArchetype):
                 ScoreIndicator.percentage = (ScoreIndicator.current_raw_score / ScoreIndicator.total_weight) * 100.0
             case 2:
                 ideal_combo = current_note.count
-                note_ideal_weight = ls.perfect_multiplier * (
-                    (
-                        min(
-                            floor(ideal_combo * inv_perfect_step + 1e-9) * ls.consecutive_perfect_multiplier,
-                            (ls.consecutive_perfect_cap * inv_perfect_step) * ls.consecutive_perfect_multiplier,
-                        )
-                        + min(
-                            floor(ideal_combo * inv_great_step + 1e-9) * ls.consecutive_great_multiplier,
-                            (ls.consecutive_great_cap * inv_great_step) * ls.consecutive_great_multiplier,
-                        )
-                        + min(
-                            floor(ideal_combo * inv_good_step + 1e-9) * ls.consecutive_good_multiplier,
-                            (ls.consecutive_good_cap * inv_good_step) * ls.consecutive_good_multiplier,
-                        )
-                    )
-                    + current_note.archetype_score_multiplier
-                    + current_note.entity_score_multiplier
+                note_ideal_weight = ls.perfect_multiplier * calculate_note_weight(
+                    perfect_step=ideal_combo,
+                    great_step=ideal_combo,
+                    good_step=ideal_combo,
+                    archetype_multiplier=current_note.archetype_score_multiplier,
+                    entity_multiplier=current_note.entity_score_multiplier,
                 )
                 y2 = note_ideal_weight - ScoreIndicator.processed_weight_compensation
                 t2 = ScoreIndicator.processed_weight + y2

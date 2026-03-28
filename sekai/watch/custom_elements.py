@@ -1,10 +1,10 @@
 from sonolus.script.archetype import EntityRef, WatchArchetype, callback, entity_memory
 from sonolus.script.bucket import Judgment
-from sonolus.script.globals import level_memory
 from sonolus.script.runtime import is_replay
 
 from sekai.lib import archetype_names
 from sekai.lib.custom_elements import (
+    ScoreIndicator,
     draw_combo_label,
     draw_combo_number,
     draw_damage_flash,
@@ -38,25 +38,6 @@ def spawn_custom(
             next_ref=next_ref_damage_flash,
             note_index=note_index,
         )
-
-
-@level_memory
-class ScoreIndicator:
-    score: float
-    percentage: float
-    ap: bool
-    first: float
-    note_score: float
-    note_time: float
-
-
-@level_memory
-class LifeManager:
-    life: float
-    initial_life: int
-    max_life: int
-    decrease_life: int
-    first: float
 
 
 class ComboJudge(WatchArchetype):

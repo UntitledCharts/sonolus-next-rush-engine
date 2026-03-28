@@ -1,13 +1,10 @@
-from math import floor
-
 from sonolus.script.archetype import EntityRef, PlayArchetype, callback, entity_info_at, exported, imported
-from sonolus.script.containers import sort_linked_entities
-from sonolus.script.globals import level_data, level_memory
 from sonolus.script.runtime import level_score
 
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import init_event_list
 from sekai.lib.buckets import init_buckets
+from sekai.lib.initialization import LastNote, LayerCache, calculate_note_weight, sort_entities_by_time
 from sekai.lib.layer import (
     LAYER_BACKGROUND_SIDE,
     LAYER_DAMAGE,
@@ -37,24 +34,6 @@ from sekai.play.events import Fever, Skill
 from sekai.play.input_manager import InputManager
 from sekai.play.note import NOTE_ARCHETYPES
 from sekai.play.static_stage import StaticStage
-
-
-@level_memory
-class LayerCache:
-    judgment: float
-    judgment1: float
-    judgment2: float
-    damage: float
-    fever_chance_cover: float
-    fever_chance_side: float
-    fever_chance_gauge: float
-    skill_bar: float
-    skill_etc: float
-
-
-@level_data
-class LastNote:
-    last_time: float
 
 
 class Initialization(PlayArchetype):
@@ -121,11 +100,11 @@ def sorted_linked_list():
 
     sorted_skill_head = +EntityRef[Skill]
     if skill_length > 0:
-        sorted_skill_head @= sort_entities(skill_head, Skill)
+        sorted_skill_head @= sort_entities_by_time(skill_head, Skill)
         count_skill(sorted_skill_head.index)
 
     if note_length > 0:
-        sorted_note_head = sort_entities(note_head, note.BaseNote)
+        sorted_note_head = sort_entities_by_time(note_head, note.BaseNote)
         setting_count(sorted_note_head.index, sorted_skill_head.index)
 
 
@@ -157,25 +136,11 @@ def initial_list(entity_count):
     return note_head, note_length, skill_head, skill_length
 
 
-def sort_entities(index: int, entity_cls):
-    head = entity_cls.at(index)
-    return sort_linked_entities(
-        head.ref(),
-        get_value=lambda head: head.calc_time,
-        get_next_ref=lambda head: head.next_ref,
-    )
-
-
 def setting_count(head: int, skill: int) -> None:
     ptr = head
     skill_ptr = skill
     count = 0
     current_note_weight = 0.0
-    inv_perfect_step = (
-        1.0 / level_score().consecutive_perfect_step if level_score().consecutive_perfect_step > 0 else 0.0
-    )
-    inv_great_step = 1.0 / level_score().consecutive_great_step if level_score().consecutive_great_step > 0 else 0.0
-    inv_good_step = 1.0 / level_score().consecutive_good_step if level_score().consecutive_good_step > 0 else 0.0
 
     custom_elements.ScoreIndicator.max_score = 1000000
     while ptr > 0:
@@ -193,24 +158,12 @@ def setting_count(head: int, skill: int) -> None:
         note.BaseNote.at(ptr).count += count
 
         # arcade score = judgmentMultiplier * (consecutiveJudgmentMultiplier + archetypeMultiplier + entityMultiplier)
-        current_note_weight = level_score().perfect_multiplier * (
-            (
-                min(
-                    floor(count * inv_perfect_step + 1e-9) * level_score().consecutive_perfect_multiplier,
-                    (level_score().consecutive_perfect_cap * inv_perfect_step)
-                    * level_score().consecutive_perfect_multiplier,
-                )
-                + min(
-                    floor(count * inv_great_step + 1e-9) * level_score().consecutive_great_multiplier,
-                    (level_score().consecutive_great_cap * inv_great_step) * level_score().consecutive_great_multiplier,
-                )
-                + min(
-                    floor(count * inv_good_step + 1e-9) * level_score().consecutive_good_multiplier,
-                    (level_score().consecutive_good_cap * inv_good_step) * level_score().consecutive_good_multiplier,
-                )
-            )
-            + note.BaseNote.at(ptr).archetype_score_multiplier
-            + note.BaseNote.at(ptr).entity_score_multiplier
+        current_note_weight = level_score().perfect_multiplier * calculate_note_weight(
+            perfect_step=count,
+            great_step=count,
+            good_step=count,
+            archetype_multiplier=note.BaseNote.at(ptr).archetype_score_multiplier,
+            entity_multiplier=note.BaseNote.at(ptr).entity_score_multiplier,
         )
         y = current_note_weight - custom_elements.ScoreIndicator.total_weight_compensation
         t = custom_elements.ScoreIndicator.total_weight + y

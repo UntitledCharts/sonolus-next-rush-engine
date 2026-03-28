@@ -10,14 +10,15 @@ from sonolus.script.archetype import (
     imported,
     shared_memory,
 )
-from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp
 from sonolus.script.runtime import add_life_scheduled, is_replay, is_skip, time
 from sonolus.script.timing import beat_to_time
 
 from sekai.lib import archetype_names
+from sekai.lib.custom_elements import LifeManager
 from sekai.lib.effect import Effects
 from sekai.lib.events import (
+    Fever,
     draw_fever_gauge,
     draw_fever_side_bar,
     draw_fever_side_cover,
@@ -29,7 +30,7 @@ from sekai.lib.events import (
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.skin import ActiveSkin
 from sekai.lib.streams import Streams
-from sekai.watch import custom_elements, initialization
+from sekai.watch import initialization
 
 
 class Skill(WatchArchetype):
@@ -78,21 +79,11 @@ class Skill(WatchArchetype):
 
     def update_sequential(self):
         if not is_replay():
-            custom_elements.LifeManager.life = self.current_life
+            LifeManager.life = self.current_life
 
     @property
     def calc_time(self) -> float:
         return self.start_time
-
-
-@level_memory
-class Fever:
-    fever_chance_time: float
-    fever_start_time: float
-    fever_chance_current_combo: int
-    fever_chance_cant_super_fever: bool
-    fever_last_count: int
-    fever_first_count: int
 
 
 class FeverChance(WatchArchetype):
