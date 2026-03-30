@@ -356,6 +356,7 @@ class BaseSkin:
     late_warning: Sprite = sprite("Late Warning")
     flick_warning: Sprite = sprite("Flick Warning")
     damage_flash: Sprite = sprite("Damage Flash")
+    dead_effect: Sprite = sprite("Dead Effect")
     auto_live: Sprite = sprite("Auto Live")
     skill_bar_life: Sprite = sprite("Skill Bar Life")
     skill_bar_score: Sprite = sprite("Skill Bar Score")
@@ -1381,6 +1382,7 @@ class ActiveSkin:
     combo_label: ComboLabelSpriteSet
     accuracy_warning: AccuracySpriteSet
     damage_flash: Sprite
+    dead_effect: Sprite
     auto_live: Sprite
     skill_bar_life: Sprite
     skill_bar_score: Sprite
@@ -1933,6 +1935,7 @@ def init_skin():
         fast=BaseSkin.fast_warning, late=BaseSkin.late_warning, flick=BaseSkin.flick_warning
     )
     ActiveSkin.damage_flash = BaseSkin.damage_flash
+    ActiveSkin.dead_effect = BaseSkin.dead_effect
     ActiveSkin.auto_live = BaseSkin.auto_live
     ActiveSkin.skill_bar_life = BaseSkin.skill_bar_life
     ActiveSkin.skill_bar_score = BaseSkin.skill_bar_score
