@@ -3,29 +3,16 @@ from sonolus.script.array import Dim
 from sonolus.script.containers import VarArray
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp
-from sonolus.script.quad import Rect
 from sonolus.script.runtime import offset_adjusted_time, time, touches
 
 from sekai.lib import archetype_names
-from sekai.lib.layer import (
-    LAYER_BACKGROUND,
-    LAYER_BACKGROUND_COVER,
-    LAYER_COVER,
-    LAYER_COVER_LINE,
-    LAYER_JUDGMENT,
-    LAYER_JUDGMENT_LINE,
-    LAYER_STAGE,
-    LAYER_STAGE_COVER,
-    LAYER_STAGE_LANE,
-    get_z,
-)
+from sekai.lib.custom_elements import LifeManager, ScoreIndicator
+from sekai.lib.initialization import LastNote
 from sekai.lib.layout import layout_lane_area, refresh_layout, touch_to_lane
 from sekai.lib.level_config import LevelConfig
-from sekai.lib.layout import layout_hitbox
-from sekai.lib.options import Options
 from sekai.lib.stage import draw_stage_and_accessories, init_stage_z_layers, play_lane_hit_effects
 from sekai.lib.streams import Streams
-from sekai.play import custom_elements, initialization, input_manager
+from sekai.play import custom_elements, input_manager
 from sekai.play.common import PlayLevelMemory
 
 
@@ -36,6 +23,7 @@ class StageMemory:
 
 class StaticStage(PlayArchetype):
     name = archetype_names.STATIC_STAGE
+    dead_time: float = entity_memory()
     z_layer_stage_lane: float = entity_memory()
     z_layer_judgment: float = entity_memory()
     z_layer_cover: float = entity_memory()
@@ -59,11 +47,12 @@ class StaticStage(PlayArchetype):
 
     def initialize(self):
         init_stage_z_layers(self)
+        self.dead_time = -2
 
     @callback(order=-2)
     def update_sequential(self):
         refresh_layout()
-        Streams.life[self.index][offset_adjusted_time()] = custom_elements.LifeManager.life
+        Streams.life[self.index][offset_adjusted_time()] = LifeManager.life
 
     @callback(order=3)
     def touch(self):
@@ -113,10 +102,13 @@ class StaticStage(PlayArchetype):
             self.z_layer_score_bar_rate,
             self.z_layer_background,
             custom_elements.ComboJudgeMemory.ap,
-            custom_elements.ScoreIndicator.score,
-            custom_elements.ScoreIndicator.note_score,
-            custom_elements.ScoreIndicator.note_time,
-            custom_elements.ScoreIndicator.percentage,
-            custom_elements.LifeManager.life,
-            initialization.LastNote.last_time,
+            ScoreIndicator.score,
+            ScoreIndicator.note_score,
+            ScoreIndicator.note_time,
+            ScoreIndicator.percentage,
+            LifeManager.life,
+            LastNote.last_time,
+            self.dead_time,
         )
+        if LifeManager.life == 0 and self.dead_time != -2:
+            self.dead_time = time()

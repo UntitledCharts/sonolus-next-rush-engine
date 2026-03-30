@@ -4,14 +4,16 @@ from sonolus.script.runtime import is_replay, is_skip, time
 from sekai.lib import archetype_names
 from sekai.lib.custom_elements import LifeManager
 from sekai.lib.layout import refresh_layout
+from sekai.lib.custom_elements import LifeManager, ScoreIndicator
+from sekai.lib.initialization import LastNote
 from sekai.lib.options import Options
 from sekai.lib.stage import draw_stage_and_accessories, init_stage_z_layers, play_lane_particle
 from sekai.lib.streams import Streams
-from sekai.watch import custom_elements, initialization
 
 
 class WatchStaticStage(WatchArchetype):
     name = archetype_names.STATIC_STAGE
+    dead_time: float = entity_memory()
     z_layer_stage_lane: float = entity_memory()
     z_layer_judgment: float = entity_memory()
     z_layer_cover: float = entity_memory()
@@ -35,18 +37,19 @@ class WatchStaticStage(WatchArchetype):
 
     def initialize(self):
         init_stage_z_layers(self)
+        self.dead_time = -2
 
     @callback(order=-2)
     def update_sequential(self):
         refresh_layout()
         LifeManager.life = Streams.life[self.index][time()] if is_replay() else LifeManager.life
-        if is_skip() and time() < custom_elements.ScoreIndicator.first:
+        if is_skip() and time() < ScoreIndicator.first:
             if Options.custom_score == 2:
-                custom_elements.ScoreIndicator.percentage = 100
+                ScoreIndicator.percentage = 100
             else:
-                custom_elements.ScoreIndicator.percentage = 0
-            custom_elements.ScoreIndicator.score = 0
-            custom_elements.ScoreIndicator.ap = False
+                ScoreIndicator.percentage = 0
+            ScoreIndicator.score = 0
+            ScoreIndicator.ap = False
 
     def update_parallel(self):
         draw_stage_and_accessories(
@@ -64,14 +67,17 @@ class WatchStaticStage(WatchArchetype):
             self.z_layer_score_bar_mask,
             self.z_layer_score_bar_rate,
             self.z_layer_background,
-            custom_elements.ScoreIndicator.ap,
-            custom_elements.ScoreIndicator.score,
-            custom_elements.ScoreIndicator.note_score,
-            custom_elements.ScoreIndicator.note_time,
-            custom_elements.ScoreIndicator.percentage,
+            ScoreIndicator.ap,
+            ScoreIndicator.score,
+            ScoreIndicator.note_score,
+            ScoreIndicator.note_time,
+            ScoreIndicator.percentage,
             LifeManager.life,
-            initialization.LastNote.last_time,
+            LastNote.last_time,
+            self.dead_time,
         )
+        if LifeManager.life == 0 and self.dead_time != -2:
+            self.dead_time = time()
 
 class WatchScheduledLaneEffect(WatchArchetype):
     name = archetype_names.SCHEDULED_LANE_EFFECT
