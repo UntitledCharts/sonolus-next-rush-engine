@@ -201,6 +201,11 @@ class Options:
         scope="Rush",
         default=True,
     )
+    ui_intro: bool = toggle_option(
+        name="UI Intro Effect",
+        scope="Rush",
+        default=True,
+    )
     note_perspective: float = slider_option(
         name="Note Perspective",
         description="Sets the perspective of the notes. As it approaches 0, the notes are drawn vertically.",
