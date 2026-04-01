@@ -172,7 +172,7 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int, z: float, z1: floa
     drawing_combo.draw_number(z=z, z1=z1, z2=z2)
 
 
-def draw_score_number(ap: bool, score: float, z1: float, z2: float):
+def draw_score_number(ap: bool, score: float, z1: float, z2: float, alpha: float = 1.0):
     if Options.hide_ui >= 2:
         return
 
@@ -236,7 +236,7 @@ def draw_score_number(ap: bool, score: float, z1: float, z2: float):
             center_x=screen_center.x,
             center_y=screen_center.y,
         ),
-        alpha=AlphaConfig(a=a, a2=0, a3=a3),
+        alpha=AlphaConfig(a=a * alpha, a2=0, a3=a3 * alpha),
         layout1=LayoutConfig(width=w, gap=digit_gap, scale=s, height=h, start_x=start_x),
         layout2=LayoutConfig(width=0, gap=0, scale=0, height=0, start_x=0),
     )
@@ -492,7 +492,7 @@ def draw_damage_flash(draw_time: float, z: float):
             ActiveSkin.damage_flash.draw(quad=layout, z=z, a=a * 0.8)
 
 
-def draw_life_number(number: int, z: float):
+def draw_life_number(number: int, z: float, alpha: float = 1.0):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.ui_number.available:
@@ -559,10 +559,10 @@ def draw_life_number(number: int, z: float):
         ),
         layout=UILayoutConfig(width=w, gap=digit_gap, height=h, start_x=screen_center.x, alignment=UIAlignment.RIGHT),
     )
-    drawing_ui.draw_number(z=z)
+    drawing_ui.draw_number(z=z, a=alpha)
 
 
-def draw_score_bar_number(number: int, z: float):
+def draw_score_bar_number(number: int, z: float, alpha: float = 1.0):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.ui_number.available:
@@ -629,10 +629,10 @@ def draw_score_bar_number(number: int, z: float):
         ),
         layout=UILayoutConfig(width=w, gap=digit_gap, height=h, start_x=screen_center.x, alignment=UIAlignment.LEFT),
     )
-    drawing_ui.draw_number(z=z)
+    drawing_ui.draw_number(z=z, a=alpha)
 
 
-def draw_score_bar_raw_number(number: int, z: float, time: float):
+def draw_score_bar_raw_number(number: int, z: float, time: float, alpha: float = 1.0):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.ui_number.available:
@@ -703,7 +703,7 @@ def draw_score_bar_raw_number(number: int, z: float, time: float):
         ),
         layout=UILayoutConfig(width=w, gap=digit_gap, height=h, start_x=screen_center.x, alignment=UIAlignment.LEFT),
     )
-    a = clamp(time / 0.2, 0, 1)
+    a = clamp(time / 0.2, 0, 1) * alpha
     drawing_ui.draw_number(z=z, a=a)
 
 
