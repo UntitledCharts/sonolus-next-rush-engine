@@ -1238,6 +1238,8 @@ def has_tap_input(kind: NoteKind) -> bool:
         NoteKind.CRIT_HEAD_FLICK,
         NoteKind.NORM_TAIL_TAP,
         NoteKind.CRIT_TAIL_TAP,
+        NoteKind.NORM_TAIL_FLICK,
+        NoteKind.CRIT_TAIL_FLICK,
     }
 
 
