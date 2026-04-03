@@ -72,11 +72,13 @@ def init_ui():
     box.r = min_x_extent
     box.l = -min_x_extent
     show_ui = not Options.hide_ui
-    custom_combo_label = not Options.custom_combo or not ActiveSkin.combo_label.available
-    custom_combo_number = not Options.custom_combo or not ActiveSkin.combo_number.available
-    custom_judgment = not Options.custom_judgment or not ActiveSkin.judgment.available
-    custom_life_bar = not Options.custom_life_bar or not ActiveSkin.life.available or is_preview() or is_tutorial()
-    custom_score_bar = not Options.custom_score_bar or not ActiveSkin.score.available or is_preview() or is_tutorial()
+    is_pt = is_preview() or is_tutorial()
+
+    custom_combo_label = not Options.custom_combo or is_pt or not ActiveSkin.combo_label.available
+    custom_combo_number = not Options.custom_combo or is_pt or not ActiveSkin.combo_number.available
+    custom_judgment = not Options.custom_judgment or is_pt or not ActiveSkin.judgment.available
+    custom_life_bar = not Options.custom_life_bar or is_pt or not ActiveSkin.life.available
+    custom_score_bar = not Options.custom_score_bar or is_pt or not ActiveSkin.score.available
     custom_life_bar_margin = +Vec2(0, 0)
     custom_score_bar_margin = +Vec2(0, 0)
 
