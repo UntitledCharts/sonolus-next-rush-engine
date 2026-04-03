@@ -42,8 +42,8 @@ class PreviewInitialization(PreviewArchetype):
     @callback(order=1)
     def preprocess(self):
         init_level_config(self.revision)
-        init_ui()
         init_skin()
+        init_ui()
         init_particles()
 
         if not ActiveSkin.lane_background_preview.is_available:

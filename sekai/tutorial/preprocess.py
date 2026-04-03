@@ -8,6 +8,6 @@ from sekai.lib.ui import init_ui
 def preprocess():
     init_level_config()
     init_layout()
-    init_ui()
     init_skin()
+    init_ui()
     init_particles()
