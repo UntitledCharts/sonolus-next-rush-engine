@@ -56,6 +56,8 @@ class Skill(PlayArchetype):
     def preprocess(self):
         self.effect = SkillMode.from_options(Options.skill_mode, self.effect)
         self.start_time = beat_to_time(self.beat)
+        self.end_time_3 = self.start_time + 3
+        self.end_time_6 = self.start_time + 6
         if Options.hide_ui != 3 and Options.skill_effect and ActiveSkin.skill_bar_score.is_available:
             Effects.skill.schedule(self.start_time)
         if self.effect == SkillMode.HEAL:
