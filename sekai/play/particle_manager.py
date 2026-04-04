@@ -29,4 +29,8 @@ class ParticleManager(PlayArchetype):
         if self.despawn:
             return
         handle_critical_flick_lane_effect(self.particles, self.lane, self.size, self.spawn_time)
+
+    def update_parallel(self):
+        if self.despawn:
+            return
         self.despawn = True
