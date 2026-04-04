@@ -547,6 +547,7 @@ def draw_dynamic_stage(
     lane_alpha: float = 1,
     judge_line_alpha: float = 1,
     y_offset: float = 0,
+    alpha: float = 1,
 ):
     division = normalize_transition(division)
     judge_line_color = normalize_transition(judge_line_color)
@@ -849,7 +850,7 @@ def draw_dynamic_stage(
         if alpha_bb > 0:
             draw_right_judgment_border(sprites_b, right_border_style.end, z_b2, ja * alpha_bb)
 
-    draw_per_stage_cover(l, r, a, lane_alpha, order)
+    draw_per_stage_cover(l, r, a, lane_alpha, order, alpha)
 
 
 def draw_fallback_stage(
@@ -863,6 +864,7 @@ def draw_fallback_stage(
     lane_alpha: float = 1,
     judge_line_alpha: float = 1,
     y_offset: float = 0,
+    alpha: float = 1,
 ):
     travel = approach(1 - y_offset)
     nh = DynamicLayout.note_h
@@ -902,10 +904,10 @@ def draw_fallback_stage(
     layout = perspective_rect(l, r, t=1 - nh, b=1 + nh, travel=travel)
     ActiveSkin.judgment_line.draw(layout, z=z_hi, a=ja)
 
-    draw_per_stage_cover(l, r, a, lane_alpha, z)
+    draw_per_stage_cover(l, r, a, lane_alpha, z, alpha)
 
 
-def draw_per_stage_cover(l: float, r: float, a: float, lane_alpha: float, order: int):
+def draw_per_stage_cover(l: float, r: float, a: float, lane_alpha: float, order: int, alpha: float):
     if not LevelConfig.dynamic_stages:
         return
     ca = a * lane_alpha
@@ -918,11 +920,11 @@ def draw_per_stage_cover(l: float, r: float, a: float, lane_alpha: float, order:
         match Options.stage_cover_mode:
             case StageCoverMode.STAGE:
                 layout = layout_stage_cover(l, r)
-                ActiveSkin.cover.draw(layout, z=z_cover, a=Options.stage_cover_alpha * ca)
+                ActiveSkin.cover.draw(layout, z=z_cover, a=Options.stage_cover_alpha * ca * alpha)
             case StageCoverMode.STAGE_AND_LINE:
                 cover_layout, line_layout = layout_stage_cover_and_line(l, r)
-                ActiveSkin.cover.draw(cover_layout, z=z_cover, a=Options.stage_cover_alpha * ca)
-                ActiveSkin.guide_neutral.draw(line_layout, z=z_line, a=0.75 * ca)
+                ActiveSkin.cover.draw(cover_layout, z=z_cover, a=Options.stage_cover_alpha * ca * alpha)
+                ActiveSkin.guide_neutral.draw(line_layout, z=z_line, a=0.75 * ca * alpha)
             case StageCoverMode.FULL_WIDTH:
                 pass
             case _:
@@ -938,7 +940,7 @@ def draw_stage_cover(z_cover, z_cover_line, alpha):
             case StageCoverMode.STAGE:
                 if not LevelConfig.dynamic_stages:
                     layout = layout_stage_cover()
-                    ActiveSkin.cover.draw(layout, z=z_cover, a=Options.stage_cover_alpha * alpha)
+                    ActiveSkin.cover.draw(layout, z=z_cover, a=Options.stage_cover_alpha * alpha * alpha)
             case StageCoverMode.STAGE_AND_LINE:
                 if not LevelConfig.dynamic_stages:
                     cover_layout, line_layout = layout_stage_cover_and_line()
