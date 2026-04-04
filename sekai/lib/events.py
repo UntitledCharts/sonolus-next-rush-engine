@@ -141,7 +141,7 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode
         return
     if not Options.skill_effect:
         return
-    if not ActiveSkin.skill_bar_life.is_available:
+    if not ActiveSkin.skill_bar_score.is_available:
         return
 
     enter_progress = unlerp_clamped(0, 0.25, time)
