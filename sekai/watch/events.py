@@ -63,7 +63,7 @@ class Skill(WatchArchetype):
         self.z2 = initialization.LayerCache.skill_etc
 
     def spawn_time(self):
-        return self.start_time
+        return -1e8 if self.count == 0 else self.start_time
 
     def despawn_time(self):
         if self.next_ref.index > 0:
@@ -74,14 +74,17 @@ class Skill(WatchArchetype):
     def update_parallel(self):
         current_time = time()
         elapsed = current_time - self.start_time
-        if current_time < self.end_time_3:
+        if 0 <= elapsed < 3:
             draw_skill_bar(self.z, self.z2, elapsed, self.count, self.effect, self.level)
-        if current_time < self.end_time_6 and self.effect == SkillMode.JUDGMENT:
+        if 0 <= elapsed < 6 and self.effect == SkillMode.JUDGMENT:
             draw_judgment_effect(elapsed)
 
     def update_sequential(self):
         if not is_replay():
-            LifeManager.life = self.current_life
+            if time() < self.start_time:
+                LifeManager.life = LifeManager.initial_life
+            else:
+                LifeManager.life = self.current_life
 
     @property
     def calc_time(self) -> float:
