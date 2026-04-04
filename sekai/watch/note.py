@@ -253,7 +253,7 @@ class WatchBaseNote(WatchArchetype):
             return self.calc_time - MIN_START_TIME
 
     def spawn_critical_lane(self):
-        if Options.lane_effect_enabled:
+        if self.is_scored and Options.lane_effect_enabled:
             particles = get_note_particles(self.kind, self.direction)
             if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
                 ParticleManager.spawn(lane=self.lane, size=self.size, target_time=self.calc_time, particles=particles)
