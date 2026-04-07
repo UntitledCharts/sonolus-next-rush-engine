@@ -10,13 +10,13 @@ from sonolus.script.archetype import (
     imported,
     shared_memory,
 )
-from sonolus.script.bucket import Judgment, JudgmentWindow
+from sonolus.script.bucket import Judgment
 from sonolus.script.interval import Interval, lerp, remap_clamped, unlerp_clamped
 from sonolus.script.runtime import is_replay, is_skip, time
 from sonolus.script.timing import beat_to_time
 
 from sekai.debug import DISABLE_NOTES
-from sekai.lib.buckets import get_judgment_interval
+from sekai.lib.buckets import SekaiWindow
 from sekai.lib.connector import ActiveConnectorInfo, ConnectorKind, ConnectorLayer
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.layout import FlickDirection, Hitbox, compute_hitbox_at_time, progress_to
@@ -88,7 +88,7 @@ class WatchBaseNote(WatchArchetype):
     visual_start_time: float = entity_data()
     start_time: float = entity_data()
     target_scaled_time: CompositeTime = entity_data()
-    target_y_offset: float = entity_data()
+    target_y_offset: float = shared_memory()
     not_render: float = shared_memory()
 
     active_connector_info: ActiveConnectorInfo = shared_memory()
@@ -97,7 +97,7 @@ class WatchBaseNote(WatchArchetype):
 
     next_ref_accuracy: EntityRef[WatchBaseNote] = shared_memory()
     next_ref_damage_flash: EntityRef[WatchBaseNote] = shared_memory()
-    judgment_window: JudgmentWindow = shared_memory()
+    judgment_window: SekaiWindow = shared_memory()
     judgment_window_bad: Interval = shared_memory()
     combo: int = shared_memory()
     count: int = shared_memory()
@@ -127,10 +127,7 @@ class WatchBaseNote(WatchArchetype):
             self.direction = mirror_flick_direction(self.direction)
 
         self.target_time = beat_to_time(self.beat)
-        self.judgment_window = get_note_window(self.kind)
-        self.judgment_window_bad = get_judgment_interval(
-            bad_window=get_note_window_bad(self.kind), good_window=self.judgment_window.good
-        )
+        self.judgment_window = get_note_window(self.kind, self.active_head_ref.index > 0)
 
         if not self.is_attached:
             self.target_scaled_time = group_time_to_scaled_time(self.timescale_group, self.target_time)
