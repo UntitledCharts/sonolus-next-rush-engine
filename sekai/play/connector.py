@@ -34,11 +34,21 @@ from sekai.lib.ease import EaseType, ease
 from sekai.lib.layout import compute_hitbox, current_layout_transform
 from sekai.lib.note import draw_hitbox_bounds_overlay, draw_slide_note_head, get_attach_params
 from sekai.lib.options import Options
+from sekai.lib.stage import get_stage_props
 from sekai.lib.streams import Streams
-from sekai.lib.timescale import group_hide_notes, update_timescale_group
+from sekai.lib.timescale import (
+    group_hide_notes,
+    group_scaled_time_to_first_time,
+    group_time_to_scaled_time,
+    update_timescale_group,
+)
 from sekai.play import input_manager, note
 
 START_LENIENCY_BEATS = 0.5
+
+
+def legacy_note_duration() -> float:
+    return lerp(0.35, 4, unlerp_clamped(12, 1, Options.note_speed) ** 1.31)
 
 
 class Connector(PlayArchetype):
@@ -50,6 +60,7 @@ class Connector(PlayArchetype):
     segment_tail_ref: EntityRef[note.BaseNote] = imported(name="segmentTail")
     active_head_ref: EntityRef[note.BaseNote] = imported(name="activeHead")
     active_tail_ref: EntityRef[note.BaseNote] = imported(name="activeTail")
+    legacy_hidden_pop: bool = imported(name="legacyHiddenPop")
 
     kind: ConnectorKind = entity_data()
     ease_type: EaseType = entity_data()
@@ -60,6 +71,7 @@ class Connector(PlayArchetype):
 
     last_visual_state: ConnectorVisualState = entity_memory()
     delay: bool = entity_memory()
+    can_consume_empty: bool = entity_memory()
 
     @callback(order=1)  # After note preprocessing is done
     def preprocess(self):
@@ -71,17 +83,32 @@ class Connector(PlayArchetype):
         self.ease_type = head.connector_ease
         self.visual_active_interval.start = min(head.target_time, tail.target_time)
         self.visual_active_interval.end = max(head.target_time, tail.target_time)
+        if self.legacy_hidden_pop:
+            head_scaled_time = group_time_to_scaled_time(
+                self.segment_head.timescale_group,
+                self.segment_head.target_time,
+            ).total
+            self.visual_active_interval.start = group_scaled_time_to_first_time(
+                self.segment_head.timescale_group,
+                head_scaled_time - legacy_note_duration(),
+            )
+            self.visual_active_interval.end = tail.target_time
         self.input_active_interval = self.visual_active_interval + input_offset()
-        self.start_time = min(
-            self.visual_active_interval.start,
-            self.input_active_interval.start,
-            head.start_time,
-            tail.start_time,
-        )
-        self.end_time = max(self.visual_active_interval.end, self.input_active_interval.end)
+        if self.legacy_hidden_pop:
+            self.start_time = self.visual_active_interval.start
+            self.end_time = self.visual_active_interval.end
+        else:
+            self.start_time = min(
+                self.visual_active_interval.start,
+                self.input_active_interval.start,
+                head.start_time,
+                tail.start_time,
+            )
+            self.end_time = max(self.visual_active_interval.end, self.input_active_interval.end)
         if self.segment_head.segment_through_judge_line:
             self.end_time += CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY
         self.last_visual_state = ConnectorVisualState.WAITING
+        self.can_consume_empty = True
         if self.active_head_ref.index > 0:
             head.tick_head_ref = self.active_head_ref
         if self.active_tail_ref.index > 0:
@@ -177,6 +204,7 @@ class Connector(PlayArchetype):
                 else:
                     if self.delay:
                         self.active_connector_info.is_active = False
+                        self.can_consume_empty = True
                     else:
                         self.delay = True
             if current_time in self.visual_active_interval:
@@ -190,25 +218,32 @@ class Connector(PlayArchetype):
                     tail.target_time,
                     head.visual_y_offset,
                     tail.visual_y_offset,
-                    time(),
+                    current_time,
                 )
                 self.active_connector_info.connector_kind = self.kind
             if group_hide_notes(self.segment_head.timescale_group) and self.active_head_ref.index > 0:
                 self.active_connector_info.connector_kind = ConnectorKind.NONE
 
+    @callback(order=1)
     def touch(self):
-        if self.segment_head.segment_kind not in (
-            ConnectorKind.ACTIVE_NORMAL,
-            ConnectorKind.ACTIVE_CRITICAL,
-            ConnectorKind.ACTIVE_FAKE_NORMAL,
-            ConnectorKind.ACTIVE_FAKE_CRITICAL,
-        ):
+        if self.despawn:
             return
-        bounds = self.active_connector_info.input_bounds
-        if time() in self.input_active_interval:
+        current_time = time()
+        if self.active_head_ref.index > 0 and current_time in self.input_active_interval:
+            bounds = self.active_connector_info.input_bounds
             for touch in touches():
-                if bounds.contains_point(touch.position) and not touch.ended and input_manager.is_allowed_empty(touch):
+                if (
+                    not touch.ended
+                    and bounds.contains_point(touch.position)
+                    and input_manager.is_allowed_empty(touch)
+                    and (
+                        self.can_consume_empty
+                        or input_manager.is_last_started_touch_disallowed()
+                        or (touch.started and input_manager.is_previous_touch_disallowed())
+                    )
+                ):
                     input_manager.disallow_empty(touch)
+                    self.can_consume_empty = False
 
     def update_parallel(self):
         current_time = time()
@@ -228,6 +263,7 @@ class Connector(PlayArchetype):
                     or self.active_connector_info.is_active
                 ):
                     visual_state = ConnectorVisualState.ACTIVE
+                    self.can_consume_empty = False
                 else:
                     visual_state = ConnectorVisualState.INACTIVE
             else:
@@ -240,18 +276,18 @@ class Connector(PlayArchetype):
             if self.active_tail_ref.index > 0 and self.active_tail.is_despawned:
                 self.despawn = True
                 return
-            if time() >= head.target_time and not segment_head.segment_through_judge_line:
+            if current_time >= head.target_time and not segment_head.segment_through_judge_line:
                 head_visual_progress = 1.0 - remap_clamped(
                     head.target_time, tail.target_time, head.visual_y_offset, tail.visual_y_offset, time()
                 )
-                head_target_time = time()
+                head_target_time = current_time
                 if self.ease_type == EaseType.NONE:
                     head_lane = head.visual_lane
                     head_size = head.size
                     head_ease_frac = head.head_ease_frac
                 else:
                     head_ease_frac = remap_clamped(
-                        head.target_time, tail.target_time, head.head_ease_frac, tail.tail_ease_frac, time()
+                        head.target_time, tail.target_time, head.head_ease_frac, tail.tail_ease_frac, current_time
                     )
                     head_interp_frac = unlerp_clamped(
                         ease(self.ease_type, head.head_ease_frac),
@@ -294,12 +330,19 @@ class Connector(PlayArchetype):
     def get_attached_params(self, target_time: float) -> tuple[float, float]:
         head = self.head_ref.get().effective_attach_head
         tail = self.tail_ref.get().effective_attach_tail
+        if head.stage_ref.index > 0 and head.stage_ref.index == tail.stage_ref.index:
+            pivot_lane = get_stage_props(head.stage_ref.get(), target_time).pivot_lane
+            head_lane = pivot_lane + head.rel_lane
+            tail_lane = pivot_lane + tail.rel_lane
+        else:
+            head_lane = head._basic_visual_lane_at(target_time)
+            tail_lane = tail._basic_visual_lane_at(target_time)
         return get_attach_params(
             ease_type=self.ease_type,
-            head_lane=head._basic_visual_lane_at(target_time),
+            head_lane=head_lane,
             head_size=head.size,
             head_target_time=head.target_time,
-            tail_lane=tail._basic_visual_lane_at(target_time),
+            tail_lane=tail_lane,
             tail_size=tail.size,
             tail_target_time=tail.target_time,
             target_time=target_time,
