@@ -165,10 +165,7 @@ def setting_count(head: int, skill: int) -> None:
             archetype_multiplier=note.BaseNote.at(ptr).archetype_score_multiplier,
             entity_multiplier=note.BaseNote.at(ptr).entity_score_multiplier,
         )
-        y = current_note_weight - custom_elements.ScoreIndicator.total_weight_compensation
-        t = custom_elements.ScoreIndicator.total_weight + y
-        custom_elements.ScoreIndicator.total_weight_compensation = (t - custom_elements.ScoreIndicator.total_weight) - y
-        custom_elements.ScoreIndicator.total_weight = t
+        custom_elements.ScoreIndicator.total_weight.add(current_note_weight)
 
         if Fever.fever_chance_time <= note.BaseNote.at(ptr).target_time < Fever.fever_start_time:
             Fever.fever_first_count = (

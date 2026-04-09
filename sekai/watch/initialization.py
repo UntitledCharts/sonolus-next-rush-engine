@@ -14,7 +14,7 @@ from sonolus.script.runtime import is_replay, level_score
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import init_event_list
 from sekai.lib.buckets import init_buckets
-from sekai.lib.custom_elements import LifeManager
+from sekai.lib.custom_elements import LifeManager, NeumaierSum
 from sekai.lib.initialization import LastNote, LayerCache, calculate_note_weight, sort_entities_by_time
 from sekai.lib.layer import (
     LAYER_BACKGROUND_SIDE,
@@ -149,9 +149,9 @@ def setting_combo(head: int, skill: int) -> None:
     ap = False
     accuracy = head
     damage_flash = head
-    total_weight = 0.0
-    total_weight_compensation = 0.0
     current_note_weight = 0.0
+
+    total_weight = +NeumaierSum
 
     while ptr > 0:
         if skill_ptr > 0 and note.WatchBaseNote.at(ptr).target_time >= Skill.at(skill_ptr).start_time:
@@ -206,27 +206,21 @@ def setting_combo(head: int, skill: int) -> None:
             entity_multiplier=note.WatchBaseNote.at(ptr).entity_score_multiplier,
         )
 
-        y = current_note_weight - total_weight_compensation
-        t = total_weight + y
-        total_weight_compensation = (t - total_weight) - y
-        total_weight = t
+        total_weight.add(current_note_weight)
 
         LastNote.last_time = max(LastNote.last_time, note.WatchBaseNote.at(ptr).calc_time)
         ptr = note.WatchBaseNote.at(ptr).next_ref.index
 
-    calculate_score(head, 1000000, total_weight)
+    calculate_score(head, 1000000, total_weight.total)
 
 
 def calculate_score(head: int, max_score: int, total_weight: float):
     ptr = head
     count = 0
     score = 0
-    current_raw_score = 0.0
-    raw_score_compensation = 0.0
-    acc_sum = 0.0
-    acc_compensation = 0.0
-    processed_weight = 0.0
-    processed_weight_compensation = 0.0
+    current_raw_score = +NeumaierSum
+    acc_sum = +NeumaierSum
+    processed_weight = +NeumaierSum
     perfect_step = 0
     great_step = 0
     good_step = 0
@@ -293,12 +287,9 @@ def calculate_score(head: int, max_score: int, total_weight: float):
         raw_calc = (note_raw_score * max_score) / total_weight
         note.WatchBaseNote.at(ptr).note_raw_score = raw_calc
 
-        y = note_raw_score - raw_score_compensation
-        t = current_raw_score + y
-        raw_score_compensation = (t - current_raw_score) - y
-        current_raw_score = t
+        current_raw_score.add(note_raw_score)
 
-        final_calc = (current_raw_score / total_weight) * max_score
+        final_calc = (current_raw_score.total / total_weight) * max_score
         score = clamp(
             final_calc,
             0,
@@ -308,7 +299,7 @@ def calculate_score(head: int, max_score: int, total_weight: float):
 
         match Options.custom_score:
             case 1:
-                note.WatchBaseNote.at(ptr).percentage = (current_raw_score / total_weight) * 100.0
+                note.WatchBaseNote.at(ptr).percentage = (current_raw_score.total / total_weight) * 100.0
             case 2:
                 note_ideal_weight = level_score().perfect_multiplier * (
                     (
@@ -331,24 +322,18 @@ def calculate_score(head: int, max_score: int, total_weight: float):
                     + note.WatchBaseNote.at(ptr).archetype_score_multiplier
                     + note.WatchBaseNote.at(ptr).entity_score_multiplier
                 )
-                y2 = note_ideal_weight - processed_weight_compensation
-                t2 = processed_weight + y2
-                processed_weight_compensation = (t2 - processed_weight) - y2
-                processed_weight = t2
+                processed_weight.add(note_ideal_weight)
 
-                current_loss = processed_weight - current_raw_score
+                current_loss = processed_weight.total - current_raw_score.total
                 current_visible_score = total_weight - current_loss
                 percent = (current_visible_score / total_weight) * 100.0
                 note.WatchBaseNote.at(ptr).percentage = clamp(percent, 0.0, 100.0)
             case 3:
                 current_acc = (1 - abs(note.WatchBaseNote.at(ptr).accuracy)) * 100
 
-                y = current_acc - acc_compensation
-                t = acc_sum + y
-                acc_compensation = (t - acc_sum) - y
-                acc_sum = t
+                acc_sum.add(current_acc)
 
-                note.WatchBaseNote.at(ptr).percentage = acc_sum / count
+                note.WatchBaseNote.at(ptr).percentage = acc_sum.total / count
 
         ptr = note.WatchBaseNote.at(ptr).next_ref.index
 
