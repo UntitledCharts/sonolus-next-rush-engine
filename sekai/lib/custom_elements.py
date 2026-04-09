@@ -33,6 +33,23 @@ class LifeManager:
     first: float
 
 
+class NeumaierSum(Record):
+    base: float
+    c: float
+
+    @property
+    def total(self) -> float:
+        return self.base + self.c
+
+    def add(self, value: float) -> None:
+        t = self.base + value
+        if abs(self.base) >= abs(value):
+            self.c += (self.base - t) + value
+        else:
+            self.c += (value - t) + self.base
+        self.base = t
+
+
 @level_memory
 class ScoreIndicator:
     score: float
@@ -43,15 +60,11 @@ class ScoreIndicator:
     first: float
 
     # Play
-    total_weight: float
-    total_weight_compensation: float
-    acc_sum: float
-    acc_compensation: float
-    processed_weight: float
-    processed_weight_compensation: float
+    total_weight: NeumaierSum
+    acc_sum: NeumaierSum
+    processed_weight: NeumaierSum
+    current_raw_score: NeumaierSum
     max_score: int
-    current_raw_score: float
-    raw_score_compensation: float
     count: int
     perfect_step: int
     great_step: int
