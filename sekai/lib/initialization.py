@@ -52,14 +52,17 @@ def calculate_note_weight(
 
 
 class SortableEntity(Protocol):
-    calc_time: float
-    next_ref: EntityRef[Any]
+    @property
+    def calc_time(self) -> float: ...
+
+    @property
+    def next_ref(self) -> EntityRef[Any]: ...
 
     def ref(self) -> EntityRef[Any]: ...
 
 
 class SortableArchetypeClass(Protocol):
-    def at(self, index: int) -> SortableEntity: ...
+    def at(self, index: int, check: bool = True) -> SortableEntity: ...
 
 
 def sort_entities_by_time(index: int, entity_cls: SortableArchetypeClass):
