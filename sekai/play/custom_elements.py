@@ -163,17 +163,16 @@ class ComboJudge(PlayArchetype):
             archetype_multiplier=current_note.archetype_score_multiplier,
             entity_multiplier=current_note.entity_score_multiplier,
         )
-        raw_calc = (note_raw_score * ScoreIndicator.max_score) / ScoreIndicator.total_weight
+        tot_w = ScoreIndicator.total_weight.total
+        tot_w = tot_w if tot_w != 0 else 1.0
+        raw_calc = (note_raw_score * ScoreIndicator.max_score) / tot_w
         note_score = raw_calc
         ScoreIndicator.note_score = note_score if note_score > 0 else ScoreIndicator.note_score
         ScoreIndicator.note_time = self.spawn_time if note_score > 0 else ScoreIndicator.note_time
 
-        y = note_raw_score - ScoreIndicator.raw_score_compensation
-        t = ScoreIndicator.current_raw_score + y
-        ScoreIndicator.raw_score_compensation = (t - ScoreIndicator.current_raw_score) - y
-        ScoreIndicator.current_raw_score = t
+        ScoreIndicator.current_raw_score.add(note_raw_score)
 
-        final_calc = (ScoreIndicator.current_raw_score / ScoreIndicator.total_weight) * ScoreIndicator.max_score
+        final_calc = (ScoreIndicator.current_raw_score.total / tot_w) * ScoreIndicator.max_score
         ScoreIndicator.score = clamp(
             final_calc,
             0,
@@ -181,7 +180,9 @@ class ComboJudge(PlayArchetype):
         )
         match Options.custom_score:
             case 1:
-                ScoreIndicator.percentage = (ScoreIndicator.current_raw_score / ScoreIndicator.total_weight) * 100.0
+                ScoreIndicator.percentage = (ScoreIndicator.current_raw_score.total / tot_w) * 100.0
+            case 1:
+                ScoreIndicator.percentage = (ScoreIndicator.current_raw_score.total / tot_w) * 100.0
             case 2:
                 ideal_combo = current_note.count
                 note_ideal_weight = ls.perfect_multiplier * calculate_note_weight(
@@ -191,25 +192,20 @@ class ComboJudge(PlayArchetype):
                     archetype_multiplier=current_note.archetype_score_multiplier,
                     entity_multiplier=current_note.entity_score_multiplier,
                 )
-                y2 = note_ideal_weight - ScoreIndicator.processed_weight_compensation
-                t2 = ScoreIndicator.processed_weight + y2
-                ScoreIndicator.processed_weight_compensation = (t2 - ScoreIndicator.processed_weight) - y2
-                ScoreIndicator.processed_weight = t2
 
-                current_loss = ScoreIndicator.processed_weight - ScoreIndicator.current_raw_score
-                current_visible_score = ScoreIndicator.total_weight - current_loss
-                percent = (current_visible_score / ScoreIndicator.total_weight) * 100.0
+                ScoreIndicator.processed_weight.add(note_ideal_weight)
+
+                current_loss = ScoreIndicator.processed_weight.total - ScoreIndicator.current_raw_score.total
+                current_visible_score = tot_w - current_loss
+                percent = (current_visible_score / tot_w) * 100.0
                 ScoreIndicator.percentage = clamp(percent, 0.0, 100.0)
             case 3:
                 ScoreIndicator.count += 1
                 current_acc = (1 - abs(self.accuracy)) * 100
 
-                y = current_acc - ScoreIndicator.acc_compensation
-                t = ScoreIndicator.acc_sum + y
-                ScoreIndicator.acc_compensation = (t - ScoreIndicator.acc_sum) - y
-                ScoreIndicator.acc_sum = t
+                ScoreIndicator.acc_sum.add(current_acc)
 
-                ScoreIndicator.percentage = ScoreIndicator.acc_sum / ScoreIndicator.count
+                ScoreIndicator.percentage = ScoreIndicator.acc_sum.total / ScoreIndicator.count
 
     def calculate_life(self):
         if not Options.custom_life_bar:
