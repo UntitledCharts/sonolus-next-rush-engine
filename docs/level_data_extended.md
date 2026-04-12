@@ -11,11 +11,13 @@ Represents a skill activation event.
   * SCORE = 0
   * HEAL = 1
   * JUDGMENT = 2
-* **level (int)**: The displayed level of the skill. Defaults to 1.
+* **level (int)**: The displayed level of the skill. Must be an integer between 1 and 4. Defaults to 1.
 
 ## FeverChance
 
 Represents the start of the fever chance period.
+
+**Note:** A level can contain exactly one `FeverChance` and exactly one `FeverStart` event. They must always appear as a pair, and `FeverChance` must occur at an earlier `#BEAT` than `FeverStart`.
 
 ### Fields
 
@@ -25,6 +27,8 @@ Represents the start of the fever chance period.
 ## FeverStart
 
 Represents the start of the active fever period.
+
+**Note:** A level can contain exactly one `FeverStart` event, which must be paired with and occur strictly after the `FeverChance` event.
 
 ### Fields
 
