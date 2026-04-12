@@ -438,9 +438,11 @@ export const uscToLevelData = (
                 conn.data['segmentTail'] = prevJointIntermediate
             }
         }
-        for (const connectorIntermediate of connectors) {
-            connectorIntermediate.data['activeHead'] = headNoteIntermediate
-            connectorIntermediate.data['activeTail'] = prevJointIntermediate
+        if (slideNote.type === 'slide') {
+            for (const connectorIntermediate of connectors) {
+                connectorIntermediate.data['activeHead'] = headNoteIntermediate
+                connectorIntermediate.data['activeTail'] = prevJointIntermediate
+            }
         }
     }
 
@@ -507,8 +509,6 @@ export const uscToLevelData = (
         for (const connectorIntermediate of guideConnectors) {
             connectorIntermediate.data['segmentHead'] = headMidpointIntermediate
             connectorIntermediate.data['segmentTail'] = prevMidpointIntermediate
-            connectorIntermediate.data['activeHead'] = headMidpointIntermediate
-            connectorIntermediate.data['activeTail'] = prevMidpointIntermediate
         }
 
         if (!smoothGuideFade) {
