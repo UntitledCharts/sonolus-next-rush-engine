@@ -12,11 +12,6 @@ export type ExtendedEntityData = {
     data: ExtendedEntityDataField[]
 }
 
-export type ExtendedLevelData = {
-    bgmOffset: number
-    entities: ExtendedEntityData[]
-}
-
 const ConnectorKind = {
     NONE: 0,
     ACTIVE_NORMAL: 1,
@@ -186,7 +181,7 @@ function resolveOriginal(
     return undefined
 }
 
-export const extendedToLevelData = (data: ExtendedLevelData, offset = 0): LevelData | undefined => {
+export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | undefined => {
     const ext = new ExtData(data.entities)
 
     if (ext.getByArch('TimeScaleGroup').length === 0) return undefined

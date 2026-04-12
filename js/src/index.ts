@@ -8,11 +8,11 @@ import { USC } from './usc/index.js'
 import { isUSC } from './usc/analyze.js'
 import { isLevelData } from './LevelData/analyze.js'
 import { isPJSK } from './pjsk/analyze.js'
+import { isExtendedLevelData } from './extended/analyze.js'
 import { pjskToUSC } from './pjsk/convert.js'
 import {
     extendedToLevelData,
     type ExtendedEntityData,
-    type ExtendedLevelData,
     type ExtendedEntityDataField,
 } from './extended/convert.js'
 
@@ -23,7 +23,6 @@ export {
     ucmmwsToLevelData,
     extendedToLevelData,
     type ExtendedEntityData,
-    type ExtendedLevelData,
     type ExtendedEntityDataField,
 }
 export * from './usc/index.js'
@@ -32,24 +31,23 @@ export const convertToLevelData = (
     input: string | Uint8Array | USC | LevelData,
     offset = 0,
 ): LevelData => {
+    if (isExtendedLevelData(input)) {
+        const converted = extendedToLevelData(input, offset)
+        if (converted) return converted
+    }
     if (isLevelData(input)) {
         return input
     }
-
     let usc: USC
-
     if (isUSC(input)) {
         usc = input
     } else if (input instanceof Uint8Array) {
         const type = detectMMWSType(input)
-
         if (type === 'UCMMWS') {
             return ucmmwsToLevelData(input)
         }
-
         if (type === 'MMWS' || type === 'CCMMWS') {
             usc = mmwsToUSC(input)
-
             if (type === 'MMWS') {
                 return uscToLevelData(usc, offset, true, true)
             } else {
@@ -60,6 +58,10 @@ export const convertToLevelData = (
     } else if (typeof input === 'string') {
         try {
             const parsed = JSON.parse(input)
+            if (isExtendedLevelData(parsed)) {
+                const converted = extendedToLevelData(parsed, offset)
+                if (converted) return converted
+            }
             if (isLevelData(parsed)) {
                 return parsed
             }
@@ -79,7 +81,6 @@ export const convertToLevelData = (
             'Unsupported input type: Input must be string(SUS/USC/LevelData), Uint8Array(MMWS), or USC/LevelData object.',
         )
     }
-
     return uscToLevelData(usc, offset, true, true)
 }
 
