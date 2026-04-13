@@ -149,6 +149,7 @@ class BaseParticles:
     # sekai version checker
     v3: Particle = particle("Never delete the sekai version checker=v3")
     v1: Particle = particle("Never delete the sekai version checker=v1")
+    lightweight: Particle = particle("Lightweight=True")
 
 
 EMPTY_PARTICLE = Particle(-1)
@@ -303,6 +304,7 @@ class ActiveParticles:
     fever_border: Particle
 
     ui_checker: UIChecker
+    lightweight: Particle
 
 
 def init_particles():
@@ -787,3 +789,4 @@ def init_particles():
     ActiveParticles.fever_border @= BaseParticles.fever_border
 
     ActiveParticles.ui_checker @= UIChecker(v1=BaseParticles.v1, v3=BaseParticles.v3)
+    ActiveParticles.lightweight @= BaseParticles.lightweight
