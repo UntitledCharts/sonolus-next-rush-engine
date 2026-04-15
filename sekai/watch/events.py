@@ -10,6 +10,7 @@ from sonolus.script.archetype import (
     imported,
     shared_memory,
 )
+from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp
 from sonolus.script.runtime import add_life_scheduled, is_replay, is_skip, time
 from sonolus.script.timing import beat_to_time
@@ -27,10 +28,17 @@ from sekai.lib.events import (
     spawn_fever_chance_particle,
     spawn_fever_start_particle,
 )
+from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.skin import ActiveSkin
 from sekai.lib.streams import Streams
 from sekai.watch import initialization
+
+
+@level_memory
+class SkillActive:
+    judgment: bool
+    start_time: float
 
 
 class Skill(WatchArchetype):
@@ -76,7 +84,7 @@ class Skill(WatchArchetype):
         elapsed = current_time - self.start_time
         if 0 <= elapsed < 3:
             draw_skill_bar(self.z, self.z2, elapsed, self.count, self.effect, self.level)
-        if 0 <= elapsed < 6 and self.effect == SkillMode.JUDGMENT:
+        if 0 <= elapsed < 6 and self.effect == SkillMode.JUDGMENT and not LevelConfig.dynamic_stages:
             draw_judgment_effect(elapsed)
 
     def update_sequential(self):
@@ -85,6 +93,12 @@ class Skill(WatchArchetype):
                 LifeManager.life = LifeManager.initial_life
             else:
                 LifeManager.life = self.current_life
+        t = time()
+        if self.start_time <= t < self.end_time_6 and self.effect == SkillMode.JUDGMENT:
+            SkillActive.judgment = True
+            SkillActive.start_time = self.start_time
+        else:
+            SkillActive.judgment = False
 
     @property
     def calc_time(self) -> float:
@@ -102,6 +116,7 @@ class FeverChance(WatchArchetype):
     z: float = entity_memory()
     z2: float = entity_memory()
     z3: float = entity_memory()
+    z4: float = entity_memory()
 
     @callback(order=-2)
     def preprocess(self):
@@ -114,6 +129,7 @@ class FeverChance(WatchArchetype):
         self.z = initialization.LayerCache.fever_chance_cover
         self.z2 = initialization.LayerCache.fever_chance_side
         self.z3 = initialization.LayerCache.fever_chance_gauge
+        self.z4 = initialization.LayerCache.fever_chance_gauge
 
     def spawn_time(self):
         return self.start_time
@@ -157,8 +173,8 @@ class FeverChance(WatchArchetype):
         elapsed = current_time - self.start_time
         if Options.fever_effect == 0:
             draw_fever_side_cover(self.z, elapsed)
-        draw_fever_side_bar(self.z2, elapsed)
-        draw_fever_gauge(self.z3, self.percentage)
+        draw_fever_side_bar(self.z2, self.z3, elapsed)
+        draw_fever_gauge(self.z4, self.percentage)
 
     @callback(order=3)
     def update_sequential(self):
