@@ -748,7 +748,7 @@ def draw_dynamic_stage(
         sprites.judgment_gradient.draw(layout, z=z, a=a)
 
     if lane_alpha > 0:
-        la = a * lane_alpha
+        la = a * lane_alpha * Options.lane_alpha
         ActiveSkin.lane_background.draw(layout_lane_by_edges(l, r), z=z_bg0, a=la)
 
         p_left = left_border_style.progress
