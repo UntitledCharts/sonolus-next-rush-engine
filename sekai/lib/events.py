@@ -7,7 +7,7 @@ from sekai.lib.layer import LAYER_JUDGMENT_SKILL, get_z
 from sekai.lib.layout import (
     LANE_B,
     LANE_T,
-    Layout,
+    DynamicLayout,
     aspect_ratio,
     get_perspective_y,
     layout_fever_border,
@@ -54,7 +54,7 @@ def draw_fever_side_cover(z: float, time: float):
     ActiveSkin.background.draw(layout1, z, a=a)
     ActiveSkin.background.draw(layout2, z, a=a)
 
-    if screen().t < Layout.t:
+    if screen().t < DynamicLayout.t:
         return
     layout_sky = layout_fever_cover_sky()
     ActiveSkin.background.draw(layout_sky, z, a=a)
@@ -68,7 +68,7 @@ def draw_fever_side_bar(z: float, time: float):
     if Options.fever_effect == 2:
         return
     a = unlerp_clamped(0, 0.25, time)
-    if screen().t < Layout.t or not ActiveSkin.sekai_stage_fever_tablet.is_available:
+    if screen().t < DynamicLayout.t or not ActiveSkin.sekai_stage_fever_tablet.is_available:
         layout = layout_sekai_stage()
         ActiveSkin.sekai_stage_fever.draw(layout, z, a=a)
     else:

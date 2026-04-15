@@ -6,9 +6,9 @@ from typing import Protocol, assert_never, cast
 
 from sonolus.script import runtime
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
-from sonolus.script.interval import clamp, interp, lerp
+from sonolus.script.interval import clamp, interp, lerp, unlerp_clamped
 from sonolus.script.quad import Quad
-from sonolus.script.record import Record, unlerp_clamped
+from sonolus.script.record import Record
 from sonolus.script.runtime import is_multiplayer, is_play, is_replay, is_watch, screen, time
 from sonolus.script.vec import Vec2
 
