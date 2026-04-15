@@ -1,6 +1,6 @@
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import lerp, unlerp_clamped
-from sonolus.script.quad import Quad
+from sonolus.script.quad import Quad, Rect
 from sonolus.script.vec import Vec2
 
 from sekai.lib.layer import LAYER_JUDGMENT_SKILL, get_z
@@ -10,9 +10,9 @@ from sekai.lib.layout import (
     DynamicLayout,
     aspect_ratio,
     get_perspective_y,
+    layout_dynamic_fever_side,
     layout_fever_border,
-    layout_fever_cover_left,
-    layout_fever_cover_right,
+    layout_fever_cover,
     layout_fever_cover_sky,
     layout_fever_gauge_left,
     layout_fever_gauge_right,
@@ -24,6 +24,7 @@ from sekai.lib.layout import (
     layout_skill_judgment_line,
     perspective_rect,
     screen,
+    transform_quad,
 )
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SekaiVersion, SkillMode
@@ -39,6 +40,12 @@ class Fever:
     fever_chance_cant_super_fever: bool
     fever_last_count: int
     fever_first_count: int
+    min_l: float
+    max_r: float
+    has_active: bool
+    y_offset: float
+    alpha_l: float
+    alpha_r: float
 
 
 def draw_fever_side_cover(z: float, time: float):
@@ -48,8 +55,18 @@ def draw_fever_side_cover(z: float, time: float):
         return
     if Options.fever_effect == 2:
         return
-    layout1 = layout_fever_cover_left()
-    layout2 = layout_fever_cover_right()
+    if LevelConfig.dynamic_stages:
+        l = 0
+        r = 0
+        if Fever.has_active:
+            l = Fever.min_l - 0.5
+            r = Fever.max_r + 0.5
+    else:
+        l = -6.5
+        r = 6.5
+
+    layout1 = layout_fever_cover(l, 0)
+    layout2 = layout_fever_cover(0, r)
     a = unlerp_clamped(0, 0.25, time) * 0.75
     ActiveSkin.background.draw(layout1, z, a=a)
     ActiveSkin.background.draw(layout2, z, a=a)
@@ -60,17 +77,55 @@ def draw_fever_side_cover(z: float, time: float):
     ActiveSkin.background.draw(layout_sky, z, a=a)
 
 
-def draw_fever_side_bar(z: float, time: float):
-    if not ActiveSkin.sekai_stage_fever.is_available:
-        return
+def draw_fever_side_bar(z: float, z_t: float, time: float):
     if Options.hide_ui >= 3:
         return
     if Options.fever_effect == 2:
         return
     a = unlerp_clamped(0, 0.25, time)
-    if screen().t < DynamicLayout.t or not ActiveSkin.sekai_stage_fever_tablet.is_available:
-        layout = layout_sekai_stage()
-        ActiveSkin.sekai_stage_fever.draw(layout, z, a=a)
+    if LevelConfig.dynamic_stages:
+        if not Fever.has_active:
+            return
+
+        l = Fever.min_l
+        r = Fever.max_r
+
+        a_left = a * Fever.alpha_l
+        a_right = a * Fever.alpha_r
+
+        thickness = 0.5
+
+        layout1 = perspective_rect(l=l - thickness, r=l, t=LANE_T, b=get_perspective_y(-1))
+        layout2 = perspective_rect(l=r, r=r + thickness, t=LANE_T, b=get_perspective_y(-1))
+
+        fever_text_t = lerp(LANE_B, LANE_T, 0.78)
+        super_fever_text_t = lerp(LANE_B, LANE_T, 0.90)
+
+        point1 = perspective_rect(l=l - 1, r=l, t=fever_text_t - 0.002, b=fever_text_t + 0.002)
+        point2 = perspective_rect(l=l - 1, r=l, t=super_fever_text_t - 0.001, b=super_fever_text_t + 0.001)
+
+        fever_l = (r - 0.6) * fever_text_t
+        super_fever_l = (r - 0.7) * super_fever_text_t
+
+        fever_text_layout = transform_quad(
+            Rect(l=fever_l, r=fever_l + 4.5, t=fever_text_t - 0.07, b=fever_text_t + 0.07)
+        )
+        super_fever_text_layout = transform_quad(
+            Rect(l=super_fever_l, r=super_fever_l + 2.94, t=super_fever_text_t - 0.053, b=super_fever_text_t + 0.053)
+        )
+
+        if a_left > 0:
+            ActiveSkin.sekai_fever_gauge_background.draw(layout1, z, a=a_left)
+            ActiveSkin.guide_neutral.draw(point1, z_t, a=a_left)
+            ActiveSkin.guide_neutral.draw(point2, z_t, a=a_left)
+        if a_right > 0:
+            ActiveSkin.sekai_fever_gauge_background.draw(layout2, z, a=a_right)
+            ActiveSkin.sekai_fever_text.draw(fever_text_layout, z_t, a=a_right)
+            ActiveSkin.sekai_super_fever_text.draw(super_fever_text_layout, z_t, a=a_right)
+    elif screen().t < DynamicLayout.t or not ActiveSkin.sekai_stage_fever_tablet.is_available:
+        if ActiveSkin.sekai_stage_fever.is_available:
+            layout = layout_sekai_stage()
+            ActiveSkin.sekai_stage_fever.draw(layout, z, a=a)
     else:
         layout = layout_sekai_stage_t()
         ActiveSkin.sekai_stage_fever_tablet.draw(layout, z, a=a)
@@ -83,11 +138,32 @@ def draw_fever_gauge(z: float, percentage: float):
         return
     if Options.fever_effect == 2:
         return
-    t = lerp(LANE_B, LANE_T, percentage)
-    layout1 = layout_fever_gauge_left(t)
-    layout2 = layout_fever_gauge_right(t)
-    ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, z, a=0.6)
-    ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, z, a=0.6)
+
+    if LevelConfig.dynamic_stages:
+        if not Fever.has_active:
+            return
+
+        l = Fever.min_l
+        r = Fever.max_r
+
+        a_left = 0.6 * Fever.alpha_l
+        a_right = 0.6 * Fever.alpha_r
+
+        thickness = 0.5
+
+        layout1 = layout_dynamic_fever_side(l - thickness, l, percentage)
+        layout2 = layout_dynamic_fever_side(r, r + thickness, percentage)
+
+        if a_left > 0:
+            ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, z, a=a_left)
+        if a_right > 0:
+            ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, z, a=a_right)
+    else:
+        t = lerp(LANE_B, LANE_T, percentage)
+        layout1 = layout_fever_gauge_left(t)
+        layout2 = layout_fever_gauge_right(t)
+        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, z, a=0.6)
+        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, z, a=0.6)
 
 
 def spawn_fever_start_particle(percentage: float):
@@ -97,21 +173,30 @@ def spawn_fever_start_particle(percentage: float):
         return
     if percentage < 0.78:
         return
+    if LevelConfig.dynamic_stages:
+        l = 0
+        r = 0
+        if Fever.has_active:
+            l = Fever.min_l
+            r = Fever.max_r
+    else:
+        l = -6
+        r = 6
     if percentage < 0.9:
         layout_text = layout_fever_text()
-        layout_lane1 = layout_lane_fever(-6, 1)
-        layout_lane2 = layout_lane_fever(6, 1)
+        layout_lane1 = layout_lane_fever(l, 1)
+        layout_lane2 = layout_lane_fever(r, 1)
         ActiveParticles.fever_start_text.spawn(layout_text, 1, False)
         if Options.fever_effect == 0:
             ActiveParticles.fever_start_lane.spawn(layout_lane1, 1, False)
             ActiveParticles.fever_start_lane.spawn(layout_lane2, 1, False)
     else:
         layout_text = layout_fever_text()
-        layout_lane1 = layout_lane_fever(-6, 1)
-        layout_lane2 = layout_lane_fever(6, 1)
+        layout_lane1 = layout_lane_fever(l, 1)
+        layout_lane2 = layout_lane_fever(r, 1)
         mid = (get_perspective_y(1) + get_perspective_y(-1)) / 2
-        layout_effect1 = perspective_rect(l=-6 - 0.5, r=-6 + 0.5, t=mid - 0.050075, b=mid + 0.050075)
-        layout_effect2 = perspective_rect(l=6 - 0.5, r=6 + 0.5, t=mid - 0.050075, b=mid + 0.050075)
+        layout_effect1 = perspective_rect(l=l - 0.5, r=l + 0.5, t=mid - 0.050075, b=mid + 0.050075)
+        layout_effect2 = perspective_rect(l=r - 0.5, r=r + 0.5, t=mid - 0.050075, b=mid + 0.050075)
         ActiveParticles.super_fever_start_text.spawn(layout_text, 1, False)
         if Options.fever_effect == 0:
             ActiveParticles.super_fever_start_lane.spawn(layout_lane1, 1, False)
@@ -127,9 +212,18 @@ def spawn_fever_chance_particle():
         return
     if Options.fever_effect == 2:
         return
+    if LevelConfig.dynamic_stages:
+        l = 0
+        r = 0
+        if Fever.has_active:
+            l = Fever.min_l - 0.5
+            r = Fever.max_r + 0.5
+    else:
+        l = -6.5
+        r = 6.5
     layout_text = layout_fever_text()
-    layout_lane1 = layout_lane_fever(-6, 0.5)
-    layout_lane2 = layout_lane_fever(6, 0.5)
+    layout_lane1 = layout_lane_fever(l, 0.5)
+    layout_lane2 = layout_lane_fever(r, 0.5)
     ActiveParticles.fever_chance_text.spawn(layout_text, 1, False)
     if Options.fever_effect == 0:
         ActiveParticles.fever_chance_lane.spawn(layout_lane1, 1, False)
@@ -235,11 +329,20 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode
         ActiveSkin.skill_value.get_sprite(effect).draw(layout, z2, final_anim)
 
 
-def draw_judgment_effect(time):
+def draw_judgment_effect(time: float, l: float = -6, r: float = 6, stage_alpha: float = 1.0, y_offset: float = 0.0):
     enter_progress = unlerp_clamped(0, 0.25, time)
     exit_progress = unlerp_clamped(5.75, 6, time)
 
     anim = enter_progress - exit_progress
-    layout = layout_skill_judgment_line()
+    layout = layout_skill_judgment_line(l, r, y_offset)
     z = get_z(LAYER_JUDGMENT_SKILL)
-    ActiveSkin.skill_judgment_line.draw(layout, z=z, a=anim)
+    ActiveSkin.skill_judgment_line.draw(layout, z=z, a=anim * stage_alpha)
+
+
+def reset_fever_bounds():
+    Fever.min_l = 1e8
+    Fever.max_r = -1e8
+    Fever.has_active = False
+    Fever.y_offset = 0.0
+    Fever.alpha_l = 0.0
+    Fever.alpha_r = 0.0

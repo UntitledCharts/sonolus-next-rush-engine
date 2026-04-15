@@ -15,6 +15,7 @@ class LayerCache:
     damage: float
     fever_chance_cover: float
     fever_chance_side: float
+    fever_chance_text: float
     fever_chance_gauge: float
     skill_bar: float
     skill_etc: float
