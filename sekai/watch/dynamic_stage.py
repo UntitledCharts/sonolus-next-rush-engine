@@ -18,6 +18,7 @@ from sonolus.script.timing import beat_to_bpm, beat_to_time
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import BaseEvent, init_event_list
 from sekai.lib.ease import EaseType
+from sekai.lib.events import Fever, draw_judgment_effect
 from sekai.lib.layout import ZoomVerticalAlign, preempt_time
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options
@@ -32,6 +33,7 @@ from sekai.lib.stage import (
     get_stage_props,
     get_start_time,
 )
+from sekai.watch.events import SkillActive
 
 
 class WatchCameraChange(WatchArchetype, BaseEvent):
@@ -101,12 +103,40 @@ class WatchDynamicStage(WatchArchetype):
     @callback(order=-1)
     def update_sequential(self):
         self.props @= get_stage_props(self)
+        self.fever_boundary()
+
+    def fever_boundary(self):
+        if self.props.a > 0:
+            l = self.props.lane - self.props.width
+            r = self.props.lane + self.props.width
+
+            if l < Fever.min_l:
+                Fever.min_l = l
+                Fever.alpha_l = self.props.a
+            elif l == Fever.min_l and self.props.a > Fever.alpha_l:
+                Fever.alpha_l = self.props.a
+
+            if r > Fever.max_r:
+                Fever.max_r = r
+                Fever.alpha_r = self.props.a
+            elif r == Fever.max_r and self.props.a > Fever.alpha_r:
+                Fever.alpha_r = self.props.a
+
+            Fever.has_active = True
+            Fever.y_offset = self.props.y_offset
 
     def update_parallel(self):
         t = time()
         if t < self.draw_start_time or t > self.draw_end_time:
             return
         self.props.draw()
+
+        if SkillActive.judgment:
+            elapsed = t - SkillActive.start_time
+            if elapsed < 6:
+                l = self.props.lane - self.props.width
+                r = self.props.lane + self.props.width
+                draw_judgment_effect(elapsed, l, r, self.props.a, self.props.y_offset)
 
 
 class WatchStageMaskChange(WatchArchetype, BaseEvent):

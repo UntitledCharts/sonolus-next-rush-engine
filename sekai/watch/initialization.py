@@ -78,6 +78,7 @@ class WatchInitialization(WatchArchetype):
         LayerCache.damage = get_z(layer=LAYER_DAMAGE)
         LayerCache.fever_chance_cover = get_z(layer=LAYER_BACKGROUND_SIDE)
         LayerCache.fever_chance_side = get_z(layer=LAYER_STAGE)
+        LayerCache.fever_chance_text = get_z(layer=LAYER_STAGE, etc=1)
         LayerCache.fever_chance_gauge = get_z(layer=LAYER_GAUGE)
         LayerCache.skill_bar = get_z(layer=LAYER_SKILL_BAR)
         LayerCache.skill_etc = get_z(layer=LAYER_SKILL_ETC)

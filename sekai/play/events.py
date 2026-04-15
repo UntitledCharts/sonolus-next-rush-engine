@@ -27,6 +27,7 @@ from sekai.lib.events import (
     spawn_fever_chance_particle,
     spawn_fever_start_particle,
 )
+from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.skin import ActiveSkin
 from sekai.lib.streams import Streams
@@ -36,6 +37,7 @@ from sekai.play import custom_elements, initialization
 @level_memory
 class SkillActive:
     judgment: bool
+    start_time: float
 
 
 class Skill(PlayArchetype):
@@ -81,15 +83,17 @@ class Skill(PlayArchetype):
         if (current_time >= self.end_time_3 and self.effect != SkillMode.JUDGMENT) or current_time >= self.end_time_6:
             self.despawn = True
             return
-        if self.effect == SkillMode.JUDGMENT:
+        if self.effect == SkillMode.JUDGMENT and not LevelConfig.dynamic_stages:
             draw_judgment_effect(elapsed)
 
     def update_sequential(self):
         if time() >= self.end_time_6:
             SkillActive.judgment = False
             return
-        if not SkillActive.judgment and self.effect == SkillMode.JUDGMENT:
-            SkillActive.judgment = True
+        if self.effect == SkillMode.JUDGMENT:
+            if not SkillActive.judgment:
+                SkillActive.judgment = True
+            SkillActive.start_time = self.start_time
         if not self.check and custom_elements.LifeManager.life > 0 and self.effect == SkillMode.HEAL:
             custom_elements.LifeManager.life += 250
             custom_elements.LifeManager.life = clamp(
@@ -113,6 +117,7 @@ class FeverChance(PlayArchetype):
     z: float = entity_memory()
     z2: float = entity_memory()
     z3: float = entity_memory()
+    z4: float = entity_memory()
 
     @callback(order=-2)
     def preprocess(self):
@@ -125,6 +130,7 @@ class FeverChance(PlayArchetype):
         self.z = initialization.LayerCache.fever_chance_cover
         self.z2 = initialization.LayerCache.fever_chance_side
         self.z3 = initialization.LayerCache.fever_chance_gauge
+        self.z4 = initialization.LayerCache.fever_chance_gauge
 
     def spawn_order(self):
         return self.start_time
@@ -158,8 +164,8 @@ class FeverChance(PlayArchetype):
         if show_ui:
             if Options.fever_effect == 0:
                 draw_fever_side_cover(self.z, elapsed)
-            draw_fever_side_bar(self.z2, elapsed)
-            draw_fever_gauge(self.z3, self.percentage)
+            draw_fever_side_bar(self.z2, self.z3, elapsed)
+            draw_fever_gauge(self.z4, self.percentage)
 
     @callback(order=3)
     def update_sequential(self):

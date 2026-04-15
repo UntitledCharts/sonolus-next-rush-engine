@@ -3,6 +3,7 @@ from sonolus.script.runtime import is_replay, is_skip, time
 
 from sekai.lib import archetype_names
 from sekai.lib.custom_elements import LifeManager, ScoreIndicator
+from sekai.lib.events import reset_fever_bounds
 from sekai.lib.initialization import LastNote
 from sekai.lib.layout import refresh_layout
 from sekai.lib.options import Options
@@ -41,6 +42,7 @@ class WatchStaticStage(WatchArchetype):
     @callback(order=-2)
     def update_sequential(self):
         refresh_layout()
+        reset_fever_bounds()
         LifeManager.life = Streams.life[self.index][time()] if is_replay() else LifeManager.life
         if is_skip() and time() < ScoreIndicator.first:
             if Options.custom_score == 2:
