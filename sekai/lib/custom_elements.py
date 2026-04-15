@@ -15,7 +15,7 @@ from sekai.lib.layout import (
     UIMargin,
     layout_combo_label,
     transform_fixed_size,
-    transform_quad,
+    transform_static_quad,
 )
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SekaiVersion
@@ -298,7 +298,7 @@ class ComboNumberLayout(Record):
     layout2: LayoutConfig
 
     def layout_combo_number(self, l: float, r: float, t: float, b: float) -> Quad:
-        return transform_quad(
+        return transform_static_quad(
             Quad(
                 bl=Vec2(l, b),
                 br=Vec2(r, b),
