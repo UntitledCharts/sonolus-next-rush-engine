@@ -31,9 +31,6 @@ from sekai.play import custom_elements, input_manager, note, static_stage
 from sekai.play.common import init_play_common
 from sekai.play.dynamic_stage import CameraChange
 from sekai.play.events import Fever, Skill
-from sekai.play.input_manager import InputManager
-from sekai.play.note import NOTE_ARCHETYPES
-from sekai.play.static_stage import StaticStage
 
 
 class Initialization(PlayArchetype):
