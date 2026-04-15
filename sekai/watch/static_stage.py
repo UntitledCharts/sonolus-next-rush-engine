@@ -2,10 +2,9 @@ from sonolus.script.archetype import WatchArchetype, callback, entity_memory
 from sonolus.script.runtime import is_replay, is_skip, time
 
 from sekai.lib import archetype_names
-from sekai.lib.custom_elements import LifeManager
-from sekai.lib.layout import refresh_layout
 from sekai.lib.custom_elements import LifeManager, ScoreIndicator
 from sekai.lib.initialization import LastNote
+from sekai.lib.layout import refresh_layout
 from sekai.lib.options import Options
 from sekai.lib.stage import draw_stage_and_accessories, init_stage_z_layers, play_lane_particle
 from sekai.lib.streams import Streams
@@ -78,6 +77,7 @@ class WatchStaticStage(WatchArchetype):
         )
         if LifeManager.life == 0 and self.dead_time != -2:
             self.dead_time = time()
+
 
 class WatchScheduledLaneEffect(WatchArchetype):
     name = archetype_names.SCHEDULED_LANE_EFFECT

@@ -666,7 +666,7 @@ class ComboLabelSpriteSet(Record):
         return self.normal.is_available
 
 
-class JudgmentSpriteSet(Record):
+class JudgmentUiSpriteSet(Record):
     perfect: Sprite
     great: Sprite
     good: Sprite
@@ -1377,7 +1377,7 @@ class ActiveSkin:
     fever_chance_line: Sprite
     fever_start_line: Sprite
 
-    judgment: JudgmentSpriteSet
+    judgment: JudgmentUiSpriteSet
     combo_number: ComboNumberSpriteSet
     combo_label: ComboLabelSpriteSet
     accuracy_warning: AccuracySpriteSet
@@ -1916,7 +1916,7 @@ def init_skin():
     ActiveSkin.skill_line = BaseSkin.skill_line
     ActiveSkin.fever_chance_line = BaseSkin.fever_chance_line
     ActiveSkin.fever_start_line = BaseSkin.fever_start_line
-    ActiveSkin.judgment = JudgmentSpriteSet(
+    ActiveSkin.judgment = JudgmentUiSpriteSet(
         perfect=BaseSkin.perfect,
         great=BaseSkin.great,
         good=BaseSkin.good,

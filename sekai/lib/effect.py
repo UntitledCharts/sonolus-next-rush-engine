@@ -28,6 +28,7 @@ class Effects:
 
     skill: Effect = effect("Sekai Skill")
 
+
 SFX_DISTANCE = 0.0167
 
 
