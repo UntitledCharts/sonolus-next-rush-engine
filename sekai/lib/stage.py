@@ -1100,7 +1100,7 @@ def get_score_rank(score):
 
 
 def play_lane_hit_effects(lane: float, sfx: bool = True):
-    if sfx:
+    if sfx or not Options.prevent_empty_lane_sfx:
         play_lane_sfx(lane)
     play_lane_particle(lane)
 
