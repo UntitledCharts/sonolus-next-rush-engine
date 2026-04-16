@@ -121,6 +121,9 @@ class StageProps(Record):
     y_offset: float
 
     def draw(self):
+        ui_alpha = 1.0
+        if Options.ui_intro and time() < -1.0:
+            ui_alpha = unlerp_clamped(-2.0, -1.0, time())
         draw_dynamic_stage(
             lane=self.lane,
             width=self.width,
@@ -134,6 +137,7 @@ class StageProps(Record):
             lane_alpha=self.lane_alpha,
             judge_line_alpha=self.judge_line_alpha,
             y_offset=self.y_offset,
+            alpha=ui_alpha,
         )
 
 
@@ -571,6 +575,7 @@ def draw_dynamic_stage(
             lane_alpha,
             judge_line_alpha,
             y_offset,
+            alpha,
         )
         return
 
@@ -748,7 +753,7 @@ def draw_dynamic_stage(
         sprites.judgment_gradient.draw(layout, z=z, a=a)
 
     if lane_alpha > 0:
-        la = a * lane_alpha * Options.lane_alpha
+        la = a * lane_alpha * Options.lane_alpha * alpha
         ActiveSkin.lane_background.draw(layout_lane_by_edges(l, r), z=z_bg0, a=la)
 
         p_left = left_border_style.progress
@@ -774,7 +779,7 @@ def draw_dynamic_stage(
             if p_div > 0:
                 draw_dividers(division.end.size, division.end.parity, pivot_lane, z_lane1, la * p_div)
 
-    ja = a * judge_line_alpha
+    ja = a * judge_line_alpha * alpha
     bg_layout = perspective_rect(l, r, 1 - nh, 1 + nh, travel)
     if sprites_same:
         sprites_a.judgment_background.draw(bg_layout, z=z_bg1_a, a=ja)
