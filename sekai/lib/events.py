@@ -8,6 +8,7 @@ from sekai.lib.layout import (
     LANE_B,
     LANE_T,
     DynamicLayout,
+    Layout,
     aspect_ratio,
     get_perspective_y,
     layout_dynamic_fever_side,
@@ -101,17 +102,23 @@ def draw_fever_side_bar(z: float, z_t: float, time: float):
         fever_text_t = lerp(LANE_B, LANE_T, 0.78)
         super_fever_text_t = lerp(LANE_B, LANE_T, 0.90)
 
-        point1 = perspective_rect(l=l - 1, r=l, t=fever_text_t - 0.002, b=fever_text_t + 0.002)
-        point2 = perspective_rect(l=l - 1, r=l, t=super_fever_text_t - 0.001, b=super_fever_text_t + 0.001)
+        zoom = DynamicLayout.w_scale / Layout.w_scale
+
+        p1_h = 0.002 * zoom
+        p2_h = 0.001 * zoom
+
+        point1 = perspective_rect(l=l - 1, r=l, t=fever_text_t - p1_h, b=fever_text_t + p1_h)
+        point2 = perspective_rect(l=l - 1, r=l, t=super_fever_text_t - p2_h, b=super_fever_text_t + p2_h)
 
         fever_l = (r - 0.6) * fever_text_t
         super_fever_l = (r - 0.7) * super_fever_text_t
 
-        fever_text_layout = transform_quad(
-            Rect(l=fever_l, r=fever_l + 4.5, t=fever_text_t - 0.07, b=fever_text_t + 0.07)
-        )
+        f_h = 0.07 * zoom
+        sf_h = 0.053 * zoom
+
+        fever_text_layout = transform_quad(Rect(l=fever_l, r=fever_l + 4.5, t=fever_text_t - f_h, b=fever_text_t + f_h))
         super_fever_text_layout = transform_quad(
-            Rect(l=super_fever_l, r=super_fever_l + 2.94, t=super_fever_text_t - 0.053, b=super_fever_text_t + 0.053)
+            Rect(l=super_fever_l, r=super_fever_l + 2.94, t=super_fever_text_t - sf_h, b=super_fever_text_t + sf_h)
         )
 
         if a_left > 0:
