@@ -25,6 +25,7 @@ from sekai.play.dynamic_stage import (
     StagePivotChange,
     StageStyleChange,
 )
+from sekai.play.events import FeverChance, FeverStart, Skill
 from sekai.play.initialization import Initialization
 from sekai.play.note import NOTE_ARCHETYPES, BaseNote
 from sekai.play.sim_line import SimLine
@@ -165,7 +166,35 @@ class LevelSlide:
     notes: list[LevelNote] = field(default_factory=list)
 
 
-type LevelEntities = LevelBpmChange | LevelTimescaleGroup | LevelNote | LevelSlide | LevelStage | LevelCameraChange
+@dataclass
+class LevelFeverChance:
+    beat: float
+    force: bool = False
+
+
+@dataclass
+class LevelFeverStart:
+    beat: float
+
+
+@dataclass
+class LevelSkill:
+    beat: float
+    effect: int
+    level: int = 1
+
+
+type LevelEntities = (
+    LevelBpmChange
+    | LevelTimescaleGroup
+    | LevelNote
+    | LevelSlide
+    | LevelStage
+    | LevelCameraChange
+    | LevelFeverChance
+    | LevelFeverStart
+    | LevelSkill
+)
 
 
 def _note_archetype_for(kind: NoteKind, is_fake: bool) -> type[PlayArchetype]:
@@ -187,6 +216,7 @@ def build_level(
     level_camera_changes: list[LevelCameraChange] = []
     top_notes: list[LevelNote] = []
     slides: list[LevelSlide] = []
+    event_entities: list[PlayArchetype] = []
 
     for entity in entities:
         if isinstance(entity, LevelBpmChange):
@@ -201,7 +231,15 @@ def build_level(
             top_notes.append(entity)
         elif isinstance(entity, LevelSlide):
             slides.append(entity)
-        else:
+        elif isinstance(entity, LevelFeverChance):
+            event_entities.append(FeverChance(beat=entity.beat, force=entity.force))
+        elif isinstance(entity, LevelFeverStart):
+            event_entities.append(FeverStart(beat=entity.beat))
+        elif isinstance(entity, LevelSkill):
+            event_entities.append(Skill(beat=entity.beat, effect=entity.effect, level=entity.level))
+        elif not isinstance(
+            entity, (LevelBpmChange, LevelTimescaleGroup, LevelStage, LevelZoomChange, LevelNote, LevelSlide)
+        ):
             raise TypeError(f"Unsupported level entity: {type(entity).__name__}")
 
     out_entities: list[PlayArchetype] = []
@@ -326,6 +364,8 @@ def build_level(
         note.is_attached = True
 
     out_entities.extend(BpmChange(beat=level_bpm.beat, bpm=level_bpm.bpm) for level_bpm in bpm_changes)
+
+    out_entities.extend(event_entities)
 
     _emit_sim_lines(note_entities, out_entities)
 
