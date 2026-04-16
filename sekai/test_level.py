@@ -1,7 +1,10 @@
 from sekai.level_utils import (
     LevelBpmChange,
     LevelCameraChange,
+    LevelFeverChance,
+    LevelFeverStart,
     LevelNote,
+    LevelSkill,
     LevelSlide,
     LevelStage,
     LevelStageMaskChange,
@@ -240,6 +243,10 @@ guide_slide.notes = [
     for i, beat in enumerate(regular_beats)
 ]
 
+fever_chance = LevelFeverChance(beat=1.0, force=True)
+fever_start = LevelFeverStart(beat=100)
+test_skill = LevelSkill(beat=1.0, effect=2)
+
 
 # A separate stage on the right hosting a flick on every beat, to exercise flick rendering
 # (bodies + arrows) under the tilt sweep. Its mask (lanes 4..6) sits just past stage_b's pulled-in
@@ -296,6 +303,9 @@ entities = [
     *camera_changes,
     slide,
     guide_slide,
+    fever_chance,
+    fever_start,
+    test_skill,
     *attached_notes,
     *right_flicks,
 ]
