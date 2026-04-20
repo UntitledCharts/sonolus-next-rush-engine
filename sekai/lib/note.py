@@ -796,12 +796,12 @@ def get_note_effect(kind: NoteEffectKind, judgment: Judgment):
             if judgment != Judgment.MISS:
                 result @= first_available_effect(Effects.critical_tap, Effects.normal_perfect)
             else:
-                result @= EMPTY_EFFECT
+                result @= first_available_effect(Effects.critical_tap, Effects.normal_perfect)
         case NoteEffectKind.CRIT_FLICK:
             if judgment != Judgment.MISS:
                 result @= first_available_effect(Effects.critical_flick, Effects.flick_perfect)
             else:
-                result @= EMPTY_EFFECT
+                result @= first_available_effect(Effects.critical_flick, Effects.flick_perfect)
         case NoteEffectKind.CRIT_TRACE:
             if judgment != Judgment.MISS:
                 result @= first_available_effect(Effects.critical_trace, Effects.normal_perfect)
