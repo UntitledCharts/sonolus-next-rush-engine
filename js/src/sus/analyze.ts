@@ -13,6 +13,7 @@ type BarLengthObject = {
 type RawObject = {
     tick: number
     value: string
+    speedRatio?: number
 }
 
 export type TimeScaleChangeObject = {
@@ -93,6 +94,27 @@ export const analyze = (sus: string): Score => {
             timeScaleChanges[timeScaleIndex].push(...toTimeScaleChanges(line, toTick))
         }
     }
+
+    const customSpeedGroups = new Map<string, number>()
+    const getCustomGroup = (baseGroup: number, speedRatio: number) => {
+        const key = `${baseGroup}_${speedRatio}`
+        if (customSpeedGroups.has(key)) return customSpeedGroups.get(key)!
+        const newIndex = timeScaleChanges.length
+        customSpeedGroups.set(key, newIndex)
+        const baseChanges = timeScaleChanges[baseGroup] || []
+        let scaledChanges: TimeScaleChangeObject[] = []
+        if (baseChanges.length === 0) {
+            scaledChanges = [{ tick: 0, timeScale: speedRatio }]
+        } else {
+            scaledChanges = baseChanges.map(change => ({
+                tick: change.tick,
+                timeScale: change.timeScale * speedRatio
+            }))
+        }
+        timeScaleChanges.push(scaledChanges)
+        return newIndex
+    }
+
     lines.forEach((line, index) => {
         const [header, data] = line
         const measureOffset = measureChanges.find(([changeIndex]) => changeIndex <= index)?.[1] ?? 0
@@ -124,7 +146,7 @@ export const analyze = (sus: string): Score => {
 
         // Tap Notes
         if (header.length === 5 && header[3] === '1') {
-            tapNotes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick))
+            tapNotes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick, getCustomGroup))
             return
         }
 
@@ -134,11 +156,11 @@ export const analyze = (sus: string): Score => {
             const stream = streams.get(key)
 
             if (stream) {
-                stream.notes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick))
+                stream.notes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick, getCustomGroup))
             } else {
                 streams.set(key, {
                     type: +header[3],
-                    notes: toNotes(line, measureOffset, timeScaleGroup, toTick),
+                    notes: toNotes(line, measureOffset, timeScaleGroup, toTick, getCustomGroup),
                 })
             }
             return
@@ -146,7 +168,7 @@ export const analyze = (sus: string): Score => {
 
         // Directional Notes
         if (header.length === 5 && header[3] === '5') {
-            directionalNotes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick))
+            directionalNotes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick, getCustomGroup))
             return
         }
     })
@@ -305,12 +327,22 @@ const toTimeScaleChanges = ([, data]: Line, toTick: ToTick) => {
         .sort((a, b) => a.tick - b.tick)
 }
 
-const toNotes = (line: Line, measureOffset: number, timeScaleGroup: number, toTick: ToTick) => {
+const toNotes = (
+    line: Line,
+    measureOffset: number,
+    baseTimeScaleGroup: number,
+    toTick: ToTick,
+    getCustomGroup: (baseGroup: number, speedRatio: number) => number // 콜백 추가
+) => {
     const [header] = line
     const lane = parseInt(header[4], 36)
 
-    return toRaws(line, measureOffset, toTick).map(({ tick, value }) => {
+    return toRaws(line, measureOffset, toTick).map(({ tick, value, speedRatio }) => {
         const width = parseInt(value[1], 36)
+
+        const timeScaleGroup = speedRatio !== undefined
+            ? getCustomGroup(baseTimeScaleGroup, speedRatio)
+            : baseTimeScaleGroup
 
         return {
             tick,
@@ -345,15 +377,22 @@ const toSlides = (stream: SlideObject) => {
     return slides
 }
 
-const toRaws = ([header, data]: Line, measureOffset: number, toTick: ToTick) => {
+const toRaws = ([header, data]: Line, measureOffset: number, toTick: ToTick): RawObject[] => {
     const measure = +header.substring(0, 3) + measureOffset
-    return (data.match(/.{2}/g) ?? [])
-        .map(
-            (value, i, values) =>
-                value !== '00' && {
-                    tick: toTick(measure, i, values.length),
-                    value,
-                },
-        )
-        .filter((object): object is RawObject => !!object)
+    const matches = [...data.matchAll(/([0-9a-zA-Z]{2})(?:,([-+]?\d*\.?\d+))?/g)]
+    return matches
+        .map((match, i, values): RawObject | null => {
+            const value = match[1]
+            if (value === '00') return null
+            const speedRatio = match[2] !== undefined ? parseFloat(match[2]) : undefined
+            const rawObject: RawObject = {
+                tick: toTick(measure, i, values.length),
+                value,
+            }
+            if (speedRatio !== undefined) {
+                rawObject.speedRatio = speedRatio
+            }
+            return rawObject
+        })
+        .filter((object): object is RawObject => object !== null)
 }
