@@ -76,8 +76,6 @@ def update_input_state():
             InputState.last_started_touch_id = touch.id
             InputState.last_started_touch_disallowed = False
 
-            InputState.last_started_touch_id = touch.id
-
         if touch.id in old_disallowed_empty_touches:
             disallow_empty(touch)
 
