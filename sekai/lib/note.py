@@ -550,24 +550,20 @@ def draw_note_body(
     z = get_z(layer, time=target_time, lane=lane, etc=etc)
     match sprites.render_type:
         case BodyRenderType.NORMAL:
-            left_layout, middle_layout, right_layout = layout_regular_note_body(
-                lane, size, travel, lane - size < -6 or lane + size > 6
-            )
+            left_layout, middle_layout, right_layout = layout_regular_note_body(lane, size, travel)
             sprites.left.draw(left_layout, z=z, a=a)
             sprites.middle.draw(middle_layout, z=z, a=a)
             sprites.right.draw(right_layout, z=z, a=a)
         case BodyRenderType.SLIM:
-            left_layout, middle_layout, right_layout = layout_slim_note_body(
-                lane, size, travel, lane - size < -6 or lane + size > 6
-            )
+            left_layout, middle_layout, right_layout = layout_slim_note_body(lane, size, travel)
             sprites.left.draw(left_layout, z=z, a=a)
             sprites.middle.draw(middle_layout, z=z, a=a)
             sprites.right.draw(right_layout, z=z, a=a)
         case BodyRenderType.NORMAL_FALLBACK:
-            layout = layout_regular_note_body_fallback(lane, size, travel, lane - size < -6 or lane + size > 6)
+            layout = layout_regular_note_body_fallback(lane, size, travel)
             sprites.middle.draw(layout, z=z, a=a)
         case BodyRenderType.SLIM_FALLBACK:
-            layout = layout_slim_note_body_fallback(lane, size, travel, lane - size < -6 or lane + size > 6)
+            layout = layout_slim_note_body_fallback(lane, size, travel)
             sprites.middle.draw(layout, z=z, a=a)
 
 

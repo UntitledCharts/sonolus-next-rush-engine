@@ -1057,7 +1057,7 @@ def layout_note_body_by_edges(l: float, r: float, h: float, travel: float):
 
 
 def layout_note_body_slices_by_edges(
-    l: float, r: float, h: float, edge_w: float, travel: float, not_sekai_p: bool = False
+    l: float, r: float, h: float, edge_w: float, travel: float
 ) -> tuple[Quad, Quad, Quad]:
     m = (l + r) / 2
     if r < l:
@@ -1072,20 +1072,17 @@ def layout_note_body_slices_by_edges(
     )
 
 
-def layout_regular_note_body(
-    lane: float, size: float, travel: float, not_sekai_p: bool = False
-) -> tuple[Quad, Quad, Quad]:
+def layout_regular_note_body(lane: float, size: float, travel: float) -> tuple[Quad, Quad, Quad]:
     return layout_note_body_slices_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
         h=DynamicLayout.note_h,
         edge_w=NOTE_EDGE_W,
         travel=travel,
-        not_sekai_p=not_sekai_p,
     )
 
 
-def layout_regular_note_body_fallback(lane: float, size: float, travel: float, not_sekai_p: bool = False) -> Quad:
+def layout_regular_note_body_fallback(lane: float, size: float, travel: float) -> Quad:
     return layout_note_body_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
@@ -1094,20 +1091,17 @@ def layout_regular_note_body_fallback(lane: float, size: float, travel: float, n
     )
 
 
-def layout_slim_note_body(
-    lane: float, size: float, travel: float, not_sekai_p: bool = False
-) -> tuple[Quad, Quad, Quad]:
+def layout_slim_note_body(lane: float, size: float, travel: float) -> tuple[Quad, Quad, Quad]:
     return layout_note_body_slices_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
         h=DynamicLayout.note_h,  # Height is handled by the sprite rather than being changed here
         edge_w=NOTE_SLIM_EDGE_W,
         travel=travel,
-        not_sekai_p=not_sekai_p,
     )
 
 
-def layout_slim_note_body_fallback(lane: float, size: float, travel: float, not_sekai_p: bool = False) -> Quad:
+def layout_slim_note_body_fallback(lane: float, size: float, travel: float) -> Quad:
     return layout_note_body_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
