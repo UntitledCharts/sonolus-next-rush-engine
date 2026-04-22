@@ -6,7 +6,9 @@ export function isExtendedLevelData(data: unknown): data is LevelData {
         typeof data === 'object' &&
         data !== null &&
         'entities' in data &&
-        Array.isArray((data as any).entities) &&
-        (data as any).entities.some((e: any) => e.archetype === 'TimeScaleGroup')
+        Array.isArray((data as Record<string, unknown>).entities) &&
+        (data as { entities: Record<string, unknown>[] }).entities.some(
+            (e) => e.archetype === 'TimeScaleGroup',
+        )
     )
 }

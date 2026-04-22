@@ -1,4 +1,4 @@
-export type USC = {
+export interface USC {
     offset: number
     objects: USCObject[]
 }
@@ -13,7 +13,7 @@ export type USCObject =
     | USCSkill
     | USCFever
 
-type BaseUSCObject = {
+interface BaseUSCObject {
     beat: number
     timeScaleGroup: number
 }
@@ -23,7 +23,7 @@ export type USCBpmChange = Omit<BaseUSCObject, 'timeScaleGroup'> & {
     bpm: number
 }
 
-export type USCTimeScaleChange = {
+export interface USCTimeScaleChange {
     type: 'timeScaleGroup'
     changes: {
         beat: number
@@ -74,7 +74,7 @@ export type USCConnectionEndNote = BaseUSCNote & {
     judgeType: 'normal' | 'trace' | 'none'
 }
 
-export type USCSlideNote = {
+export interface USCSlideNote {
     type: 'slide' | 'guide'
     critical: boolean
     connections: [
@@ -109,7 +109,7 @@ export const USCFade = {
 
 export type USCFade = keyof typeof USCFade
 
-export type USCGuideNote = {
+export interface USCGuideNote {
     type: 'guide'
     color: USCColor
     fade: USCFade
@@ -127,7 +127,7 @@ export type SkillEffects = (typeof SkillEffects)[keyof typeof SkillEffects]
 
 type Level = 1 | 2 | 3 | 4
 
-type USCEvent = {
+interface USCEvent {
     beat: number
 }
 

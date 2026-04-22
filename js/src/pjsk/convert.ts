@@ -1,18 +1,18 @@
 import {
     USC,
-    USCObject,
-    USCSlideNote,
-    USCGuideNote,
-    USCSingleNote,
     USCBpmChange,
-    USCTimeScaleChange,
+    USCConnectionAttachNote,
+    USCConnectionEndNote,
     USCConnectionStartNote,
     USCConnectionTickNote,
-    USCConnectionEndNote,
-    USCConnectionAttachNote,
-    USCGuideMidpointNote,
-    USCSkill,
     USCFever,
+    USCGuideMidpointNote,
+    USCGuideNote,
+    USCObject,
+    USCSingleNote,
+    USCSkill,
+    USCSlideNote,
+    USCTimeScaleChange,
 } from '../usc/index.js'
 
 const FlickDirection = {
@@ -34,7 +34,7 @@ const TickType = {
     Skip: 2,
 } as const
 
-type PJSKNote = {
+interface PJSKNote {
     id: number
     type: string
     beat: number
@@ -54,7 +54,7 @@ type PJSKNote = {
     isEvent?: boolean
 }
 
-type PJSKData = {
+interface PJSKData {
     offset: number
     notes: PJSKNote[]
 }
@@ -219,7 +219,7 @@ export const pjskToUSC = (json: string | PJSKData): USC => {
                     objects.push({
                         type: 'slide',
                         critical: chain.some((n) => n.isGold),
-                        connections: connections as any,
+                        connections: connections as unknown as USCSlideNote['connections'],
                     } as USCSlideNote)
                 }
                 break

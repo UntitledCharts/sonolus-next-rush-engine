@@ -2,19 +2,19 @@ import { type LevelData, type LevelDataEntity } from '@sonolus/core'
 import {
     USC,
     USCBpmChange,
+    USCConnectionEndNote,
+    USCConnectionStartNote,
     USCDamageNote,
+    USCFever,
     USCGuideNote,
     USCObject,
     USCSingleNote,
+    USCSkill,
     USCSlideNote,
     USCTimeScaleChange,
-    USCConnectionEndNote,
-    USCConnectionStartNote,
-    USCSkill,
-    USCFever,
 } from './index.js'
 
-type IntermediateEntity = {
+interface IntermediateEntity {
     archetype: string
     data: Record<string, number | IntermediateEntity>
 }
@@ -73,7 +73,7 @@ export const uscToLevelData = (
     const createIntermediate = (
         archetype: string,
         data: Record<string, number | IntermediateEntity>,
-        isSimEligible: boolean = false,
+        isSimEligible = false,
     ): IntermediateEntity => {
         const intermediateEntity: IntermediateEntity = { archetype, data }
         allIntermediateEntities.push(intermediateEntity)
@@ -165,9 +165,9 @@ export const uscToLevelData = (
             )
 
             if (lastChangeIntermediate === null) {
-                groupIntermediateEntity.data['first'] = newChangeIntermediate
+                groupIntermediateEntity.data.first = newChangeIntermediate
             } else {
-                lastChangeIntermediate.data['next'] = newChangeIntermediate
+                lastChangeIntermediate.data.next = newChangeIntermediate
             }
             lastChangeIntermediate = newChangeIntermediate
         }
@@ -208,7 +208,7 @@ export const uscToLevelData = (
 
         const directionValue = SONOLUS_DIRECTIONS[sonolusDirName as SonolusDirectionName]
         if (directionValue !== undefined) {
-            data['direction'] = directionValue
+            data.direction = directionValue
         }
 
         createIntermediate(archetype, data, true)
@@ -323,7 +323,9 @@ export const uscToLevelData = (
             const sonolusEaseValue =
                 SONOLUS_CONNECTOR_EASES[
                     mapUscEaseToSonolusEase(
-                        'ease' in connectionNote ? (connectionNote as any).ease : undefined,
+                        'ease' in connectionNote
+                            ? (connectionNote as unknown as { ease?: UscEase }).ease
+                            : undefined,
                     )
                 ]
 
@@ -356,7 +358,7 @@ export const uscToLevelData = (
 
             const directionValue = SONOLUS_DIRECTIONS[sonolusDirName as SonolusDirectionName]
             if (directionValue !== undefined) {
-                data['direction'] = directionValue
+                data.direction = directionValue
             }
 
             const connectionIntermediate = createIntermediate(archetype, data, isSimLineEligible)
@@ -367,15 +369,15 @@ export const uscToLevelData = (
             if (currentSegmentHead === null) {
                 currentSegmentHead = connectionIntermediate
             }
-            connectionIntermediate.data['activeHead'] = headNoteIntermediate
+            connectionIntermediate.data.activeHead = headNoteIntermediate
 
             if (isAttached) {
                 queuedAttachIntermediates.push(connectionIntermediate)
             } else {
                 if (prevJointIntermediate !== null) {
                     for (const attachIntermediate of queuedAttachIntermediates) {
-                        attachIntermediate.data['attachHead'] = prevJointIntermediate
-                        attachIntermediate.data['attachTail'] = connectionIntermediate
+                        attachIntermediate.data.attachHead = prevJointIntermediate
+                        attachIntermediate.data.attachTail = connectionIntermediate
                     }
                     queuedAttachIntermediates.length = 0
 
@@ -387,8 +389,8 @@ export const uscToLevelData = (
                         createIntermediate('TransientHiddenTickNote', {
                             '#BEAT': nextHiddenTickBeat,
                             '#TIMESCALE_GROUP': timeScaleGroupIntermediates[0],
-                            lane: connectionIntermediate.data['lane'],
-                            size: connectionIntermediate.data['size'],
+                            lane: connectionIntermediate.data.lane,
+                            size: connectionIntermediate.data.size,
                             direction: SONOLUS_DIRECTIONS.up,
                             isAttached: 1,
                             connectorEase: SONOLUS_CONNECTOR_EASES.linear,
@@ -414,8 +416,8 @@ export const uscToLevelData = (
 
             if (isSeparatorValue === 1) {
                 for (const conn of pendingSegmentConnectors) {
-                    conn.data['segmentHead'] = currentSegmentHead
-                    conn.data['segmentTail'] = connectionIntermediate
+                    conn.data.segmentHead = currentSegmentHead
+                    conn.data.segmentTail = connectionIntermediate
                 }
                 pendingSegmentConnectors.length = 0
 
@@ -423,7 +425,7 @@ export const uscToLevelData = (
             }
 
             if (prevNoteIntermediate !== null) {
-                prevNoteIntermediate.data['next'] = connectionIntermediate
+                prevNoteIntermediate.data.next = connectionIntermediate
             }
             prevNoteIntermediate = connectionIntermediate
             stepIdx++
@@ -434,14 +436,14 @@ export const uscToLevelData = (
         }
         if (currentSegmentHead) {
             for (const conn of pendingSegmentConnectors) {
-                conn.data['segmentHead'] = currentSegmentHead
-                conn.data['segmentTail'] = prevJointIntermediate
+                conn.data.segmentHead = currentSegmentHead
+                conn.data.segmentTail = prevJointIntermediate
             }
         }
         if (slideNote.type === 'slide') {
             for (const connectorIntermediate of connectors) {
-                connectorIntermediate.data['activeHead'] = headNoteIntermediate
-                connectorIntermediate.data['activeTail'] = prevJointIntermediate
+                connectorIntermediate.data.activeHead = headNoteIntermediate
+                connectorIntermediate.data.activeTail = prevJointIntermediate
             }
         }
     }
@@ -495,7 +497,7 @@ export const uscToLevelData = (
                     tail: midpointIntermediate,
                 })
                 guideConnectors.push(connectorIntermediate)
-                prevMidpointIntermediate.data['next'] = midpointIntermediate
+                prevMidpointIntermediate.data.next = midpointIntermediate
             }
             prevMidpointIntermediate = midpointIntermediate
 
@@ -507,17 +509,21 @@ export const uscToLevelData = (
         }
 
         for (const connectorIntermediate of guideConnectors) {
-            connectorIntermediate.data['segmentHead'] = headMidpointIntermediate
-            connectorIntermediate.data['segmentTail'] = prevMidpointIntermediate
+            connectorIntermediate.data.segmentHead = headMidpointIntermediate
+            connectorIntermediate.data.segmentTail = prevMidpointIntermediate
         }
 
         if (!smoothGuideFade) {
             switch (guideNote.fade) {
                 case 'in':
-                    headMidpointIntermediate!.data['segmentAlpha'] = 0
+                    if (headMidpointIntermediate) {
+                        headMidpointIntermediate.data.segmentAlpha = 0
+                    }
                     break
                 case 'out':
-                    prevMidpointIntermediate!.data['segmentAlpha'] = 0
+                    if (prevMidpointIntermediate) {
+                        prevMidpointIntermediate.data.segmentAlpha = 0
+                    }
                     break
                 case 'none':
                     break
@@ -529,8 +535,8 @@ export const uscToLevelData = (
         const beatA = noteA.data['#BEAT'] as number
         const beatB = noteB.data['#BEAT'] as number
         if (beatA !== beatB) return beatA - beatB
-        const laneA = noteA.data['lane'] as number
-        const laneB = noteB.data['lane'] as number
+        const laneA = noteA.data.lane as number
+        const laneB = noteB.data.lane as number
         return laneA - laneB
     })
 
