@@ -27,8 +27,10 @@
   },
   "scripts": {
     "check-type": "tsc -p . --noEmit",
+    "check-lint": "biome lint",
     "biome": "biome check",
     "format": "biome format --write --files-max-size=100000000000",
+    "check": "biome check --write",
     "version": "node ./version.js",
     "build": "tsc -p . && node ./build.js"
   },
@@ -36,10 +38,9 @@
     "@sonolus/core": "~7.15.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "~2.4.10",
+    "@biomejs/biome": "~2.4.12",
     "@sonolus/sonolus.js": "~9.7.1",
-    "@types/node": "^25.5.0",
-    "typescript": "~6.0.2",
-    "typescript-eslint": "^8.58.0"
+    "@types/node": "^25.6.0",
+    "typescript": "~6.0.3"
   }
 }
