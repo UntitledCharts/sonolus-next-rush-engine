@@ -1,12 +1,12 @@
 import { type LevelData, type LevelDataEntity } from '@sonolus/core'
 
-export type ExtendedEntityDataField = {
+export interface ExtendedEntityDataField {
     name: string
     value?: number
     ref?: string
 }
 
-export type ExtendedEntityData = {
+export interface ExtendedEntityData {
     archetype: string
     name?: string
     data: ExtendedEntityDataField[]
@@ -121,7 +121,7 @@ class ExtData {
         entities.forEach((e, idx) => {
             const arch = e.archetype
             if (!this.byArch.has(arch)) this.byArch.set(arch, [])
-            this.byArch.get(arch)!.push({ idx, e })
+            this.byArch.get(arch)?.push({ idx, e })
 
             if (arch in noteTypeMapping) this.notes.push({ idx, e })
             if (arch in activeConnectorKindMapping) this.connectors.push({ idx, e })
@@ -159,7 +159,7 @@ class EntityBuilder {
     }
 }
 
-function getField(e: ExtendedEntityData, name: string): any {
+function getField(e: ExtendedEntityData, name: string): number | string | undefined {
     const field = e.data.find((x) => x.name === name)
     if (!field) return undefined
     if (field.value !== undefined) return field.value
@@ -167,7 +167,7 @@ function getField(e: ExtendedEntityData, name: string): any {
     return undefined
 }
 
-function getNum(e: ExtendedEntityData, name: string, def: number = 0): number {
+function getNum(e: ExtendedEntityData, name: string, def = 0): number {
     const val = getField(e, name)
     return typeof val === 'number' ? val : def
 }
@@ -238,7 +238,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         finalEntities.push(...changes)
     }
 
-    function getTSG(ref: any) {
+    function getTSG(ref: number | string | undefined) {
         if (typeof ref === 'number') return timescaleGroupsByIndex.get(ref)
         if (typeof ref === 'string') return timescaleGroupsByName.get(ref)
         return undefined
@@ -272,7 +272,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         if (e.name) notesByName.set(e.name, note)
     }
 
-    function getNote(ref: any) {
+    function getNote(ref: number | string | undefined) {
         if (typeof ref === 'number') return notesByIndex.get(ref)
         if (typeof ref === 'string') return notesByName.get(ref)
         return undefined
@@ -306,7 +306,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         if (e.name) connectorsByName.set(e.name, connector)
     }
 
-    function getConn(ref: any) {
+    function getConn(ref: number | string | undefined) {
         if (typeof ref === 'number') return connectorsByIndex.get(ref)
         if (typeof ref === 'string') return connectorsByName.get(ref)
         return undefined
@@ -322,9 +322,9 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const attachRef = getField(e, 'attach')
         if (attachRef !== undefined) {
             const attachConn = getConn(attachRef)
-            if (attachConn && attachConn.refs['head'] && attachConn.refs['tail']) {
-                note.set('attachHead', attachConn.refs['head'])
-                note.set('attachTail', attachConn.refs['tail'])
+            if (attachConn?.refs.head && attachConn.refs.tail) {
+                note.set('attachHead', attachConn.refs.head)
+                note.set('attachTail', attachConn.refs.tail)
                 note.set('isAttached', 1)
             }
         }
@@ -332,8 +332,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const slideRef = getField(e, 'slide')
         if (slideRef !== undefined) {
             const slideConn = getConn(slideRef)
-            if (slideConn && slideConn.refs['activeHead']) {
-                note.set('activeHead', slideConn.refs['activeHead'])
+            if (slideConn?.refs.activeHead) {
+                note.set('activeHead', slideConn.refs.activeHead)
             }
         }
     }
@@ -358,34 +358,34 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         size: number,
         tsg: EntityBuilder | undefined,
         pos: string,
-        segmentKind: number = -1,
-        segmentAlpha: number = -1,
-        connectorEase: number = -1,
+        segmentKind = -1,
+        segmentAlpha = -1,
+        connectorEase = -1,
     ) {
         const anchors = anchorsByBeat.get(beat) || []
         for (const anchor of anchors) {
             const positions = anchorPositions.get(anchor)
-            if (positions && positions.has(pos)) continue
+            if (positions?.has(pos)) continue
 
             if (
-                anchor.values['lane'] === lane &&
-                anchor.values['size'] === size &&
+                anchor.values.lane === lane &&
+                anchor.values.size === size &&
                 anchor.refs['#TIMESCALE_GROUP'] === tsg &&
                 (segmentKind === -1 ||
-                    anchor.values['segmentKind'] === segmentKind ||
-                    anchor.values['segmentKind'] === -1) &&
+                    anchor.values.segmentKind === segmentKind ||
+                    anchor.values.segmentKind === -1) &&
                 (segmentAlpha === -1 ||
-                    anchor.values['segmentAlpha'] === segmentAlpha ||
-                    anchor.values['segmentAlpha'] === -1) &&
+                    anchor.values.segmentAlpha === segmentAlpha ||
+                    anchor.values.segmentAlpha === -1) &&
                 (connectorEase === -1 ||
-                    anchor.values['connectorEase'] === connectorEase ||
-                    anchor.values['connectorEase'] === -1)
+                    anchor.values.connectorEase === connectorEase ||
+                    anchor.values.connectorEase === -1)
             ) {
-                if (segmentKind !== -1 && anchor.values['segmentKind'] === -1)
+                if (segmentKind !== -1 && anchor.values.segmentKind === -1)
                     anchor.set('segmentKind', segmentKind)
-                if (segmentAlpha !== -1 && anchor.values['segmentAlpha'] === -1)
+                if (segmentAlpha !== -1 && anchor.values.segmentAlpha === -1)
                     anchor.set('segmentAlpha', segmentAlpha)
-                if (connectorEase !== -1 && anchor.values['connectorEase'] === -1)
+                if (connectorEase !== -1 && anchor.values.connectorEase === -1)
                     anchor.set('connectorEase', connectorEase)
 
                 positions?.add(pos)
@@ -408,7 +408,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         finalEntities.push(newAnchor)
 
         if (!anchorsByBeat.has(beat)) anchorsByBeat.set(beat, [])
-        anchorsByBeat.get(beat)!.push(newAnchor)
+        anchorsByBeat.get(beat)?.push(newAnchor)
         anchorPositions.set(newAnchor, new Set([pos]))
 
         return newAnchor
@@ -462,10 +462,10 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
     for (const list of anchorsByBeat.values()) {
         for (const anchor of list) {
-            if (anchor.values['segmentKind'] === -1)
+            if (anchor.values.segmentKind === -1)
                 anchor.set('segmentKind', ConnectorKind.GUIDE_NEUTRAL)
-            if (anchor.values['segmentAlpha'] === -1) anchor.set('segmentAlpha', 1.0)
-            if (anchor.values['connectorEase'] === -1) anchor.set('connectorEase', EaseType.LINEAR)
+            if (anchor.values.segmentAlpha === -1) anchor.set('segmentAlpha', 1.0)
+            if (anchor.values.connectorEase === -1) anchor.set('connectorEase', EaseType.LINEAR)
         }
     }
 
@@ -479,8 +479,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
     for (const e of finalEntities) {
         if (e.archetype === 'Connector') {
-            const head = e.refs['head']
-            const tail = e.refs['tail']
+            const head = e.refs.head
+            const tail = e.refs.tail
             if (head && tail) {
                 head.set('next', tail)
             }
@@ -499,12 +499,12 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             data.push({ name: key, value: val })
         }
         for (const [key, refObj] of Object.entries(e.refs)) {
-            data.push({ name: key, ref: entityToName.get(refObj)! })
+            data.push({ name: key, ref: entityToName.get(refObj) ?? '' })
         }
 
         return {
             archetype: e.archetype,
-            name: entityToName.get(e)!,
+            name: entityToName.get(e) ?? '',
             data,
         }
     })

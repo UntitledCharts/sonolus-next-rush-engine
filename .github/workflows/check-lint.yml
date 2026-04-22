@@ -1,11 +1,10 @@
-name: Check Format
+name: Check Lint
 
 on:
     push:
         branches: ['master']
     pull_request:
         branches: ['master']
-        types: [opened, synchronize, reopened, ready_for_review]
 
 defaults:
     run:
@@ -13,7 +12,6 @@ defaults:
 
 jobs:
     check:
-        if: github.event.pull_request.draft == false
         runs-on: ubuntu-latest
 
         steps:
@@ -22,4 +20,4 @@ jobs:
               with:
                   node-version: 'lts/*'
             - run: npm ci
-            - run: npm run check-format
+            - run: npm run check-lint

@@ -1,3 +1,4 @@
+import { type LevelData, type LevelDataEntity } from '@sonolus/core'
 import {
     USC,
     USCColor,
@@ -10,10 +11,9 @@ import {
     USCSingleNote,
     USCSlideNote,
 } from '../usc/index.js'
-import { EaseType, analyze } from './analyze.js'
-import { type LevelData, type LevelDataEntity } from '@sonolus/core'
+import { analyze, EaseType } from './analyze.js'
 
-type IntermediateEntity = {
+interface IntermediateEntity {
     archetype: string
     data: Record<string, number | IntermediateEntity>
 }
@@ -113,13 +113,13 @@ export const mmwsToUSC = (mmws: Uint8Array): USC => {
         const key = hispeedChange.layer
         if (!tsGroups.has(key)) {
             if (!tsGroups.has(0)) tsGroups.set(0, [])
-            tsGroups.get(0)!.push({
+            tsGroups.get(0)?.push({
                 beat: hispeedChange.tick / TICKS_PER_BEAT,
                 timeScale: hispeedChange.speed,
             })
             continue
         }
-        tsGroups.get(key)!.push({
+        tsGroups.get(key)?.push({
             beat: hispeedChange.tick / TICKS_PER_BEAT,
             timeScale: hispeedChange.speed,
         })
@@ -184,7 +184,7 @@ export const mmwsToUSC = (mmws: Uint8Array): USC => {
                 fade: hold.fadeType === 0 ? 'out' : hold.fadeType === 1 ? 'none' : 'in',
                 color: Object.entries(USCColor).find(
                     ([, i]) => i === hold.guideColor,
-                )![0] as USCColor,
+                )?.[0] as USCColor,
                 midpoints: [hold.start, ...hold.steps, hold.end].map((step) => ({
                     beat: step.tick / TICKS_PER_BEAT,
                     lane: laneToUSCLane(step),
@@ -268,7 +268,7 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
     const createIntermediate = (
         archetype: string,
         data: Record<string, number | IntermediateEntity>,
-        isSimEligible: boolean = false,
+        isSimEligible = false,
     ): IntermediateEntity => {
         const intermediateEntity: IntermediateEntity = { archetype, data }
         allIntermediateEntities.push(intermediateEntity)
@@ -309,10 +309,10 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
     for (const hs of score.events.hispeedChanges) {
         if (!layerChanges.has(hs.layer)) {
             if (!layerChanges.has(0)) layerChanges.set(0, [])
-            layerChanges.get(0)!.push(hs)
+            layerChanges.get(0)?.push(hs)
             continue
         }
-        layerChanges.get(hs.layer)!.push(hs)
+        layerChanges.get(hs.layer)?.push(hs)
     }
 
     for (let i = 0; i < Math.max(1, score.numLayers); i++) {
@@ -345,15 +345,15 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
             }
 
             if (hs.hideNotes) {
-                data['hideNotes'] = 1
+                data.hideNotes = 1
             }
 
             const newChangeIntermediate = createIntermediate('#TIMESCALE_CHANGE', data)
 
             if (lastChangeIntermediate === null) {
-                groupIntermediate.data['first'] = newChangeIntermediate
+                groupIntermediate.data.first = newChangeIntermediate
             } else {
-                lastChangeIntermediate.data['next'] = newChangeIntermediate
+                lastChangeIntermediate.data.next = newChangeIntermediate
             }
             lastChangeIntermediate = newChangeIntermediate
         }
@@ -388,7 +388,7 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
         }
 
         if (tap.flickType !== 'none') {
-            data['direction'] = flickTypeToDirection(tap.flickType)
+            data.direction = flickTypeToDirection(tap.flickType)
         }
 
         createIntermediate(archetype, data, true)
@@ -465,7 +465,7 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
                         tail: midpointIntermediate,
                     })
                     guideConnectors.push(connectorIntermediate)
-                    prevMidpointIntermediate.data['next'] = midpointIntermediate
+                    prevMidpointIntermediate.data.next = midpointIntermediate
                 }
                 prevMidpointIntermediate = midpointIntermediate
                 stepIdx++
@@ -473,16 +473,16 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
 
             if (headMidpointIntermediate && prevMidpointIntermediate) {
                 for (const conn of guideConnectors) {
-                    conn.data['segmentHead'] = headMidpointIntermediate
-                    conn.data['segmentTail'] = prevMidpointIntermediate
-                    conn.data['activeHead'] = headMidpointIntermediate
-                    conn.data['activeTail'] = prevMidpointIntermediate
+                    conn.data.segmentHead = headMidpointIntermediate
+                    conn.data.segmentTail = prevMidpointIntermediate
+                    conn.data.activeHead = headMidpointIntermediate
+                    conn.data.activeTail = prevMidpointIntermediate
                 }
 
                 if (hold.fadeType === 2) {
-                    headMidpointIntermediate.data['segmentAlpha'] = 0
+                    headMidpointIntermediate.data.segmentAlpha = 0
                 } else if (hold.fadeType === 0) {
-                    prevMidpointIntermediate.data['segmentAlpha'] = 0
+                    prevMidpointIntermediate.data.segmentAlpha = 0
                 }
             }
         } else {
@@ -495,7 +495,7 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
             const connectors: IntermediateEntity[] = []
             const pendingSegmentConnectors: IntermediateEntity[] = []
 
-            type SlideEvent = {
+            interface SlideEvent {
                 tick: number
                 lane: number
                 width: number
@@ -632,9 +632,9 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
                 }
 
                 if (event.flick && event.flick !== 'none') {
-                    data['direction'] = flickTypeToDirection(event.flick)
+                    data.direction = flickTypeToDirection(event.flick)
                 } else {
-                    data['direction'] = 0
+                    data.direction = 0
                 }
 
                 const connectionIntermediate = createIntermediate(
@@ -649,15 +649,15 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
                 if (currentSegmentHead === null) {
                     currentSegmentHead = connectionIntermediate
                 }
-                connectionIntermediate.data['activeHead'] = headNoteIntermediate
+                connectionIntermediate.data.activeHead = headNoteIntermediate
 
                 if (isAttached) {
                     queuedAttachIntermediates.push(connectionIntermediate)
                 } else {
                     if (prevJointIntermediate !== null) {
                         for (const attachIntermediate of queuedAttachIntermediates) {
-                            attachIntermediate.data['attachHead'] = prevJointIntermediate
-                            attachIntermediate.data['attachTail'] = connectionIntermediate
+                            attachIntermediate.data.attachHead = prevJointIntermediate
+                            attachIntermediate.data.attachTail = connectionIntermediate
                         }
                         queuedAttachIntermediates.length = 0
 
@@ -668,8 +668,8 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
                             createIntermediate('TransientHiddenTickNote', {
                                 '#BEAT': nextHiddenTickBeat,
                                 '#TIMESCALE_GROUP': timeScaleGroupRef,
-                                lane: connectionIntermediate.data['lane'],
-                                size: connectionIntermediate.data['size'],
+                                lane: connectionIntermediate.data.lane,
+                                size: connectionIntermediate.data.size,
                                 direction: 0,
                                 isAttached: 1,
                                 connectorEase: SONOLUS_CONNECTOR_EASES.linear,
@@ -695,7 +695,7 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
                 }
 
                 if (prevNoteIntermediate !== null) {
-                    prevNoteIntermediate.data['next'] = connectionIntermediate
+                    prevNoteIntermediate.data.next = connectionIntermediate
                 }
                 prevNoteIntermediate = connectionIntermediate
             }
@@ -703,13 +703,13 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
             if (headNoteIntermediate && prevJointIntermediate) {
                 if (currentSegmentHead) {
                     for (const conn of pendingSegmentConnectors) {
-                        conn.data['segmentHead'] = currentSegmentHead
-                        conn.data['segmentTail'] = prevJointIntermediate
+                        conn.data.segmentHead = currentSegmentHead
+                        conn.data.segmentTail = prevJointIntermediate
                     }
                 }
                 for (const conn of connectors) {
-                    conn.data['activeHead'] = headNoteIntermediate
-                    conn.data['activeTail'] = prevJointIntermediate
+                    conn.data.activeHead = headNoteIntermediate
+                    conn.data.activeTail = prevJointIntermediate
                 }
             }
         }
@@ -719,8 +719,8 @@ export const ucmmwsToLevelData = (mmws: Uint8Array): LevelData => {
         const beatA = a.data['#BEAT'] as number
         const beatB = b.data['#BEAT'] as number
         if (Math.abs(beatA - beatB) > EPSILON) return beatA - beatB
-        const laneA = a.data['lane'] as number
-        const laneB = b.data['lane'] as number
+        const laneA = a.data.lane as number
+        const laneB = b.data.lane as number
         return laneA - laneB
     })
 

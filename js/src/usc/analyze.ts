@@ -6,6 +6,6 @@ export function isUSC(data: unknown): data is USC {
         typeof data === 'object' &&
         data !== null &&
         'objects' in data &&
-        Array.isArray((data as any).objects)
+        Array.isArray((data as Record<string, unknown>).objects)
     )
 }

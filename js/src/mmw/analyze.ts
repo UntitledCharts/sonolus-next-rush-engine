@@ -7,7 +7,7 @@ type StepType = (typeof StepType)[number]
 const EaseType = ['linear', 'easeIn', 'easeOut', 'easeInOut', 'easeOutIn'] as const
 export type EaseType = (typeof EaseType)[number]
 
-export type Score = {
+export interface Score {
     metadata: {
         title: string
         author: string

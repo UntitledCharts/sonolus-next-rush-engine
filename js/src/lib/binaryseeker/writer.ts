@@ -20,7 +20,7 @@ export class BinaryWriter {
      * @param initialSize - The initial size of the buffer. The buffer will grow automatically as needed, but this parameter can help reduce the number of resizing.
      * @returns A new BinaryWriter instance.
      */
-    constructor(initialSize: number = 256) {
+    constructor(initialSize = 256) {
         this.#data = new Uint8Array(initialSize)
         this.#view = new DataView(this.#data.buffer)
         this.#cursor = 0
