@@ -5,28 +5,28 @@ type TimeScaleGroupChange = [number, string]
 
 type Meta = Map<string, string[]>
 
-type BarLengthObject = {
+interface BarLengthObject {
     measure: number
     length: number
 }
 
-type RawObject = {
+interface RawObject {
     tick: number
     value: string
     speedRatio?: number
 }
 
-export type TimeScaleChangeObject = {
+export interface TimeScaleChangeObject {
     tick: number
     timeScale: number
 }
 
-export type BpmChangeObject = {
+export interface BpmChangeObject {
     tick: number
     bpm: number
 }
 
-export type NoteObject = {
+export interface NoteObject {
     tick: number
     lane: number
     width: number
@@ -34,12 +34,12 @@ export type NoteObject = {
     timeScaleGroup: number
 }
 
-export type SlideObject = {
+export interface SlideObject {
     type: number
     notes: NoteObject[]
 }
 
-export type Score = {
+export interface Score {
     offset: number
     ticksPerBeat: number
     timeScaleChanges: TimeScaleChangeObject[][]
@@ -98,7 +98,8 @@ export const analyze = (sus: string): Score => {
     const customSpeedGroups = new Map<string, number>()
     const getCustomGroup = (baseGroup: number, speedRatio: number) => {
         const key = `${baseGroup}_${speedRatio}`
-        if (customSpeedGroups.has(key)) return customSpeedGroups.get(key)!
+        const group = customSpeedGroups.get(key)
+        if (group !== undefined) return group
         const newIndex = timeScaleChanges.length
         customSpeedGroups.set(key, newIndex)
         const baseChanges = timeScaleChanges[baseGroup] || []
@@ -106,9 +107,9 @@ export const analyze = (sus: string): Score => {
         if (baseChanges.length === 0) {
             scaledChanges = [{ tick: 0, timeScale: speedRatio }]
         } else {
-            scaledChanges = baseChanges.map(change => ({
+            scaledChanges = baseChanges.map((change) => ({
                 tick: change.tick,
-                timeScale: change.timeScale * speedRatio
+                timeScale: change.timeScale * speedRatio,
             }))
         }
         timeScaleChanges.push(scaledChanges)
@@ -156,7 +157,9 @@ export const analyze = (sus: string): Score => {
             const stream = streams.get(key)
 
             if (stream) {
-                stream.notes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick, getCustomGroup))
+                stream.notes.push(
+                    ...toNotes(line, measureOffset, timeScaleGroup, toTick, getCustomGroup),
+                )
             } else {
                 streams.set(key, {
                     type: +header[3],
@@ -168,7 +171,9 @@ export const analyze = (sus: string): Score => {
 
         // Directional Notes
         if (header.length === 5 && header[3] === '5') {
-            directionalNotes.push(...toNotes(line, measureOffset, timeScaleGroup, toTick, getCustomGroup))
+            directionalNotes.push(
+                ...toNotes(line, measureOffset, timeScaleGroup, toTick, getCustomGroup),
+            )
             return
         }
     })
@@ -332,7 +337,7 @@ const toNotes = (
     measureOffset: number,
     baseTimeScaleGroup: number,
     toTick: ToTick,
-    getCustomGroup: (baseGroup: number, speedRatio: number) => number // 콜백 추가
+    getCustomGroup: (baseGroup: number, speedRatio: number) => number, // 콜백 추가
 ) => {
     const [header] = line
     const lane = parseInt(header[4], 36)
@@ -340,9 +345,10 @@ const toNotes = (
     return toRaws(line, measureOffset, toTick).map(({ tick, value, speedRatio }) => {
         const width = parseInt(value[1], 36)
 
-        const timeScaleGroup = speedRatio !== undefined
-            ? getCustomGroup(baseTimeScaleGroup, speedRatio)
-            : baseTimeScaleGroup
+        const timeScaleGroup =
+            speedRatio !== undefined
+                ? getCustomGroup(baseTimeScaleGroup, speedRatio)
+                : baseTimeScaleGroup
 
         return {
             tick,

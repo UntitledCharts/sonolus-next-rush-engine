@@ -8,7 +8,7 @@ import {
     USCObject,
     USCSlideNote,
 } from '../usc/index.js'
-import { NoteObject, Score, analyze } from './analyze.js'
+import { analyze, NoteObject, Score } from './analyze.js'
 
 /** Convert a SUS to a USC */
 export const susToUSC = (sus: string): USC => chsLikeToUSC(analyze(sus))
