@@ -1066,12 +1066,12 @@ def draw_score_bar(
 
         gauge_mask_layout = layout_score_gauge(gauge, ScoreGaugeType.MASK)
         ActiveSkin.score.gauge.mask.draw(gauge_mask_layout, z=z_layer_score_glow, a=alpha)
-        if LevelConfig.ui_version == SekaiVersion.v3 or rank != ScoreRankType.D:
-            score_rank_layout = layout_score_rank()
-            ActiveSkin.score.rank.get_sprite(rank).draw(score_rank_layout, z=z_layer_score_bar_rate, a=alpha)
     else:
         gauge_cover_layout = layout_score_gauge(score_type=ScoreGaugeType.NORMAL)
         ActiveSkin.score.gauge.cover.draw(gauge_cover_layout, z=z_layer_score, a=alpha)
+    if LevelConfig.ui_version == SekaiVersion.v3 or rank != ScoreRankType.D:
+        score_rank_layout = layout_score_rank()
+        ActiveSkin.score.rank.get_sprite(rank).draw(score_rank_layout, z=z_layer_score_bar_rate, a=alpha)
     if LevelConfig.ui_version == SekaiVersion.v3:
         score_rank_text_layout = layout_score_rank_text()
         ActiveSkin.score.rank_text.get_sprite(rank).draw(score_rank_text_layout, z=z_layer_score_bar_rate, a=alpha)
