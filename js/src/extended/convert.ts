@@ -186,8 +186,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
     const finalEntities: EntityBuilder[] = []
 
-    const defaultTsg = new EntityBuilder('#TIMESCALE_GROUP');
-    finalEntities.push(defaultTsg);
+    const defaultTsg = new EntityBuilder('#TIMESCALE_GROUP')
+    finalEntities.push(defaultTsg)
 
     const init = new EntityBuilder('Initialization')
     finalEntities.push(init)
