@@ -184,9 +184,10 @@ function resolveOriginal(
 export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | undefined => {
     const ext = new ExtData(data.entities)
 
-    if (ext.getByArch('TimeScaleGroup').length === 0) return undefined
-
     const finalEntities: EntityBuilder[] = []
+
+    const defaultTsg = new EntityBuilder('#TIMESCALE_GROUP');
+    finalEntities.push(defaultTsg);
 
     const init = new EntityBuilder('Initialization')
     finalEntities.push(init)
@@ -317,7 +318,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
         const tsgRef = getField(e, 'timeScaleGroup')
         const tsg = getTSG(tsgRef)
-        if (tsg) note.set('#TIMESCALE_GROUP', tsg)
+        note.set('#TIMESCALE_GROUP', tsg || defaultTsg)
 
         const attachRef = getField(e, 'attach')
         if (attachRef !== undefined) {
