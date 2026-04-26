@@ -290,7 +290,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         let segmentTail = getNote(endRef)
 
         if (!segmentTail) {
-            let currentTailRef = getField(e, 'tail')
+            const currentTailRef = getField(e, 'tail')
             let ultimateTailRef = currentTailRef
             const visited = new Set<string | number>()
 
