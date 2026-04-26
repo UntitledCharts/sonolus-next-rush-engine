@@ -238,7 +238,7 @@ def build_level(
         elif isinstance(entity, LevelSkill):
             event_entities.append(Skill(beat=entity.beat, effect=entity.effect, level=entity.level))
         elif not isinstance(
-            entity, (LevelBpmChange, LevelTimescaleGroup, LevelStage, LevelZoomChange, LevelNote, LevelSlide)
+            entity, (LevelBpmChange, LevelTimescaleGroup, LevelStage, LevelCameraChange, LevelNote, LevelSlide)
         ):
             raise TypeError(f"Unsupported level entity: {type(entity).__name__}")
 
