@@ -280,25 +280,13 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
     }
 
     for (const { idx, e } of ext.connectors) {
-        let headRef = getField(e, 'head')
         const startRef = getField(e, 'start')
-
-        const headOrig = resolveOriginal(ext, headRef)
-        const startOrig = resolveOriginal(ext, startRef)
-
-        if (headOrig && startOrig) {
-            const isHeadStart = headOrig.archetype.includes('StartNote')
-            const isStartStart = startOrig.archetype.includes('StartNote')
-
-            if (isHeadStart && isStartStart && headRef !== startRef) {
-                headRef = startRef
-            }
-        }
+        const headRef = getField(e, 'head')
 
         const head = getNote(headRef)
         const tail = getNote(getField(e, 'tail'))
 
-        const segmentHead = getNote(startRef) || head
+        const segmentHead = getNote(startRef)
 
         const endRef = getField(e, 'end')
         let segmentTail = getNote(endRef)
@@ -333,6 +321,9 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
         if (!head || !tail || !segmentHead || !segmentTail) continue
 
+        const kind = activeConnectorKindMapping[e.archetype]
+        const ease = easeTypeMapping[getNum(e, 'ease')] ?? EaseType.LINEAR
+
         const connector = new EntityBuilder('Connector')
         connector.set('head', head)
         connector.set('tail', tail)
@@ -341,12 +332,13 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         connector.set('activeHead', segmentHead)
         connector.set('activeTail', segmentTail)
 
-        head.set('connectorEase', easeTypeMapping[getNum(e, 'ease')] ?? EaseType.LINEAR)
+        head.set('connectorEase', ease)
 
-        const kind = activeConnectorKindMapping[e.archetype]
         head.set('segmentKind', kind)
         tail.set('segmentKind', kind)
         segmentHead.set('segmentKind', kind)
+        segmentHead.set('segmentAlpha', 1)
+        segmentTail.set('segmentAlpha', 1)
 
         finalEntities.push(connector)
         connectorsByIndex.set(idx, connector)
