@@ -280,10 +280,24 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
     }
 
     for (const { idx, e } of ext.connectors) {
-        const head = getNote(getField(e, 'head'))
+        let headRef = getField(e, 'head')
+        const startRef = getField(e, 'start')
+
+        const headOrig = resolveOriginal(ext, headRef)
+        const startOrig = resolveOriginal(ext, startRef)
+
+        if (headOrig && startOrig) {
+            const isHeadStart = headOrig.archetype.includes('StartNote')
+            const isStartStart = startOrig.archetype.includes('StartNote')
+
+            if (isHeadStart && isStartStart && headRef !== startRef) {
+                headRef = startRef
+            }
+        }
+
+        const head = getNote(headRef)
         const tail = getNote(getField(e, 'tail'))
 
-        const startRef = getField(e, 'start')
         const segmentHead = getNote(startRef) || head
 
         const endRef = getField(e, 'end')
