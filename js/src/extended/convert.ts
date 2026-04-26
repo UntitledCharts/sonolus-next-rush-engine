@@ -282,8 +282,40 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
     for (const { idx, e } of ext.connectors) {
         const head = getNote(getField(e, 'head'))
         const tail = getNote(getField(e, 'tail'))
-        const segmentHead = getNote(getField(e, 'start')) || head
-        const segmentTail = getNote(getField(e, 'end')) || tail
+
+        const startRef = getField(e, 'start')
+        const segmentHead = getNote(startRef) || head
+
+        const endRef = getField(e, 'end')
+        let segmentTail = getNote(endRef)
+
+        if (!segmentTail) {
+            let currentTailRef = getField(e, 'tail')
+            let ultimateTailRef = currentTailRef
+            const visited = new Set<string | number>()
+
+            while (ultimateTailRef !== undefined && !visited.has(ultimateTailRef)) {
+                visited.add(ultimateTailRef)
+
+                const nextConn = ext.connectors.find(
+                    (c) =>
+                        getField(c.e, 'head') === ultimateTailRef &&
+                        getField(c.e, 'start') === startRef,
+                )
+
+                if (nextConn) {
+                    ultimateTailRef = getField(nextConn.e, 'tail')
+                } else {
+                    break
+                }
+            }
+
+            segmentTail = getNote(ultimateTailRef)
+        }
+
+        if (!segmentTail) {
+            segmentTail = tail
+        }
 
         if (!head || !tail || !segmentHead || !segmentTail) continue
 
