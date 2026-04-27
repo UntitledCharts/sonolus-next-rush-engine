@@ -11,7 +11,7 @@ from sonolus.script.archetype import (
     shared_memory,
 )
 from sonolus.script.bucket import Judgment
-from sonolus.script.interval import Interval, lerp, remap_clamped, unlerp_clamped
+from sonolus.script.interval import lerp, remap_clamped, unlerp_clamped
 from sonolus.script.runtime import is_replay, is_skip, time
 from sonolus.script.timing import beat_to_time
 
@@ -278,7 +278,7 @@ class WatchBaseNote(WatchArchetype):
             leniency = get_leniency(self.kind)
             hitbox_l = self.lane - self.size
             hitbox_r = self.lane + self.size
-            window_start = self.target_time + self.judgment_window.good.start
+            """window_start = self.target_time + self.judgment_window.good.start
             window_end = self.target_time + self.judgment_window.good.end
 
             # Scan backward to cover connector positions from window start to this tick
@@ -348,7 +348,7 @@ class WatchBaseNote(WatchArchetype):
                     last_size = size
                     last_time = current.target_time
                     last_ease = current.connector_ease
-                current_ref @= current.next_ref
+                current_ref @= current.next_ref"""
             hitbox_l -= leniency
             hitbox_r += leniency
             self.hitbox_l = hitbox_l
