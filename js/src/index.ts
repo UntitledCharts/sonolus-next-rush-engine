@@ -8,8 +8,6 @@ import {
 import { isLevelData } from './LevelData/analyze.js'
 import { detectMMWSType } from './mmw/analyze.js'
 import { mmwsToUSC, ucmmwsToLevelData } from './mmw/convert.js'
-import { isPJSK } from './pjsk/analyze.js'
-import { pjskToUSC } from './pjsk/convert.js'
 import { susToUSC } from './sus/convert.js'
 import { isUSC } from './usc/analyze.js'
 import { uscToLevelData } from './usc/convert.js'
@@ -17,13 +15,12 @@ import { USC } from './usc/index.js'
 
 export * from './usc/index.js'
 export {
-    type ExtendedEntityData,
-    type ExtendedEntityDataField,
     extendedToLevelData,
     mmwsToUSC,
     susToUSC,
     ucmmwsToLevelData,
-    uscToLevelData,
+    uscToLevelData, type ExtendedEntityData,
+    type ExtendedEntityDataField
 }
 
 export const convertToLevelData = (
@@ -67,8 +64,6 @@ export const convertToLevelData = (
             if (isUSC(parsed)) {
                 usc = parsed
                 return uscToLevelData(usc, offset, false, false)
-            } else if (isPJSK(parsed)) {
-                usc = pjskToUSC(parsed)
             } else {
                 usc = susToUSC(input)
             }
@@ -86,29 +81,18 @@ export const convertToLevelData = (
 export const version = '0.0.0'
 
 export const databaseEngineItem = {
-    name: 'next-rush-plus',
+    name: 'next-rush',
     version: 13,
     title: {
-        en: 'Next RUSH+',
+        en: 'Next RUSH',
     },
     subtitle: {
-        en: 'Next RUSH+',
+        en: 'Next RUSH',
     },
     author: {
-        en: 'Next RUSH+',
+        en: 'Next RUSH',
     },
     description: {
-        en: [
-            "Next SEKAI's expansion engine",
-            `Version: ${version}`,
-            '',
-            'https://github.com/Next-SEKAI/sonolus-next-sekai-engine',
-        ].join('\n'),
-        ko: [
-            'Next SEKAI의 확장 엔진',
-            `버전: ${version}`,
-            '',
-            'https://github.com/Next-SEKAI/sonolus-next-sekai-engine',
-        ].join('\n'),
+        en: [`Version: ${version}`].join('\n'),
     },
 } as const satisfies Partial<DatabaseEngineItem>

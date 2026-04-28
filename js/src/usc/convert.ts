@@ -57,7 +57,7 @@ const SONOLUS_GUIDE_COLORS = {
 
 const EPSILON = 1e-6
 
-/** Convert a USC to a Level Data (Next Sekai) */
+/** Convert a USC to a Level Data */
 export const uscToLevelData = (
     usc: USC,
     offset = 0,

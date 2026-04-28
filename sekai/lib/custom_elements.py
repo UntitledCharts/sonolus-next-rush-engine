@@ -18,7 +18,7 @@ from sekai.lib.layout import (
     transform_static_quad,
 )
 from sekai.lib.level_config import LevelConfig
-from sekai.lib.options import Options, SekaiVersion
+from sekai.lib.options import Options, Version
 from sekai.lib.skin import (
     ActiveSkin,
 )
@@ -528,7 +528,7 @@ def draw_life_number(number: int, z: float, alpha: float = 1.0):
 
     bar_h_unscaled = (
         0.196 * ui.secondary_metric_config.scale
-        if LevelConfig.ui_version == SekaiVersion.v3
+        if LevelConfig.ui_version == Version.v3
         else 0.23 * ui.secondary_metric_config.scale
     )
     bar_h_current = bar_h_unscaled * scale_ratio
@@ -540,13 +540,13 @@ def draw_life_number(number: int, z: float, alpha: float = 1.0):
     w = 0
     digit_gap = 0
     match LevelConfig.ui_version:
-        case SekaiVersion.v3:
+        case Version.v3:
             margin_offset = 0.61
             y_offset = 0.04314
             h = 0.06141 * ui.secondary_metric_config.scale * scale_ratio
             w = h * 0.714
             digit_gap = w * -0.04
-        case SekaiVersion.v1:
+        case Version.v1:
             margin_offset = 0.5
             y_offset = 0.06314
             h = 0.08141 * ui.secondary_metric_config.scale * scale_ratio
@@ -598,7 +598,7 @@ def draw_score_bar_number(number: int, z: float, alpha: float = 1.0):
 
     bar_h_unscaled = (
         0.27 * ui.primary_metric_config.scale
-        if LevelConfig.ui_version == SekaiVersion.v3
+        if LevelConfig.ui_version == Version.v3
         else 0.32 * ui.primary_metric_config.scale
     )
     bar_h_current = bar_h_unscaled * scale_ratio
@@ -610,13 +610,13 @@ def draw_score_bar_number(number: int, z: float, alpha: float = 1.0):
     w = 0
     digit_gap = 0
     match LevelConfig.ui_version:
-        case SekaiVersion.v3:
+        case Version.v3:
             margin_offset = 1.02
             y_offset = -0.09
             h = 0.09141 * ui.primary_metric_config.scale * scale_ratio
             w = h * 0.705
             digit_gap = w * -0.04
-        case SekaiVersion.v1:
+        case Version.v1:
             margin_offset = 1.025
             y_offset = -0.07
             h = 0.14141 * ui.primary_metric_config.scale * scale_ratio
@@ -672,7 +672,7 @@ def draw_score_bar_raw_number(number: int, z: float, time: float, alpha: float =
 
     bar_h_unscaled = (
         0.27 * ui.primary_metric_config.scale
-        if LevelConfig.ui_version == SekaiVersion.v3
+        if LevelConfig.ui_version == Version.v3
         else 0.32 * ui.primary_metric_config.scale
     )
     bar_h_current = bar_h_unscaled * scale_ratio
@@ -684,13 +684,13 @@ def draw_score_bar_raw_number(number: int, z: float, time: float, alpha: float =
     w = 0
     digit_gap = 0
     match LevelConfig.ui_version:
-        case SekaiVersion.v3:
+        case Version.v3:
             margin_offset = 0.56 + (0.492 - 0.56) * clamp(time / 0.2, 0, 1)
             y_offset = -0.102
             h = 0.06 * ui.primary_metric_config.scale * scale_ratio
             w = h * 0.705
             digit_gap = w * -0.04
-        case SekaiVersion.v1:
+        case Version.v1:
             margin_offset = 0.51 + (0.442 - 0.51) * clamp(time / 0.2, 0, 1)
             y_offset = -0.085
             h = 0.09 * ui.primary_metric_config.scale * scale_ratio

@@ -3,7 +3,7 @@ from sonolus.script.globals import level_data
 from sonolus.script.particle import Particle, StandardParticle, particle, particles
 from sonolus.script.record import Record
 
-from sekai.lib.options import SekaiVersion
+from sekai.lib.options import Version
 
 
 @particles
@@ -230,9 +230,9 @@ class UIChecker(Record):
     def check(self):
         result = 0
         if self.v1.is_available:
-            result = SekaiVersion.v1
+            result = Version.v1
         else:
-            result = SekaiVersion.v3
+            result = Version.v3
         return result
 
 

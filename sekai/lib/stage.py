@@ -62,7 +62,7 @@ from sekai.lib.layout import (
     transformed_vec_at,
 )
 from sekai.lib.level_config import LevelConfig
-from sekai.lib.options import Options, SekaiVersion, StageCoverMode
+from sekai.lib.options import Options, StageCoverMode, Version
 from sekai.lib.particle import ActiveParticles
 from sekai.lib.skin import (
     ActiveSkin,
@@ -1069,10 +1069,10 @@ def draw_score_bar(
     else:
         gauge_cover_layout = layout_score_gauge(score_type=ScoreGaugeType.NORMAL)
         ActiveSkin.score.gauge.cover.draw(gauge_cover_layout, z=z_layer_score, a=alpha)
-    if LevelConfig.ui_version == SekaiVersion.v3 or rank != ScoreRankType.D:
+    if LevelConfig.ui_version == Version.v3 or rank != ScoreRankType.D:
         score_rank_layout = layout_score_rank()
         ActiveSkin.score.rank.get_sprite(rank).draw(score_rank_layout, z=z_layer_score_bar_rate, a=alpha)
-    if LevelConfig.ui_version == SekaiVersion.v3:
+    if LevelConfig.ui_version == Version.v3:
         score_rank_text_layout = layout_score_rank_text()
         ActiveSkin.score.rank_text.get_sprite(rank).draw(score_rank_text_layout, z=z_layer_score_bar_rate, a=alpha)
 
@@ -1082,9 +1082,9 @@ def get_gauge_progress(score):
     fp = (
         0,
         0.447,
-        0.6 if LevelConfig.ui_version == SekaiVersion.v3 else 0.577,
-        0.755 if LevelConfig.ui_version == SekaiVersion.v3 else 0.72,
-        0.9 if LevelConfig.ui_version == SekaiVersion.v3 else 0.87,
+        0.6 if LevelConfig.ui_version == Version.v3 else 0.577,
+        0.755 if LevelConfig.ui_version == Version.v3 else 0.72,
+        0.9 if LevelConfig.ui_version == Version.v3 else 0.87,
         1.0,
     )
 

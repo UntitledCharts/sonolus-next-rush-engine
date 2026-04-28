@@ -27,5 +27,5 @@ jobs:
       - name: Upload engine artifact
         uses: actions/upload-artifact@v7
         with:
-          name: next-sekai-rush-plus-engine
+          name: next-rush-engine
           path: build/dist/

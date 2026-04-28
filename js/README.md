@@ -1,12 +1,6 @@
-# Next RUSH+ Sonolus Engine
+# NEXT RUSH Sonolus Engine
 
-A new Project Sekai inspired engine for [Sonolus](https://sonolus.com).
-
-## Installation
-
-```
-npm install sonolus-next-rush-plus-engine
-```
+Perspective-lane rhythm game for [Sonolus](https://sonolus.com).
 
 ## Documentation
 
@@ -20,13 +14,13 @@ Partial database engine item compatible with [sonolus-express](https://github.co
 
 ### `susToUSC(sus)`
 
-Converts sus chart to USC (Universal Sekai Chart).
+Converts sus chart to USC.
 
 -   `sus`: sus chart.
 
 ### `uscToLevelData(usc, offset?)`
 
-Converts USC (Universal Sekai Chart) to Level Data.
+Converts USC to Level Data.
 
 -   `usc`: usc chart.
 -   `offset`: offset (default: `0`).
@@ -42,5 +36,3 @@ The following assets are exposed as package entry points:
 -   `EngineTutorialData`
 -   `EngineRom`
 -   `EngineThumbnail`
-
-In Node.js, you can obtain path to assets `import.meta.resolve('sonolus-pjsekai-engine/EngineConfiguration')`.

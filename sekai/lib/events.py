@@ -28,7 +28,7 @@ from sekai.lib.layout import (
     transform_quad,
 )
 from sekai.lib.level_config import LevelConfig
-from sekai.lib.options import Options, SekaiVersion, SkillMode
+from sekai.lib.options import Options, SkillMode, Version
 from sekai.lib.particle import ActiveParticles
 from sekai.lib.skin import ActiveSkin
 
@@ -253,7 +253,7 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode
     layout = +Quad
     x_ratio = 0
     y_ratio = 0
-    if LevelConfig.ui_version == SekaiVersion.v3:
+    if LevelConfig.ui_version == Version.v3:
         x_ratio = 0.7 - 0.7 * (aspect_ratio() - 1.3333) ** 3
 
         raw_val = -0.405 * aspect_ratio() + 0.72
@@ -282,7 +282,7 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode
         case SkillMode.JUDGMENT:
             ActiveSkin.skill_bar_judgment.draw(layout, z, anim)
 
-    if LevelConfig.ui_version == SekaiVersion.v3:
+    if LevelConfig.ui_version == Version.v3:
         x = -7.5 + x_ratio
         y = 0.45 - y_ratio
         icon_start_center = Vec2(x=x - 0.2, y=y)
@@ -300,7 +300,7 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode
         layout @= layout_skill_bar(icon_current_center, w, h)
     ActiveSkin.skill_icon.get_sprite(num).draw(layout, z2, anim)
 
-    if LevelConfig.ui_version == SekaiVersion.v3:
+    if LevelConfig.ui_version == Version.v3:
         x = -5.58 + x_ratio
         y = 0.474 - y_ratio
         text_start_center = Vec2(x=x - 0.2, y=y)
@@ -330,7 +330,7 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode
         w = h * 14
         final_anim = anim
         layout @= layout_skill_bar(text_current_center, w, h)
-    if time <= 1.5 or LevelConfig.ui_version == SekaiVersion.v1:
+    if time <= 1.5 or LevelConfig.ui_version == Version.v1:
         ActiveSkin.skill_level.get_sprite(level).draw(layout, z2, final_anim)
     else:
         ActiveSkin.skill_value.get_sprite(effect).draw(layout, z2, final_anim)

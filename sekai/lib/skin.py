@@ -11,7 +11,7 @@ from sonolus.script.runtime import is_replay, is_watch
 from sonolus.script.sprite import RenderMode, Sprite, SpriteGroup, StandardSprite, skin, sprite, sprite_group
 
 from sekai.lib.layout import AccuracyType, ComboType, FlickDirection, JudgmentType
-from sekai.lib.options import Options, SekaiVersion, SkillMode
+from sekai.lib.options import Options, SkillMode, Version
 
 if TYPE_CHECKING:
     from sekai.lib.buckets import SekaiWindow
@@ -1002,9 +1002,9 @@ class UIChecker(Record):
     def check(self):
         result = 0
         if self.v1.is_available:
-            result = SekaiVersion.v1
+            result = Version.v1
         else:
-            result = SekaiVersion.v3
+            result = Version.v3
         return result
 
 

@@ -1,7 +1,7 @@
 {
   "name": "sonolus-next-rush-plus-engine",
   "version": "0.0.0",
-  "description": "A new Project Sekai inspired engine for Sonolus",
+  "description": "Perspective-lane rhythm game for Sonolus",
   "author": "Hyeon2",
   "repository": {
     "type": "git",
