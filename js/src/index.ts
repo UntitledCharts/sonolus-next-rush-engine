@@ -15,12 +15,13 @@ import { USC } from './usc/index.js'
 
 export * from './usc/index.js'
 export {
+    type ExtendedEntityData,
+    type ExtendedEntityDataField,
     extendedToLevelData,
     mmwsToUSC,
     susToUSC,
     ucmmwsToLevelData,
-    uscToLevelData, type ExtendedEntityData,
-    type ExtendedEntityDataField
+    uscToLevelData,
 }
 
 export const convertToLevelData = (
