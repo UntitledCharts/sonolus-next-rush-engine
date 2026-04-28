@@ -1,11 +1,6 @@
 # Next RUSH+ Sonolus Engine
 
-A new Project Sekai inspired engine for [Sonolus](https://sonolus.com).
-
-## Official Resources
-
-Server: https://coconut.sonolus.com/next-sekai/
-Editor: https://next-sekai-editor.sonolus.com/
+Perspective-lane rhythm game for [Sonolus](https://sonolus.com).
 
 ## Quick Dev Setup
 

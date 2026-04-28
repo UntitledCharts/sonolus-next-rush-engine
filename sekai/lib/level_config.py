@@ -2,7 +2,7 @@ from enum import IntEnum
 
 from sonolus.script.globals import level_data
 
-from sekai.lib.options import Options, ScoreMode, SekaiVersion
+from sekai.lib.options import Options, ScoreMode, Version
 
 
 class EngineRevision(IntEnum):
@@ -18,8 +18,8 @@ class LevelConfig:
     score_mode: ScoreMode
     dynamic_stages: bool
     skip_default_stage: bool
-    ui_version: SekaiVersion
-    particle_version: SekaiVersion
+    ui_version: Version
+    particle_version: Version
 
 
 def init_level_config(
@@ -32,9 +32,9 @@ def init_level_config(
         LevelConfig.score_mode = ScoreMode.WEIGHTED_COMBO
 
 
-def init_ui_version(ui_version: SekaiVersion):
+def init_ui_version(ui_version: Version):
     LevelConfig.ui_version = ui_version
 
 
-def init_particle_version(particle_version: SekaiVersion):
+def init_particle_version(particle_version: Version):
     LevelConfig.particle_version = particle_version
