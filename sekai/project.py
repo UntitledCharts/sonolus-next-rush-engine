@@ -13,6 +13,7 @@ from sekai.watch.mode import watch_mode
 engine = Engine(
     name="next-rush",
     title="Next RUSH",
+    thumbnail="../js/res/thumbnail.png",
     data=EngineData(
         ui=ui_config,
         options=Options,
