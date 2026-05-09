@@ -43,8 +43,6 @@ jobs:
         working-directory: ./js
       - name: Publish to npm
         working-directory: ./js
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           VERSION_TAG="${{ github.ref_name }}"
 
