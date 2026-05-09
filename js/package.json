@@ -1,11 +1,11 @@
 {
-  "name": "sonolus-next-rush-plus-engine",
+  "name": "sonolus-next-rush-engine",
   "version": "0.0.0",
   "description": "Perspective-lane rhythm game for Sonolus",
   "author": "Hyeon2",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hyeon2006/sonolus-next-rush-plus-engine.git"
+    "url": "git+https://github.com/UntitledCharts/sonolus-next-rush-engine.git"
   },
   "license": "MIT",
   "keywords": [
@@ -39,9 +39,9 @@
     "@sonolus/core": "~7.15.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "~2.4.12",
+    "@biomejs/biome": "~2.4.14",
     "@sonolus/sonolus.js": "~9.7.1",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.6.2",
     "typescript": "~6.0.3"
   }
 }
