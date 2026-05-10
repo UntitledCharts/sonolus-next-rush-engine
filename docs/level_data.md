@@ -219,6 +219,7 @@ An active slide connector or guide.
 * **segmentTail (ref[Note])**: A reference to the next separator note. Used to determine **alpha**.
 * **activeHead (ref?[Note])**: If this is part of an active slide, a reference to the start note of the slide. Used to determine when to start accepting input for an active slide.
 * **activeTail (ref?[Note])**: If this is part of an active slide, a reference to the end note of the slide.
+* **legacyHiddenPop (bool)**: Whether this connector should use the legacy hidden pop visibility window. Used only for compatibility with old converted level data.
 
 ## SimLine
 

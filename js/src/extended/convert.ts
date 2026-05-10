@@ -110,9 +110,6 @@ const guideKindMapping: Record<number, number> = {
     7: ConnectorKind.GUIDE_BLACK,
 }
 
-const LEGACY_HIDDEN_POP_NOTE_SPEED = 10
-const LEGACY_MIN_HIDDEN_POP_WINDOW = 1 / 30
-
 interface BpmChangeInfo {
     beat: number
     bpm: number
@@ -200,10 +197,6 @@ function unlerp(a: number, b: number, x: number) {
 
 function clamp01(x: number) {
     return Math.min(1, Math.max(0, x))
-}
-
-function legacyNoteDuration(noteSpeed: number) {
-    return lerp(0.35, 4, unlerp(12, 1, noteSpeed) ** 1.31)
 }
 
 function applyEase(type: number, x: number) {
@@ -411,33 +404,6 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         return scaledTime
     }
 
-    function createHideUntilTimescaleGroup(showBeat: number) {
-        const group = new EntityBuilder('#TIMESCALE_GROUP')
-        const hide = new EntityBuilder('#TIMESCALE_CHANGE')
-        const show = new EntityBuilder('#TIMESCALE_CHANGE')
-        const hideBeat = Math.min(0, showBeat - 1e-6)
-
-        hide.set('#BEAT', hideBeat)
-        hide.set('#TIMESCALE', 1)
-        hide.set('#TIMESCALE_SKIP', 0)
-        hide.set('#TIMESCALE_GROUP', group)
-        hide.set('#TIMESCALE_EASE', 0)
-        hide.set('hideNotes', 1)
-        hide.set('next', show)
-
-        show.set('#BEAT', showBeat)
-        show.set('#TIMESCALE', 1)
-        show.set('#TIMESCALE_SKIP', 0)
-        show.set('#TIMESCALE_GROUP', group)
-        show.set('#TIMESCALE_EASE', 0)
-        show.set('hideNotes', 0)
-
-        group.set('first', hide)
-        finalEntities.push(group, hide, show)
-
-        return group
-    }
-
     const notesByIndex = new Map<number, EntityBuilder>()
     const notesByName = new Map<string, EntityBuilder>()
     const connectorsByIndex = new Map<number, EntityBuilder>()
@@ -585,17 +551,6 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         return getNum(tailOriginal, '#BEAT') < getNum(headOriginal, '#BEAT') - 1e-6
     }
 
-    function getLegacyHiddenPopWindow(
-        headOriginal: ExtendedEntityData,
-        tailOriginal: ExtendedEntityData,
-    ) {
-        const headTime = beatToTime(getNum(headOriginal, '#BEAT'))
-        const tailTime = beatToTime(getNum(tailOriginal, '#BEAT'))
-        const noteDuration = legacyNoteDuration(LEGACY_HIDDEN_POP_NOTE_SPEED)
-
-        return Math.max(LEGACY_MIN_HIDDEN_POP_WINDOW, noteDuration - (headTime - tailTime))
-    }
-
     for (const { idx, e } of ext.connectors) {
         const startRef = getField(e, 'start')
         const headRef = getField(e, 'head')
@@ -657,15 +612,11 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const segmentNotes = [head, ...splitAnchors, tail]
 
         if (reverseHiddenPopConnector && rawHeadOriginal && tailOriginal) {
-            const popWindow = getLegacyHiddenPopWindow(rawHeadOriginal, tailOriginal)
-            const showTime = beatToTime(getNum(tailOriginal, '#BEAT')) - popWindow
-            const showBeat = timeToBeat(showTime)
-            const gateTsg = createHideUntilTimescaleGroup(showBeat)
             const segmentHead = createConnectorAnchor(
                 getNum(rawHeadOriginal, '#BEAT'),
                 getNum(rawHeadOriginal, 'lane'),
                 getNum(rawHeadOriginal, 'size'),
-                gateTsg,
+                getTSG(getField(rawHeadOriginal, 'timeScaleGroup')) ?? tsg,
                 kind,
             )
             const connector = new EntityBuilder('Connector')
@@ -673,6 +624,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             connector.set('tail', tail)
             connector.set('segmentHead', segmentHead)
             connector.set('segmentTail', tail)
+            connector.set('legacyHiddenPop', 1)
             if (hasActiveSlide) {
                 connector.set('activeHead', activeHead)
                 connector.set('activeTail', activeTail)
