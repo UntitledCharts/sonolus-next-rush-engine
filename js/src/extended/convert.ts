@@ -110,6 +110,17 @@ const guideKindMapping: Record<number, number> = {
     7: ConnectorKind.GUIDE_BLACK,
 }
 
+interface BpmChangeInfo {
+    beat: number
+    bpm: number
+    time: number
+}
+
+interface TimescaleChangeInfo {
+    beat: number
+    timeScale: number
+}
+
 class ExtData {
     entities: ExtendedEntityData[]
     byArch = new Map<string, { idx: number; e: ExtendedEntityData }[]>()
@@ -176,6 +187,36 @@ function nearlyEqual(a: number, b: number) {
     return Math.abs(a - b) < 1e-6
 }
 
+function lerp(a: number, b: number, t: number) {
+    return a + (b - a) * t
+}
+
+function unlerp(a: number, b: number, x: number) {
+    return (x - a) / (b - a)
+}
+
+function clamp01(x: number) {
+    return Math.min(1, Math.max(0, x))
+}
+
+function applyEase(type: number, x: number) {
+    const t = clamp01(x)
+    switch (type) {
+        case EaseType.IN_QUAD:
+            return t * t
+        case EaseType.OUT_QUAD:
+            return 1 - (1 - t) * (1 - t)
+        case EaseType.IN_OUT_QUAD:
+            return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2
+        case EaseType.OUT_IN_QUAD:
+            return t < 0.5
+                ? (1 - (1 - 2 * t) * (1 - 2 * t)) / 2
+                : 0.5 + ((2 * t - 1) * (2 * t - 1)) / 2
+        default:
+            return t
+    }
+}
+
 function resolveOriginal(
     ext: ExtData,
     ref: number | string | undefined,
@@ -196,6 +237,45 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
     const init = new EntityBuilder('Initialization')
     finalEntities.push(init)
 
+    const bpmChanges = ext
+        .getByArch('#BPM_CHANGE')
+        .map(({ e }) => ({ beat: getNum(e, '#BEAT'), bpm: getNum(e, '#BPM') }))
+        .sort((a, b) => a.beat - b.beat)
+
+    const bpmChangeInfos: BpmChangeInfo[] = []
+    let lastBeat = 0
+    let lastTime = 0
+    let lastBpm = bpmChanges[0]?.bpm ?? 120
+
+    for (const change of bpmChanges) {
+        lastTime += ((change.beat - lastBeat) * 60) / lastBpm
+        bpmChangeInfos.push({ ...change, time: lastTime })
+        lastBeat = change.beat
+        lastBpm = change.bpm
+    }
+
+    function beatToTime(beat: number) {
+        if (bpmChangeInfos.length === 0) return (beat * 60) / 120
+
+        let current = bpmChangeInfos[0]
+        for (const change of bpmChangeInfos) {
+            if (change.beat > beat) break
+            current = change
+        }
+        return current.time + ((beat - current.beat) * 60) / current.bpm
+    }
+
+    function timeToBeat(time: number) {
+        if (bpmChangeInfos.length === 0) return (time * 120) / 60
+
+        let current = bpmChangeInfos[0]
+        for (const change of bpmChangeInfos) {
+            if (change.time > time) break
+            current = change
+        }
+        return current.beat + ((time - current.time) * current.bpm) / 60
+    }
+
     for (const { e } of ext.getByArch('#BPM_CHANGE')) {
         const bpm = new EntityBuilder('#BPM_CHANGE')
         bpm.set('#BEAT', getNum(e, '#BEAT'))
@@ -205,6 +285,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
     const timescaleGroupsByIndex = new Map<number, EntityBuilder>()
     const timescaleGroupsByName = new Map<string, EntityBuilder>()
+    const timescaleChangesByIndex = new Map<number, TimescaleChangeInfo[]>()
+    const timescaleChangesByName = new Map<string, TimescaleChangeInfo[]>()
 
     for (const { idx, e } of ext.getByArch('TimeScaleGroup')) {
         const group = new EntityBuilder('#TIMESCALE_GROUP')
@@ -214,10 +296,16 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
         let rawRef = getField(e, 'first')
         const changes: EntityBuilder[] = []
+        const changeInfos: TimescaleChangeInfo[] = []
 
         while (rawRef !== undefined) {
             const raw = resolveOriginal(ext, rawRef)
             if (!raw) break
+
+            changeInfos.push({
+                beat: getNum(raw, '#BEAT'),
+                timeScale: getNum(raw, 'timeScale'),
+            })
 
             const change = new EntityBuilder('#TIMESCALE_CHANGE')
             change.set('#BEAT', getNum(raw, '#BEAT'))
@@ -241,12 +329,79 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             group.set('first', changes[0])
         }
         finalEntities.push(...changes)
+        changeInfos.sort((a, b) => a.beat - b.beat)
+        timescaleChangesByIndex.set(idx, changeInfos)
+        if (e.name) timescaleChangesByName.set(e.name, changeInfos)
     }
 
     function getTSG(ref: number | string | undefined) {
         if (typeof ref === 'number') return timescaleGroupsByIndex.get(ref)
         if (typeof ref === 'string') return timescaleGroupsByName.get(ref)
         return undefined
+    }
+
+    function getTSGChanges(ref: number | string | undefined) {
+        if (typeof ref === 'number') return timescaleChangesByIndex.get(ref) ?? []
+        if (typeof ref === 'string') return timescaleChangesByName.get(ref) ?? []
+        return []
+    }
+
+    function timeToScaledTime(time: number, changes: TimescaleChangeInfo[]) {
+        if (changes.length === 0) return time
+
+        const firstTime = beatToTime(changes[0].beat)
+        if (time < firstTime) return time
+
+        let scaledTime = firstTime
+        for (let i = 0; i < changes.length; i++) {
+            const start = changes[i]
+            const startTime = beatToTime(start.beat)
+            const endTime = i === changes.length - 1 ? undefined : beatToTime(changes[i + 1].beat)
+
+            if (endTime === undefined || time < endTime) {
+                return scaledTime + (time - startTime) * start.timeScale
+            }
+
+            scaledTime += (endTime - startTime) * start.timeScale
+        }
+
+        return time
+    }
+
+    function scaledTimeToTime(scaledTime: number, changes: TimescaleChangeInfo[]) {
+        if (changes.length === 0) return scaledTime
+
+        const firstTime = beatToTime(changes[0].beat)
+        if (scaledTime < firstTime) return scaledTime
+
+        let currentScaledTime = firstTime
+        for (let i = 0; i < changes.length; i++) {
+            const start = changes[i]
+            const startTime = beatToTime(start.beat)
+            const endTime = i === changes.length - 1 ? undefined : beatToTime(changes[i + 1].beat)
+
+            if (endTime === undefined) {
+                if (start.timeScale === 0) return Number.POSITIVE_INFINITY
+                return startTime + (scaledTime - currentScaledTime) / start.timeScale
+            }
+
+            const nextScaledTime = currentScaledTime + (endTime - startTime) * start.timeScale
+            const minScaledTime = Math.min(currentScaledTime, nextScaledTime)
+            const maxScaledTime = Math.max(currentScaledTime, nextScaledTime)
+
+            if (minScaledTime <= scaledTime && scaledTime <= maxScaledTime) {
+                if (Math.abs(nextScaledTime - currentScaledTime) < 1e-6) return startTime
+                return lerp(
+                    startTime,
+                    endTime,
+                    unlerp(currentScaledTime, nextScaledTime, scaledTime),
+                )
+            }
+
+            currentScaledTime = nextScaledTime
+        }
+
+        return scaledTime
     }
 
     const notesByIndex = new Map<number, EntityBuilder>()
@@ -303,20 +458,106 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         )
     }
 
+    function createConnectorAnchor(
+        beat: number,
+        lane: number,
+        size: number,
+        tsg: EntityBuilder | undefined,
+        kind: number,
+    ) {
+        const anchor = new EntityBuilder('AnchorNote')
+        anchor.set('#BEAT', beat)
+        anchor.set('lane', lane)
+        anchor.set('size', size)
+        anchor.set('direction', FlickDirection.UP_OMNI)
+        anchor.set('#TIMESCALE_GROUP', tsg || defaultTsg)
+        anchor.set('isAttached', 0)
+        anchor.set('connectorEase', EaseType.LINEAR)
+        anchor.set('isSeparator', 1)
+        anchor.set('segmentKind', kind)
+        anchor.set('segmentAlpha', 1)
+        anchor.set('segmentLayer', 0)
+        finalEntities.push(anchor)
+        return anchor
+    }
+
+    function getConnectorSplitAnchors(
+        headOriginal: ExtendedEntityData,
+        tailOriginal: ExtendedEntityData,
+        tsg: EntityBuilder | undefined,
+        kind: number,
+        ease: number,
+    ) {
+        const headBeat = getNum(headOriginal, '#BEAT')
+        const tailBeat = getNum(tailOriginal, '#BEAT')
+        if (tailBeat <= headBeat) return []
+
+        const headTsgRef = getField(headOriginal, 'timeScaleGroup')
+        const tailTsgRef = getField(tailOriginal, 'timeScaleGroup')
+        const headChanges = getTSGChanges(headTsgRef)
+        const tailChanges = getTSGChanges(tailTsgRef)
+        const splitBeats = headChanges
+            .map(({ beat }) => beat)
+            .filter((beat) => headBeat + 1e-6 < beat && beat < tailBeat - 1e-6)
+
+        if (splitBeats.length === 0) return []
+
+        const headScaledTime = timeToScaledTime(beatToTime(headBeat), headChanges)
+        const tailScaledTime = timeToScaledTime(beatToTime(tailBeat), tailChanges)
+        if (Math.abs(tailScaledTime - headScaledTime) < 1e-6) return []
+
+        if (ease !== EaseType.LINEAR) {
+            const sampleCount = 8
+            for (let i = 1; i < sampleCount; i++) {
+                const scaledTime = lerp(headScaledTime, tailScaledTime, i / sampleCount)
+                const beat = timeToBeat(scaledTimeToTime(scaledTime, headChanges))
+                if (Number.isFinite(beat) && headBeat + 1e-6 < beat && beat < tailBeat - 1e-6) {
+                    splitBeats.push(beat)
+                }
+            }
+        }
+
+        const uniqueSplitBeats = [...splitBeats]
+            .sort((a, b) => a - b)
+            .filter((beat, i, beats) => i === 0 || !nearlyEqual(beat, beats[i - 1]))
+
+        const headLane = getNum(headOriginal, 'lane')
+        const tailLane = getNum(tailOriginal, 'lane')
+        const headSize = getNum(headOriginal, 'size')
+        const tailSize = getNum(tailOriginal, 'size')
+
+        return uniqueSplitBeats.map((beat) => {
+            const scaledTime = timeToScaledTime(beatToTime(beat), headChanges)
+            const frac = unlerp(headScaledTime, tailScaledTime, scaledTime)
+            const easedFrac = applyEase(ease, frac)
+            return createConnectorAnchor(
+                beat,
+                lerp(headLane, tailLane, easedFrac),
+                lerp(headSize, tailSize, easedFrac),
+                tsg,
+                kind,
+            )
+        })
+    }
+
     for (const { idx, e } of ext.connectors) {
         const startRef = getField(e, 'start')
         const headRef = getField(e, 'head')
+        const tailRef = getField(e, 'tail')
 
         const rawHead = getNote(headRef)
-        const tail = getNote(getField(e, 'tail'))
+        const tail = getNote(tailRef)
 
-        const segmentHead = getNote(startRef)
-        const head = shouldUseStartAsHead(startRef, headRef) ? segmentHead : rawHead
+        const activeHead = getNote(startRef)
+        const usesStartAsHead = shouldUseStartAsHead(startRef, headRef)
+        const head = usesStartAsHead ? activeHead : rawHead
+        const headOriginal = resolveOriginal(ext, usesStartAsHead ? startRef : headRef)
+        const tailOriginal = resolveOriginal(ext, tailRef)
 
         const endRef = getField(e, 'end')
-        let segmentTail = getNote(endRef)
+        let activeTail = getNote(endRef)
 
-        if (!segmentTail) {
+        if (!activeTail) {
             const currentTailRef = getField(e, 'tail')
             let ultimateTailRef = currentTailRef
             const visited = new Set<string | number>()
@@ -337,37 +578,57 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
                 }
             }
 
-            segmentTail = getNote(ultimateTailRef)
+            activeTail = getNote(ultimateTailRef)
         }
 
-        if (!segmentTail) {
-            segmentTail = tail
+        if (!activeTail) {
+            activeTail = tail
         }
 
-        if (!head || !tail || !segmentHead || !segmentTail) continue
+        if (!head || !tail || !activeHead || !activeTail) continue
 
         const kind = activeConnectorKindMapping[e.archetype]
         const ease = easeTypeMapping[getNum(e, 'ease')] ?? EaseType.LINEAR
+        const tsg = headOriginal ? getTSG(getField(headOriginal, 'timeScaleGroup')) : undefined
+        const splitAnchors =
+            headOriginal && tailOriginal
+                ? getConnectorSplitAnchors(headOriginal, tailOriginal, tsg, kind, ease)
+                : []
+        const segmentEase = splitAnchors.length > 0 ? EaseType.LINEAR : ease
+        const segmentNotes = [head, ...splitAnchors, tail]
 
-        const connector = new EntityBuilder('Connector')
-        connector.set('head', head)
-        connector.set('tail', tail)
-        connector.set('segmentHead', segmentHead)
-        connector.set('segmentTail', segmentTail)
-        connector.set('activeHead', segmentHead)
-        connector.set('activeTail', segmentTail)
+        for (let i = 0; i < segmentNotes.length - 1; i++) {
+            const segmentHead = segmentNotes[i]
+            const segmentTail = segmentNotes[i + 1]
 
-        head.set('connectorEase', ease)
+            const connector = new EntityBuilder('Connector')
+            connector.set('head', segmentHead)
+            connector.set('tail', segmentTail)
+            connector.set('segmentHead', segmentHead)
+            connector.set('segmentTail', segmentTail)
+            connector.set('activeHead', activeHead)
+            connector.set('activeTail', activeTail)
+            finalEntities.push(connector)
+        }
 
-        head.set('segmentKind', kind)
+        const connectorLink = new EntityBuilder('Connector')
+        connectorLink.set('head', head)
+        connectorLink.set('tail', tail)
+        connectorLink.set('activeHead', activeHead)
+        connectorLink.set('activeTail', activeTail)
+
+        for (const segmentHead of segmentNotes.slice(0, -1)) {
+            segmentHead.set('connectorEase', segmentEase)
+            segmentHead.set('segmentKind', kind)
+            segmentHead.set('segmentAlpha', 1)
+        }
+
         tail.set('segmentKind', kind)
-        segmentHead.set('segmentKind', kind)
-        segmentHead.set('segmentAlpha', 1)
-        segmentTail.set('segmentAlpha', 1)
+        tail.set('segmentAlpha', 1)
+        activeHead.set('segmentKind', kind)
 
-        finalEntities.push(connector)
-        connectorsByIndex.set(idx, connector)
-        if (e.name) connectorsByName.set(e.name, connector)
+        connectorsByIndex.set(idx, connectorLink)
+        if (e.name) connectorsByName.set(e.name, connectorLink)
     }
 
     function getConn(ref: number | string | undefined) {
