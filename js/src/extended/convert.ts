@@ -603,7 +603,6 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const ease = easeTypeMapping[getNum(e, 'ease')] ?? EaseType.LINEAR
         const tsg = headOriginal ? getTSG(getField(headOriginal, 'timeScaleGroup')) : undefined
         const reverseHiddenPopConnector = isReverseHiddenPopConnector(rawHeadOriginal, tailOriginal)
-        const hasActiveSlide = !reverseHiddenPopConnector
         const splitAnchors =
             headOriginal && tailOriginal && !reverseHiddenPopConnector
                 ? getConnectorSplitAnchors(headOriginal, tailOriginal, tsg, kind, ease)
@@ -625,10 +624,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             connector.set('segmentHead', segmentHead)
             connector.set('segmentTail', tail)
             connector.set('legacyHiddenPop', 1)
-            if (hasActiveSlide) {
-                connector.set('activeHead', activeHead)
-                connector.set('activeTail', activeTail)
-            }
+            connector.set('activeHead', activeHead)
+            connector.set('activeTail', activeTail)
             finalEntities.push(connector)
         } else {
             for (let i = 0; i < segmentNotes.length - 1; i++) {
@@ -640,10 +637,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
                 connector.set('tail', segmentTail)
                 connector.set('segmentHead', segmentHead)
                 connector.set('segmentTail', segmentTail)
-                if (hasActiveSlide) {
-                    connector.set('activeHead', activeHead)
-                    connector.set('activeTail', activeTail)
-                }
+                connector.set('activeHead', activeHead)
+                connector.set('activeTail', activeTail)
                 finalEntities.push(connector)
             }
         }
@@ -651,10 +646,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const connectorLink = new EntityBuilder('Connector')
         connectorLink.set('head', head)
         connectorLink.set('tail', tail)
-        if (hasActiveSlide) {
-            connectorLink.set('activeHead', activeHead)
-            connectorLink.set('activeTail', activeTail)
-        }
+        connectorLink.set('activeHead', activeHead)
+        connectorLink.set('activeTail', activeTail)
 
         for (const segmentHead of segmentNotes.slice(0, -1)) {
             segmentHead.set('connectorEase', segmentEase)
@@ -664,9 +657,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
         tail.set('segmentKind', kind)
         tail.set('segmentAlpha', 1)
-        if (hasActiveSlide) {
-            activeHead.set('segmentKind', kind)
-        }
+        activeHead.set('segmentKind', kind)
 
         connectorsByIndex.set(idx, connectorLink)
         if (e.name) connectorsByName.set(e.name, connectorLink)
