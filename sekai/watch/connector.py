@@ -31,8 +31,17 @@ from sekai.lib.layout import compute_hitbox, current_layout_transform
 from sekai.lib.note import draw_hitbox_bounds_overlay, draw_slide_note_head, get_attach_params
 from sekai.lib.options import Options
 from sekai.lib.streams import Streams
-from sekai.lib.timescale import group_hide_notes, update_timescale_group
+from sekai.lib.timescale import (
+    group_hide_notes,
+    group_scaled_time_to_first_time,
+    group_time_to_scaled_time,
+    update_timescale_group,
+)
 from sekai.watch import note
+
+
+def legacy_note_duration() -> float:
+    return lerp(0.35, 4, unlerp_clamped(12, 1, Options.note_speed) ** 1.31)
 
 
 class WatchConnector(WatchArchetype):
@@ -44,6 +53,7 @@ class WatchConnector(WatchArchetype):
     segment_tail_ref: EntityRef[note.WatchBaseNote] = imported(name="segmentTail")
     active_head_ref: EntityRef[note.WatchBaseNote] = imported(name="activeHead")
     active_tail_ref: EntityRef[note.WatchBaseNote] = imported(name="activeTail")
+    legacy_hidden_pop: bool = imported(name="legacyHiddenPop")
 
     kind: ConnectorKind = entity_data()
     ease_type: EaseType = entity_data()
@@ -61,12 +71,25 @@ class WatchConnector(WatchArchetype):
         self.ease_type = head.connector_ease
         self.visual_active_interval.start = min(head.target_time, tail.target_time)
         self.visual_active_interval.end = max(head.target_time, tail.target_time)
-        self.start_time = min(
-            self.visual_active_interval.start,
-            head.start_time,
-            tail.start_time,
-        )
-        self.end_time = self.visual_active_interval.end
+        if self.legacy_hidden_pop:
+            head_scaled_time = group_time_to_scaled_time(
+                self.segment_head.timescale_group,
+                self.segment_head.target_time,
+            ).total
+            self.visual_active_interval.start = group_scaled_time_to_first_time(
+                self.segment_head.timescale_group,
+                head_scaled_time - legacy_note_duration(),
+            )
+            self.visual_active_interval.end = tail.target_time
+            self.start_time = self.visual_active_interval.start
+            self.end_time = self.visual_active_interval.end
+        else:
+            self.start_time = min(
+                self.visual_active_interval.start,
+                head.start_time,
+                tail.start_time,
+            )
+            self.end_time = self.visual_active_interval.end
         if self.segment_head.segment_through_judge_line:
             self.end_time += CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY
 
