@@ -110,7 +110,8 @@ const guideKindMapping: Record<number, number> = {
     7: ConnectorKind.GUIDE_BLACK,
 }
 
-const LEGACY_HIDDEN_POP_WINDOW = 1 / 30
+const LEGACY_DEFAULT_NOTE_DURATION = 2
+const LEGACY_MIN_HIDDEN_POP_WINDOW = 1 / 30
 
 interface BpmChangeInfo {
     beat: number
@@ -580,6 +581,19 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         return getNum(tailOriginal, '#BEAT') < getNum(headOriginal, '#BEAT') - 1e-6
     }
 
+    function getLegacyHiddenPopWindow(
+        headOriginal: ExtendedEntityData,
+        tailOriginal: ExtendedEntityData,
+    ) {
+        const headTime = beatToTime(getNum(headOriginal, '#BEAT'))
+        const tailTime = beatToTime(getNum(tailOriginal, '#BEAT'))
+
+        return Math.max(
+            LEGACY_MIN_HIDDEN_POP_WINDOW,
+            LEGACY_DEFAULT_NOTE_DURATION - (headTime - tailTime),
+        )
+    }
+
     for (const { idx, e } of ext.connectors) {
         const startRef = getField(e, 'start')
         const headRef = getField(e, 'head')
@@ -640,7 +654,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const segmentNotes = [head, ...splitAnchors, tail]
 
         if (reverseHiddenPopConnector && rawHeadOriginal && tailOriginal) {
-            const showTime = beatToTime(getNum(tailOriginal, '#BEAT')) - LEGACY_HIDDEN_POP_WINDOW
+            const popWindow = getLegacyHiddenPopWindow(rawHeadOriginal, tailOriginal)
+            const showTime = beatToTime(getNum(tailOriginal, '#BEAT')) - popWindow
             const showBeat = timeToBeat(showTime)
             const gateTsg = createHideUntilTimescaleGroup(showBeat)
             const segmentHead = createConnectorAnchor(
