@@ -172,6 +172,10 @@ function getNum(e: ExtendedEntityData, name: string, def = 0): number {
     return typeof val === 'number' ? val : def
 }
 
+function nearlyEqual(a: number, b: number) {
+    return Math.abs(a - b) < 1e-6
+}
+
 function resolveOriginal(
     ext: ExtData,
     ref: number | string | undefined,
@@ -279,14 +283,35 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         return undefined
     }
 
+    function shouldUseStartAsHead(
+        startRef: number | string | undefined,
+        headRef: number | string | undefined,
+    ) {
+        if (startRef === headRef) return false
+
+        const start = resolveOriginal(ext, startRef)
+        const head = resolveOriginal(ext, headRef)
+        if (!start || !head) return false
+        if (head.archetype !== 'HiddenSlideStartNote') return false
+        if (!['NormalSlideStartNote', 'CriticalSlideStartNote'].includes(start.archetype))
+            return false
+
+        return (
+            nearlyEqual(getNum(start, '#BEAT'), getNum(head, '#BEAT')) &&
+            nearlyEqual(getNum(start, 'lane'), getNum(head, 'lane')) &&
+            nearlyEqual(getNum(start, 'size'), getNum(head, 'size'))
+        )
+    }
+
     for (const { idx, e } of ext.connectors) {
         const startRef = getField(e, 'start')
         const headRef = getField(e, 'head')
 
-        const head = getNote(headRef)
+        const rawHead = getNote(headRef)
         const tail = getNote(getField(e, 'tail'))
 
         const segmentHead = getNote(startRef)
+        const head = shouldUseStartAsHead(startRef, headRef) ? segmentHead : rawHead
 
         const endRef = getField(e, 'end')
         let segmentTail = getNote(endRef)
