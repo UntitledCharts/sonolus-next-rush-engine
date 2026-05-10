@@ -110,7 +110,7 @@ const guideKindMapping: Record<number, number> = {
     7: ConnectorKind.GUIDE_BLACK,
 }
 
-const LEGACY_DEFAULT_NOTE_DURATION = 2
+const LEGACY_HIDDEN_POP_NOTE_SPEED = 10
 const LEGACY_MIN_HIDDEN_POP_WINDOW = 1 / 30
 
 interface BpmChangeInfo {
@@ -200,6 +200,10 @@ function unlerp(a: number, b: number, x: number) {
 
 function clamp01(x: number) {
     return Math.min(1, Math.max(0, x))
+}
+
+function legacyNoteDuration(noteSpeed: number) {
+    return lerp(0.35, 4, unlerp(12, 1, noteSpeed) ** 1.31)
 }
 
 function applyEase(type: number, x: number) {
@@ -587,11 +591,9 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
     ) {
         const headTime = beatToTime(getNum(headOriginal, '#BEAT'))
         const tailTime = beatToTime(getNum(tailOriginal, '#BEAT'))
+        const noteDuration = legacyNoteDuration(LEGACY_HIDDEN_POP_NOTE_SPEED)
 
-        return Math.max(
-            LEGACY_MIN_HIDDEN_POP_WINDOW,
-            LEGACY_DEFAULT_NOTE_DURATION - (headTime - tailTime),
-        )
+        return Math.max(LEGACY_MIN_HIDDEN_POP_WINDOW, noteDuration - (headTime - tailTime))
     }
 
     for (const { idx, e } of ext.connectors) {
@@ -646,6 +648,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const ease = easeTypeMapping[getNum(e, 'ease')] ?? EaseType.LINEAR
         const tsg = headOriginal ? getTSG(getField(headOriginal, 'timeScaleGroup')) : undefined
         const reverseHiddenPopConnector = isReverseHiddenPopConnector(rawHeadOriginal, tailOriginal)
+        const hasActiveSlide = !reverseHiddenPopConnector
         const splitAnchors =
             headOriginal && tailOriginal && !reverseHiddenPopConnector
                 ? getConnectorSplitAnchors(headOriginal, tailOriginal, tsg, kind, ease)
@@ -670,8 +673,10 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             connector.set('tail', tail)
             connector.set('segmentHead', segmentHead)
             connector.set('segmentTail', tail)
-            connector.set('activeHead', activeHead)
-            connector.set('activeTail', activeTail)
+            if (hasActiveSlide) {
+                connector.set('activeHead', activeHead)
+                connector.set('activeTail', activeTail)
+            }
             finalEntities.push(connector)
         } else {
             for (let i = 0; i < segmentNotes.length - 1; i++) {
@@ -683,8 +688,10 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
                 connector.set('tail', segmentTail)
                 connector.set('segmentHead', segmentHead)
                 connector.set('segmentTail', segmentTail)
-                connector.set('activeHead', activeHead)
-                connector.set('activeTail', activeTail)
+                if (hasActiveSlide) {
+                    connector.set('activeHead', activeHead)
+                    connector.set('activeTail', activeTail)
+                }
                 finalEntities.push(connector)
             }
         }
@@ -692,8 +699,10 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const connectorLink = new EntityBuilder('Connector')
         connectorLink.set('head', head)
         connectorLink.set('tail', tail)
-        connectorLink.set('activeHead', activeHead)
-        connectorLink.set('activeTail', activeTail)
+        if (hasActiveSlide) {
+            connectorLink.set('activeHead', activeHead)
+            connectorLink.set('activeTail', activeTail)
+        }
 
         for (const segmentHead of segmentNotes.slice(0, -1)) {
             segmentHead.set('connectorEase', segmentEase)
@@ -703,7 +712,9 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
         tail.set('segmentKind', kind)
         tail.set('segmentAlpha', 1)
-        activeHead.set('segmentKind', kind)
+        if (hasActiveSlide) {
+            activeHead.set('segmentKind', kind)
+        }
 
         connectorsByIndex.set(idx, connectorLink)
         if (e.name) connectorsByName.set(e.name, connectorLink)
