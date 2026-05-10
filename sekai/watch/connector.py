@@ -103,7 +103,7 @@ class WatchConnector(WatchArchetype):
                 tail.target_time,
                 head.visual_y_offset,
                 tail.visual_y_offset,
-                time(),
+                current_time,
             )
             self.active_connector_info.connector_kind = self.kind
         if group_hide_notes(self.segment_head.timescale_group) and self.active_head_ref.index > 0:
@@ -129,18 +129,18 @@ class WatchConnector(WatchArchetype):
                 return
             if self.active_tail_ref.index > 0 and current_time >= self.active_tail.despawn_time():
                 return
-            if time() >= head.target_time and not segment_head.segment_through_judge_line:
+            if current_time >= head.target_time and not segment_head.segment_through_judge_line:
                 head_visual_progress = 1.0 - remap_clamped(
                     head.target_time, tail.target_time, head.visual_y_offset, tail.visual_y_offset, time()
                 )
-                head_target_time = time()
+                head_target_time = current_time
                 if self.ease_type == EaseType.NONE:
                     head_lane = head.visual_lane
                     head_size = head.size
                     head_ease_frac = head.head_ease_frac
                 else:
                     head_ease_frac = remap_clamped(
-                        head.target_time, tail.target_time, head.head_ease_frac, tail.tail_ease_frac, time()
+                        head.target_time, tail.target_time, head.head_ease_frac, tail.tail_ease_frac, current_time
                     )
                     head_interp_frac = unlerp_clamped(
                         ease(self.ease_type, head.head_ease_frac),
