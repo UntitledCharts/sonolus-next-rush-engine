@@ -110,6 +110,8 @@ const guideKindMapping: Record<number, number> = {
     7: ConnectorKind.GUIDE_BLACK,
 }
 
+const LEGACY_HIDDEN_POP_WINDOW = 1 / 30
+
 interface BpmChangeInfo {
     beat: number
     bpm: number
@@ -404,6 +406,33 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         return scaledTime
     }
 
+    function createHideUntilTimescaleGroup(showBeat: number) {
+        const group = new EntityBuilder('#TIMESCALE_GROUP')
+        const hide = new EntityBuilder('#TIMESCALE_CHANGE')
+        const show = new EntityBuilder('#TIMESCALE_CHANGE')
+        const hideBeat = Math.min(0, showBeat - 1e-6)
+
+        hide.set('#BEAT', hideBeat)
+        hide.set('#TIMESCALE', 1)
+        hide.set('#TIMESCALE_SKIP', 0)
+        hide.set('#TIMESCALE_GROUP', group)
+        hide.set('#TIMESCALE_EASE', 0)
+        hide.set('hideNotes', 1)
+        hide.set('next', show)
+
+        show.set('#BEAT', showBeat)
+        show.set('#TIMESCALE', 1)
+        show.set('#TIMESCALE_SKIP', 0)
+        show.set('#TIMESCALE_GROUP', group)
+        show.set('#TIMESCALE_EASE', 0)
+        show.set('hideNotes', 0)
+
+        group.set('first', hide)
+        finalEntities.push(group, hide, show)
+
+        return group
+    }
+
     const notesByIndex = new Map<number, EntityBuilder>()
     const notesByName = new Map<string, EntityBuilder>()
     const connectorsByIndex = new Map<number, EntityBuilder>()
@@ -540,6 +569,17 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         })
     }
 
+    function isReverseHiddenPopConnector(
+        headOriginal: ExtendedEntityData | undefined,
+        tailOriginal: ExtendedEntityData | undefined,
+    ) {
+        if (!headOriginal || !tailOriginal) return false
+        if (headOriginal.archetype !== 'HiddenSlideStartNote') return false
+        if (tailOriginal.archetype !== 'HiddenSlideTickNote') return false
+
+        return getNum(tailOriginal, '#BEAT') < getNum(headOriginal, '#BEAT') - 1e-6
+    }
+
     for (const { idx, e } of ext.connectors) {
         const startRef = getField(e, 'start')
         const headRef = getField(e, 'head')
@@ -547,12 +587,13 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
         const rawHead = getNote(headRef)
         const tail = getNote(tailRef)
+        const rawHeadOriginal = resolveOriginal(ext, headRef)
+        const tailOriginal = resolveOriginal(ext, tailRef)
 
         const activeHead = getNote(startRef)
         const usesStartAsHead = shouldUseStartAsHead(startRef, headRef)
         const head = usesStartAsHead ? activeHead : rawHead
         const headOriginal = resolveOriginal(ext, usesStartAsHead ? startRef : headRef)
-        const tailOriginal = resolveOriginal(ext, tailRef)
 
         const endRef = getField(e, 'end')
         let activeTail = getNote(endRef)
@@ -590,25 +631,47 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const kind = activeConnectorKindMapping[e.archetype]
         const ease = easeTypeMapping[getNum(e, 'ease')] ?? EaseType.LINEAR
         const tsg = headOriginal ? getTSG(getField(headOriginal, 'timeScaleGroup')) : undefined
+        const reverseHiddenPopConnector = isReverseHiddenPopConnector(rawHeadOriginal, tailOriginal)
         const splitAnchors =
-            headOriginal && tailOriginal
+            headOriginal && tailOriginal && !reverseHiddenPopConnector
                 ? getConnectorSplitAnchors(headOriginal, tailOriginal, tsg, kind, ease)
                 : []
         const segmentEase = splitAnchors.length > 0 ? EaseType.LINEAR : ease
         const segmentNotes = [head, ...splitAnchors, tail]
 
-        for (let i = 0; i < segmentNotes.length - 1; i++) {
-            const segmentHead = segmentNotes[i]
-            const segmentTail = segmentNotes[i + 1]
-
+        if (reverseHiddenPopConnector && rawHeadOriginal && tailOriginal) {
+            const showTime = beatToTime(getNum(tailOriginal, '#BEAT')) - LEGACY_HIDDEN_POP_WINDOW
+            const showBeat = timeToBeat(showTime)
+            const gateTsg = createHideUntilTimescaleGroup(showBeat)
+            const segmentHead = createConnectorAnchor(
+                getNum(rawHeadOriginal, '#BEAT'),
+                getNum(rawHeadOriginal, 'lane'),
+                getNum(rawHeadOriginal, 'size'),
+                gateTsg,
+                kind,
+            )
             const connector = new EntityBuilder('Connector')
-            connector.set('head', segmentHead)
-            connector.set('tail', segmentTail)
+            connector.set('head', head)
+            connector.set('tail', tail)
             connector.set('segmentHead', segmentHead)
-            connector.set('segmentTail', segmentTail)
+            connector.set('segmentTail', tail)
             connector.set('activeHead', activeHead)
             connector.set('activeTail', activeTail)
             finalEntities.push(connector)
+        } else {
+            for (let i = 0; i < segmentNotes.length - 1; i++) {
+                const segmentHead = segmentNotes[i]
+                const segmentTail = segmentNotes[i + 1]
+
+                const connector = new EntityBuilder('Connector')
+                connector.set('head', segmentHead)
+                connector.set('tail', segmentTail)
+                connector.set('segmentHead', segmentHead)
+                connector.set('segmentTail', segmentTail)
+                connector.set('activeHead', activeHead)
+                connector.set('activeTail', activeTail)
+                finalEntities.push(connector)
+            }
         }
 
         const connectorLink = new EntityBuilder('Connector')
