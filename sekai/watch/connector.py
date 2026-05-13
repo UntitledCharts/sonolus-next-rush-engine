@@ -30,6 +30,7 @@ from sekai.lib.ease import EaseType, ease
 from sekai.lib.layout import compute_hitbox, current_layout_transform
 from sekai.lib.note import draw_hitbox_bounds_overlay, draw_slide_note_head, get_attach_params
 from sekai.lib.options import Options
+from sekai.lib.stage import get_stage_props
 from sekai.lib.streams import Streams
 from sekai.lib.timescale import (
     group_hide_notes,
@@ -219,12 +220,19 @@ class WatchConnector(WatchArchetype):
     def get_attached_params(self, target_time: float) -> tuple[float, float]:
         head = self.head_ref.get().effective_attach_head
         tail = self.tail_ref.get().effective_attach_tail
+        if head.stage_ref.index > 0 and head.stage_ref.index == tail.stage_ref.index:
+            pivot_lane = get_stage_props(head.stage_ref.get(), target_time).pivot_lane
+            head_lane = pivot_lane + head.rel_lane
+            tail_lane = pivot_lane + tail.rel_lane
+        else:
+            head_lane = head._basic_visual_lane_at(target_time)
+            tail_lane = tail._basic_visual_lane_at(target_time)
         return get_attach_params(
             ease_type=self.ease_type,
-            head_lane=head._basic_visual_lane_at(target_time),
+            head_lane=head_lane,
             head_size=head.size,
             head_target_time=head.target_time,
-            tail_lane=tail._basic_visual_lane_at(target_time),
+            tail_lane=tail_lane,
             tail_size=tail.size,
             tail_target_time=tail.target_time,
             target_time=target_time,
