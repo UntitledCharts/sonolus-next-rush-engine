@@ -170,6 +170,19 @@ class EntityBuilder {
     }
 }
 
+interface ConnectorSegmentLink {
+    head: EntityBuilder
+    tail: EntityBuilder
+}
+
+interface ConnectorLink {
+    head: EntityBuilder
+    tail: EntityBuilder
+    activeHead: EntityBuilder
+    activeTail: EntityBuilder
+    segments: ConnectorSegmentLink[]
+}
+
 function getField(e: ExtendedEntityData, name: string): number | string | undefined {
     const field = e.data.find((x) => x.name === name)
     if (!field) return undefined
@@ -406,8 +419,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
     const notesByIndex = new Map<number, EntityBuilder>()
     const notesByName = new Map<string, EntityBuilder>()
-    const connectorsByIndex = new Map<number, EntityBuilder>()
-    const connectorsByName = new Map<string, EntityBuilder>()
+    const connectorsByIndex = new Map<number, ConnectorLink>()
+    const connectorsByName = new Map<string, ConnectorLink>()
 
     for (const { idx, e } of ext.notes) {
         const arch = noteTypeMapping[e.archetype]
@@ -422,6 +435,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             flickDirectionMapping[getNum(e, 'direction', 0)] ?? FlickDirection.UP_OMNI,
         )
         note.set('segmentKind', ConnectorKind.ACTIVE_NORMAL)
+        note.set('segmentAlpha', 1)
+        note.set('segmentLayer', 0)
 
         note.set('isAttached', 0)
         note.set('connectorEase', 0)
@@ -436,6 +451,11 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         if (typeof ref === 'number') return notesByIndex.get(ref)
         if (typeof ref === 'string') return notesByName.get(ref)
         return undefined
+    }
+
+    function getTimeScaleAt(changes: TimescaleChangeInfo[], beat: number) {
+        const change = [...changes].reverse().find((change) => change.beat < beat - 1e-6)
+        return change?.timeScale ?? 1
     }
 
     function shouldUseStartAsHead(
@@ -497,8 +517,11 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const headChanges = getTSGChanges(headTsgRef)
         const tailChanges = getTSGChanges(tailTsgRef)
         const splitBeats = headChanges
+            .filter((change) => {
+                if (!(headBeat + 1e-6 < change.beat && change.beat < tailBeat - 1e-6)) return false
+                return !nearlyEqual(change.timeScale, getTimeScaleAt(headChanges, change.beat))
+            })
             .map(({ beat }) => beat)
-            .filter((beat) => headBeat + 1e-6 < beat && beat < tailBeat - 1e-6)
 
         if (splitBeats.length === 0) return []
 
@@ -530,13 +553,10 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             const scaledTime = timeToScaledTime(beatToTime(beat), headChanges)
             const frac = unlerp(headScaledTime, tailScaledTime, scaledTime)
             const easedFrac = applyEase(ease, frac)
-            return createConnectorAnchor(
-                beat,
-                lerp(headLane, tailLane, easedFrac),
-                lerp(headSize, tailSize, easedFrac),
-                tsg,
-                kind,
-            )
+            const lane = lerp(headLane, tailLane, easedFrac)
+            const size = lerp(headSize, tailSize, easedFrac)
+
+            return createConnectorAnchor(beat, lane, size, tsg, kind)
         })
     }
 
@@ -551,15 +571,63 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         return getNum(tailOriginal, '#BEAT') < getNum(headOriginal, '#BEAT') - 1e-6
     }
 
+    function getUltimateTailRef(
+        startRef: number | string | undefined,
+        tailRef: number | string | undefined,
+    ) {
+        let ultimateTailRef = tailRef
+        let ultimateTailBeat = getNum(
+            resolveOriginal(ext, tailRef) ?? { archetype: '', data: [] },
+            '#BEAT',
+        )
+        const visited = new Set<string>()
+
+        function visit(headRef: number | string | undefined) {
+            const key = `${String(startRef)}|${String(headRef)}`
+            if (headRef === undefined || visited.has(key)) return
+            visited.add(key)
+
+            const nextConnectors = ext.connectors.filter(
+                (c) => getField(c.e, 'head') === headRef && getField(c.e, 'start') === startRef,
+            )
+
+            if (nextConnectors.length === 0) {
+                const beat = getNum(
+                    resolveOriginal(ext, headRef) ?? { archetype: '', data: [] },
+                    '#BEAT',
+                )
+                if (beat >= ultimateTailBeat) {
+                    ultimateTailBeat = beat
+                    ultimateTailRef = headRef
+                }
+                return
+            }
+
+            for (const nextConnector of nextConnectors) {
+                visit(getField(nextConnector.e, 'tail'))
+            }
+        }
+
+        visit(tailRef)
+        return ultimateTailRef
+    }
+
+    function setInferredActiveHead(note: EntityBuilder, activeHead: EntityBuilder) {
+        if (note === activeHead) return
+        if (note.refs.activeHead) return
+
+        note.set('activeHead', activeHead)
+    }
+
     for (const { idx, e } of ext.connectors) {
         const startRef = getField(e, 'start')
         const headRef = getField(e, 'head')
         const tailRef = getField(e, 'tail')
 
-        const rawHead = getNote(headRef)
         const tail = getNote(tailRef)
         const rawHeadOriginal = resolveOriginal(ext, headRef)
         const tailOriginal = resolveOriginal(ext, tailRef)
+        const rawHead = getNote(headRef)
 
         const activeHead = getNote(startRef)
         const usesStartAsHead = shouldUseStartAsHead(startRef, headRef)
@@ -570,27 +638,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         let activeTail = getNote(endRef)
 
         if (!activeTail) {
-            const currentTailRef = getField(e, 'tail')
-            let ultimateTailRef = currentTailRef
-            const visited = new Set<string | number>()
-
-            while (ultimateTailRef !== undefined && !visited.has(ultimateTailRef)) {
-                visited.add(ultimateTailRef)
-
-                const nextConn = ext.connectors.find(
-                    (c) =>
-                        getField(c.e, 'head') === ultimateTailRef &&
-                        getField(c.e, 'start') === startRef,
-                )
-
-                if (nextConn) {
-                    ultimateTailRef = getField(nextConn.e, 'tail')
-                } else {
-                    break
-                }
-            }
-
-            activeTail = getNote(ultimateTailRef)
+            activeTail = getNote(getUltimateTailRef(startRef, getField(e, 'tail')))
         }
 
         if (!activeTail) {
@@ -609,6 +657,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
                 : []
         const segmentEase = splitAnchors.length > 0 ? EaseType.LINEAR : ease
         const segmentNotes = [head, ...splitAnchors, tail]
+        const segments: ConnectorSegmentLink[] = []
 
         if (reverseHiddenPopConnector && rawHeadOriginal && tailOriginal) {
             const segmentHead = createConnectorAnchor(
@@ -627,6 +676,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             connector.set('activeHead', activeHead)
             connector.set('activeTail', activeTail)
             finalEntities.push(connector)
+            segments.push({ head: segmentHead, tail })
         } else {
             for (let i = 0; i < segmentNotes.length - 1; i++) {
                 const segmentHead = segmentNotes[i]
@@ -640,14 +690,17 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
                 connector.set('activeHead', activeHead)
                 connector.set('activeTail', activeTail)
                 finalEntities.push(connector)
+                segments.push({ head: segmentHead, tail: segmentTail })
             }
         }
 
-        const connectorLink = new EntityBuilder('Connector')
-        connectorLink.set('head', head)
-        connectorLink.set('tail', tail)
-        connectorLink.set('activeHead', activeHead)
-        connectorLink.set('activeTail', activeTail)
+        const connectorLink: ConnectorLink = {
+            head,
+            tail,
+            activeHead,
+            activeTail,
+            segments,
+        }
 
         for (const segmentHead of segmentNotes.slice(0, -1)) {
             segmentHead.set('connectorEase', segmentEase)
@@ -658,6 +711,10 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         tail.set('segmentKind', kind)
         tail.set('segmentAlpha', 1)
         activeHead.set('segmentKind', kind)
+        for (const segmentNote of segmentNotes) {
+            setInferredActiveHead(segmentNote, activeHead)
+        }
+        setInferredActiveHead(activeTail, activeHead)
 
         connectorsByIndex.set(idx, connectorLink)
         if (e.name) connectorsByName.set(e.name, connectorLink)
@@ -667,6 +724,21 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         if (typeof ref === 'number') return connectorsByIndex.get(ref)
         if (typeof ref === 'string') return connectorsByName.get(ref)
         return undefined
+    }
+
+    function getAttachSegment(conn: ConnectorLink, beat: number) {
+        for (const segment of conn.segments) {
+            const headBeat = segment.head.getBeat()
+            const tailBeat = segment.tail.getBeat()
+            const minBeat = Math.min(headBeat, tailBeat)
+            const maxBeat = Math.max(headBeat, tailBeat)
+
+            if (minBeat - 1e-6 <= beat && beat <= maxBeat + 1e-6) {
+                return segment
+            }
+        }
+
+        return { head: conn.head, tail: conn.tail }
     }
 
     for (const [idx, note] of notesByIndex.entries()) {
@@ -679,9 +751,10 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const attachRef = getField(e, 'attach')
         if (attachRef !== undefined) {
             const attachConn = getConn(attachRef)
-            if (attachConn?.refs.head && attachConn.refs.tail) {
-                note.set('attachHead', attachConn.refs.head)
-                note.set('attachTail', attachConn.refs.tail)
+            if (attachConn) {
+                const attachSegment = getAttachSegment(attachConn, getNum(e, '#BEAT'))
+                note.set('attachHead', attachSegment.head)
+                note.set('attachTail', attachSegment.tail)
                 note.set('isAttached', 1)
             }
         }
@@ -689,8 +762,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const slideRef = getField(e, 'slide')
         if (slideRef !== undefined) {
             const slideConn = getConn(slideRef)
-            if (slideConn?.refs.activeHead) {
-                note.set('activeHead', slideConn.refs.activeHead)
+            if (slideConn) {
+                note.set('activeHead', slideConn.activeHead)
             }
         }
     }
@@ -719,6 +792,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         segmentAlpha = -1,
         connectorEase = -1,
     ) {
+        const anchorTsg = tsg ?? defaultTsg
         const anchors = anchorsByBeat.get(beat) || []
         for (const anchor of anchors) {
             const positions = anchorPositions.get(anchor)
@@ -727,7 +801,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             if (
                 anchor.values.lane === lane &&
                 anchor.values.size === size &&
-                anchor.refs['#TIMESCALE_GROUP'] === tsg &&
+                anchor.refs['#TIMESCALE_GROUP'] === anchorTsg &&
                 (segmentKind === -1 ||
                     anchor.values.segmentKind === segmentKind ||
                     anchor.values.segmentKind === -1) &&
@@ -754,9 +828,11 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         newAnchor.set('#BEAT', beat)
         newAnchor.set('lane', lane)
         newAnchor.set('size', size)
-        if (tsg) newAnchor.set('#TIMESCALE_GROUP', tsg)
+        newAnchor.set('direction', FlickDirection.UP_OMNI)
+        newAnchor.set('#TIMESCALE_GROUP', anchorTsg)
         newAnchor.set('segmentKind', segmentKind)
         newAnchor.set('segmentAlpha', segmentAlpha)
+        newAnchor.set('segmentLayer', 0)
         newAnchor.set('connectorEase', connectorEase)
 
         newAnchor.set('isAttached', 0)
