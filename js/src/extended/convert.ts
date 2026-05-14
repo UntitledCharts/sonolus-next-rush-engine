@@ -589,6 +589,15 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         ].includes(resolveOriginal(ext, ref)?.archetype ?? '')
     }
 
+    function isScoredSlideTickRef(ref: number | string | undefined) {
+        return [
+            'NormalSlideTickNote',
+            'CriticalSlideTickNote',
+            'NormalAttachedSlideTickNote',
+            'CriticalAttachedSlideTickNote',
+        ].includes(resolveOriginal(ext, ref)?.archetype ?? '')
+    }
+
     function getUltimateTailRef(
         archetype: string,
         startRef: number | string | undefined,
@@ -638,6 +647,22 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         }
 
         visit(tailRef)
+        if (isScoredSlideTickRef(ultimateTailRef)) {
+            for (const connector of ext.connectors) {
+                if (connector.e.archetype !== archetype) continue
+                if (getField(connector.e, 'start') !== startRef) continue
+
+                const candidateTailRef = getField(connector.e, 'tail')
+                const candidateTailBeat = getNum(
+                    resolveOriginal(ext, candidateTailRef) ?? { archetype: '', data: [] },
+                    '#BEAT',
+                )
+                if (candidateTailBeat > ultimateTailBeat) {
+                    ultimateTailBeat = candidateTailBeat
+                    ultimateTailRef = candidateTailRef
+                }
+            }
+        }
         return ultimateTailRef
     }
 
