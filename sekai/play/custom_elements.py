@@ -31,7 +31,7 @@ def spawn_custom(
     played_hit_effects: bool,
 ):
     ComboJudge.spawn(
-        index=index,
+        note_index=index,
         target_time=target_time,
         spawn_time=time(),
         judgment=judgment,
@@ -64,7 +64,7 @@ class ComboJudge(PlayArchetype):
     accuracy: float = entity_memory()
     windows: SekaiWindow = entity_memory()
     my_judge_id: int = entity_memory()
-    index: int = entity_memory()
+    note_index: int = entity_memory()
 
     check: bool = entity_memory()
     combo: int = entity_memory()
@@ -154,7 +154,7 @@ class ComboJudge(PlayArchetype):
                 ScoreIndicator.great_step = 0
                 ScoreIndicator.good_step = 0
 
-        current_note = note.BaseNote.at(self.index)
+        current_note = note.BaseNote.at(self.note_index)
 
         note_raw_score = judgment_multiplier * calculate_note_weight(
             perfect_step=ScoreIndicator.perfect_step,
@@ -212,7 +212,7 @@ class ComboJudge(PlayArchetype):
             return
         if LifeManager.life == 0:
             return
-        current_note = note.BaseNote.at(self.index)
+        current_note = note.BaseNote.at(self.note_index)
 
         match self.judgment:
             case Judgment.PERFECT:
