@@ -34,6 +34,12 @@ class HitboxMode(IntEnum):
     VERTICAL = 1
 
 
+class HitboxRange(IntEnum):
+    DEFAULT = 0
+    FULL_VERTICAL = 1
+    FULL_ADAPTIVE = 2
+
+
 class SkillMode(IntEnum):
     LEVEL_DEFAULT = 0
     SCORE = 1
@@ -436,6 +442,17 @@ class Options:
         advanced=True,
         scope="Next Sekai",
         default=False,
+    )
+    hitbox_range: HitboxRange = select_option(
+        name="Hitbox",
+        advanced=True,
+        scope="Rush",
+        values=[
+            "Default",
+            "Full Vertical",
+            "Full Adaptive",
+        ],
+        default=HitboxRange.DEFAULT,
     )
 
     replay_fallback_option_names = (
