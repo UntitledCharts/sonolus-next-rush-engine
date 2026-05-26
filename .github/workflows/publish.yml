@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'version'
+        required: true
 
 permissions:
   id-token: write
@@ -37,14 +42,14 @@ jobs:
         run: npm install -g npm@latest
       - run: npm ci
         working-directory: ./js
-      - run: npm run version --- ${{ github.ref_name }}
+      - run: npm run version --- ${{ github.event.inputs.version || github.ref_name }}
         working-directory: ./js
       - run: npm run build
         working-directory: ./js
       - name: Publish to npm
         working-directory: ./js
         run: |
-          VERSION_TAG="${{ github.ref_name }}"
+          VERSION_TAG="${{ github.event.inputs.version || github.ref_name }}"
 
           DIST_TAG=$(node -e "
             const tag = '$VERSION_TAG';
