@@ -15,17 +15,7 @@ from sekai.lib import archetype_names
 from sekai.lib.baseevent import init_event_list
 from sekai.lib.buckets import init_buckets
 from sekai.lib.custom_elements import LifeManager, NeumaierSum
-from sekai.lib.initialization import LastNote, LayerCache, calculate_note_weight, sort_entities_by_time
-from sekai.lib.layer import (
-    LAYER_BACKGROUND_SIDE,
-    LAYER_DAMAGE,
-    LAYER_GAUGE,
-    LAYER_JUDGMENT,
-    LAYER_SKILL_BAR,
-    LAYER_SKILL_ETC,
-    LAYER_STAGE,
-    get_z,
-)
+from sekai.lib.initialization import LastNote, calculate_note_weight, sort_entities_by_time
 from sekai.lib.layout import init_layout, init_ui_margin
 from sekai.lib.level_config import (
     EngineRevision,
@@ -71,17 +61,6 @@ class WatchInitialization(WatchArchetype):
         init_particle_version(ActiveParticles.ui_checker.check)
         init_score(note.WATCH_NOTE_ARCHETYPES)
         init_life(note.WATCH_NOTE_ARCHETYPES, self.initial_life)
-
-        LayerCache.judgment = get_z(layer=LAYER_JUDGMENT)
-        LayerCache.judgment1 = get_z(layer=LAYER_JUDGMENT, etc=1)
-        LayerCache.judgment2 = get_z(layer=LAYER_JUDGMENT, etc=2)
-        LayerCache.damage = get_z(layer=LAYER_DAMAGE)
-        LayerCache.fever_chance_cover = get_z(layer=LAYER_BACKGROUND_SIDE)
-        LayerCache.fever_chance_side = get_z(layer=LAYER_STAGE)
-        LayerCache.fever_chance_text = get_z(layer=LAYER_STAGE, etc=1)
-        LayerCache.fever_chance_gauge = get_z(layer=LAYER_GAUGE)
-        LayerCache.skill_bar = get_z(layer=LAYER_SKILL_BAR)
-        LayerCache.skill_etc = get_z(layer=LAYER_SKILL_ETC)
 
         LifeManager.life = self.initial_life
         LifeManager.initial_life = self.initial_life

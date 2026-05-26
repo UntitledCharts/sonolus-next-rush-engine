@@ -3,22 +3,8 @@ from typing import Any, Protocol
 
 from sonolus.script.archetype import EntityRef
 from sonolus.script.containers import sort_linked_entities
-from sonolus.script.globals import level_data, level_memory
+from sonolus.script.globals import level_data
 from sonolus.script.runtime import level_score
-
-
-@level_memory
-class LayerCache:
-    judgment: float
-    judgment1: float
-    judgment2: float
-    damage: float
-    fever_chance_cover: float
-    fever_chance_side: float
-    fever_chance_text: float
-    fever_chance_gauge: float
-    skill_bar: float
-    skill_etc: float
 
 
 @level_data
