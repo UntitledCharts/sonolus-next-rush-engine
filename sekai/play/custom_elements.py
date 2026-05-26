@@ -17,7 +17,7 @@ from sekai.lib.custom_elements import (
 )
 from sekai.lib.initialization import calculate_note_weight
 from sekai.lib.options import Options
-from sekai.play import initialization, note
+from sekai.play import note
 from sekai.play.events import Fever
 
 
@@ -68,30 +68,19 @@ class ComboJudge(PlayArchetype):
 
     check: bool = entity_memory()
     combo: int = entity_memory()
-    z: float = entity_memory()
-    z1: float = entity_memory()
-    z2: float = entity_memory()
     name = archetype_names.COMBO_JUDGE
-
-    def initialize(self):
-        self.z = initialization.LayerCache.judgment
-        self.z1 = initialization.LayerCache.judgment1
-        self.z2 = initialization.LayerCache.judgment2
 
     def update_parallel(self):
         if self.my_judge_id != ComboJudgeMemory.latest_judge_id:
             self.despawn = True
             return
-        draw_combo_label(ap=ComboJudgeMemory.ap, z=self.z, z1=self.z1, combo=self.combo)
-        draw_combo_number(
-            draw_time=self.spawn_time, ap=ComboJudgeMemory.ap, combo=self.combo, z=self.z, z1=self.z1, z2=self.z2
-        )
+        draw_combo_label(ap=ComboJudgeMemory.ap, combo=self.combo)
+        draw_combo_number(draw_time=self.spawn_time, ap=ComboJudgeMemory.ap, combo=self.combo)
         draw_judgment_text(
             draw_time=self.spawn_time,
             judgment=self.judgment,
             windows=self.windows,
             accuracy=self.accuracy,
-            z=self.z,
         )
 
     @callback(order=3)
@@ -241,13 +230,9 @@ class JudgmentAccuracy(PlayArchetype):
     accuracy: float = entity_memory()
     windows: SekaiWindow = entity_memory()
     wrong_way: bool = entity_memory()
-    z: float = entity_memory()
     check: bool = entity_memory()
     combo: int = entity_memory()
     name = archetype_names.JUDGMENT_ACCURACY
-
-    def initialize(self):
-        self.z = initialization.LayerCache.judgment
 
     def update_parallel(self):
         if self.combo != JudgmentAccuracyMemory.combo_check:
@@ -257,11 +242,7 @@ class JudgmentAccuracy(PlayArchetype):
             self.despawn = True
             return
         draw_judgment_accuracy(
-            judgment=self.judgment,
-            accuracy=self.accuracy,
-            windows=self.windows,
-            wrong_way=self.wrong_way,
-            z=self.z,
+            judgment=self.judgment, accuracy=self.accuracy, windows=self.windows, wrong_way=self.wrong_way
         )
 
     @callback(order=3)
@@ -282,11 +263,7 @@ class DamageFlash(PlayArchetype):
     spawn_time: float = entity_memory()
     check: bool = entity_memory()
     combo: int = entity_memory()
-    z: float = entity_memory()
     name = archetype_names.DAMAGE_FLASH
-
-    def initialize(self):
-        self.z = initialization.LayerCache.damage
 
     def update_parallel(self):
         if self.combo != DamageFlashMemory.combo_check:
@@ -295,7 +272,7 @@ class DamageFlash(PlayArchetype):
         if time() >= self.spawn_time + 0.35:
             self.despawn = True
             return
-        draw_damage_flash(draw_time=self.spawn_time, z=self.z)
+        draw_damage_flash(draw_time=self.spawn_time)
 
     @callback(order=3)
     def update_sequential(self):

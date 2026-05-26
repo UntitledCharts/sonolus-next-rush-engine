@@ -31,7 +31,7 @@ from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.skin import ActiveSkin
 from sekai.lib.streams import Streams
-from sekai.play import custom_elements, initialization
+from sekai.play import custom_elements
 
 
 @level_memory
@@ -47,8 +47,6 @@ class Skill(PlayArchetype):
     start_time: float = entity_data()
     count: int = shared_memory()
     next_ref: EntityRef[Skill] = entity_data()
-    z: float = entity_memory()
-    z2: float = entity_memory()
     check: bool = entity_memory()
     end_time_3: float = entity_memory()
     end_time_6: float = entity_memory()
@@ -65,10 +63,6 @@ class Skill(PlayArchetype):
         if self.effect == SkillMode.HEAL:
             add_life_scheduled(250, self.start_time)
 
-    def initialize(self):
-        self.z = initialization.LayerCache.skill_bar
-        self.z2 = initialization.LayerCache.skill_etc
-
     def spawn_order(self):
         return self.start_time
 
@@ -79,7 +73,7 @@ class Skill(PlayArchetype):
         current_time = time()
         elapsed = current_time - self.start_time
         if current_time < self.end_time_3:
-            draw_skill_bar(self.z, self.z2, elapsed, self.count, self.effect, self.level)
+            draw_skill_bar(elapsed, self.count, self.effect, self.level)
         if (current_time >= self.end_time_3 and self.effect != SkillMode.JUDGMENT) or current_time >= self.end_time_6:
             self.despawn = True
             return
@@ -126,12 +120,6 @@ class FeverChance(PlayArchetype):
             min(self.start_time, Fever.fever_chance_time) if Fever.fever_chance_time != 0 else self.start_time
         )
 
-    def initialize(self):
-        self.z = initialization.LayerCache.fever_chance_cover
-        self.z2 = initialization.LayerCache.fever_chance_side
-        self.z3 = initialization.LayerCache.fever_chance_gauge
-        self.z4 = initialization.LayerCache.fever_chance_gauge
-
     def spawn_order(self):
         return self.start_time
 
@@ -163,9 +151,9 @@ class FeverChance(PlayArchetype):
 
         if show_ui:
             if Options.fever_effect == 0:
-                draw_fever_side_cover(self.z, elapsed)
-            draw_fever_side_bar(self.z2, self.z3, elapsed)
-            draw_fever_gauge(self.z4, self.percentage)
+                draw_fever_side_cover(elapsed)
+            draw_fever_side_bar(elapsed)
+            draw_fever_gauge(self.percentage)
 
     @callback(order=3)
     def update_sequential(self):
