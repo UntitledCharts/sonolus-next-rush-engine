@@ -3,12 +3,12 @@ from sonolus.script.containers import sort_linked_entities
 from sonolus.script.interval import lerp
 from sonolus.script.printing import PrintColor, PrintFormat
 from sonolus.script.quad import Quad
-from sonolus.script.sprite import Sprite
+from sonolus.script.sprite import Sprite, ZIndex
 from sonolus.script.timing import beat_to_time
 
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import init_event_list
-from sekai.lib.layer import LAYER_BEAT_LINE, get_z
+from sekai.lib.layer import LAYER_BEAT_LINE, get_z_alt
 from sekai.lib.layout import CameraInfo, get_camera_info, get_next_camera_event_time
 from sekai.lib.level_config import EngineRevision, LevelConfig, init_level_config
 from sekai.lib.particle import init_particles
@@ -94,19 +94,19 @@ def draw_beat_lines():
             else:
                 left_layout @= layout_preview_bar_line(t, extend="left_only", extend_scale=extend_scale)
                 right_layout @= layout_preview_bar_line(t, extend="right_only", extend_scale=extend_scale)
-            ActiveSkin.beat_line.draw(left_layout, z=get_z(LAYER_BEAT_LINE), a=0.5)
-            ActiveSkin.beat_line.draw(right_layout, z=get_z(LAYER_BEAT_LINE), a=0.5)
+            ActiveSkin.beat_line.draw(left_layout, z=get_z_alt(LAYER_BEAT_LINE), a=0.5)
+            ActiveSkin.beat_line.draw(right_layout, z=get_z_alt(LAYER_BEAT_LINE), a=0.5)
         beat += 1
 
 
 def draw_column_dividers():
     for col in range(1, PreviewLayout.column_count):
-        ActiveSkin.preview_divider.draw(layout_preview_column_divider(col), z=get_z(LAYER_BEAT_LINE), a=0.5)
+        ActiveSkin.preview_divider.draw(layout_preview_column_divider(col), z=get_z_alt(LAYER_BEAT_LINE), a=0.5)
 
 
 def draw_camera_markers():
-    z_edge = get_z(LAYER_BEAT_LINE, etc=1)
-    z_target = get_z(LAYER_BEAT_LINE, etc=2)
+    z_edge = get_z_alt(LAYER_BEAT_LINE, 1)
+    z_target = get_z_alt(LAYER_BEAT_LINE, 2)
     for col in range(PreviewLayout.column_count):
         col_t_lo = col * PREVIEW_COLUMN_SECS
         col_t_hi = (col + 1) * PREVIEW_COLUMN_SECS
@@ -165,7 +165,7 @@ def draw_camera_line_slice(
     col: int,
     t_a: float,
     t_b: float,
-    z: float,
+    z: ZIndex,
 ):
     bound = PreviewLayout.lane_bound
     de = lane_b - lane_a
@@ -199,8 +199,8 @@ def draw_camera_jump_connectors(
     camera_post: CameraInfo,
     col: int,
     t: float,
-    z_edge: float,
-    z_target: float,
+    z_edge: ZIndex,
+    z_target: ZIndex,
 ):
     left_pre = camera_pre.lane - camera_pre.size
     left_post = camera_post.lane - camera_post.size
@@ -224,7 +224,7 @@ def draw_camera_jump_connector(
     lane_b: float,
     col: int,
     t: float,
-    z: float,
+    z: ZIndex,
 ):
     bound = PreviewLayout.lane_bound
     lo = min(lane_a, lane_b)

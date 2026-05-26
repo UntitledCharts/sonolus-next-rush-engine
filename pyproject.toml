@@ -5,7 +5,7 @@ description = "Next RUSH Sonolus engine"
 readme = "README.md"
 requires-python = ">=3.12.5"
 dependencies = [
-    "sonolus-py~=0.15.9",
+    "sonolus-py~=0.16.0",
 ]
 
 [dependency-groups]

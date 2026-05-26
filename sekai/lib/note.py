@@ -10,7 +10,7 @@ from sonolus.script.effect import Effect
 from sonolus.script.interval import lerp, remap_clamped
 from sonolus.script.quad import Quad
 from sonolus.script.runtime import is_tutorial, is_watch, level_life, level_score, time
-from sonolus.script.sprite import Sprite
+from sonolus.script.sprite import Sprite, ZIndex
 from sonolus.script.vec import Vec2
 
 from sekai.lib import archetype_names
@@ -598,7 +598,7 @@ def draw_note_arrow(
             assert_never(direction)
     animation_alpha = (1 - ease_in_cubic(animation_progress)) if Options.marker_animation else 1
     a = get_alpha(target_time) * animation_alpha
-    z = get_z(get_flick_layer(kind), time=target_time, lane=lane, etc=direction)
+    z = get_z(get_flick_layer(kind), time=target_time, lane=lane)
     match sprites.render_type:
         case ArrowRenderType.NORMAL:
             layout = layout_flick_arrow(lane, size, direction, travel, animation_progress)
@@ -1465,7 +1465,7 @@ HITBOX_DEBUG_TRIANGLE_HEIGHT = 0.2
 HITBOX_DEBUG_APEX_HALF = 0.012
 
 
-def draw_hitbox_line(sprite: Sprite, p1: Vec2, p2: Vec2, thickness: float, z: float, a: float):
+def draw_hitbox_line(sprite: Sprite, p1: Vec2, p2: Vec2, thickness: float, z: ZIndex, a: float):
     ortho = (p2 - p1).orthogonal().normalize_or_zero() * (thickness / 2)
     sprite.draw(
         Quad(
@@ -1484,8 +1484,8 @@ def draw_hitbox_marker(
     r: Vec2,
     main_sprite: Sprite,
     dot_sprite: Sprite,
-    z: float,
-    z_dot: float,
+    z: ZIndex,
+    z_dot: ZIndex,
     a: float,
 ):
     t = HITBOX_DEBUG_BORDER_THICKNESS
