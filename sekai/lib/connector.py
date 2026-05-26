@@ -415,20 +415,11 @@ def draw_connector(
     start_pos_y = pre_rotation_vec_at(start_lane, start_travel).y
     end_pos_y = pre_rotation_vec_at(end_lane, end_travel).y
 
+    delta_alpha = abs(start_alpha - end_alpha) * get_connector_alpha_option(kind)
+    scale = delta_alpha * max(1.0, abs(start_pos_y - end_pos_y)) * 3 if delta_alpha else 0.0
     match ease_type:
         case EaseType.NONE:
-            curve_change_scale = 0.0
-        case EaseType.LINEAR:
-            x_diff = (
-                max(
-                    abs((start_lane - start_size) - (end_lane - end_size)),
-                    abs((start_lane + start_size) - (end_lane + end_size)),
-                )
-                * DynamicLayout.w_scale
-            )
-            y_diff = abs(start_pos_y - end_pos_y)
-            travel_adj = clamp(2 - max(start_travel, end_travel), 1, 2)
-            curve_change_scale = (min(x_diff, y_diff) * travel_adj) * 0.8
+            pass
         case _:
             left_start_lane = start_lane - start_size
             left_end_lane = end_lane - end_size
@@ -449,30 +440,22 @@ def draw_connector(
                 ref_end_lane = right_end_lane
                 ref_head_lane = head_lane + head_size
                 ref_tail_lane = tail_lane + tail_size
-            start_ref = pre_rotation_vec_at(ref_start_lane, start_travel)
-            end_ref = pre_rotation_vec_at(ref_end_lane, end_travel)
-            last_pos_offset = 0
-            total_pos_offsets = 0
-            for r in (0.25, 0.75):
-                ease_frac = lerp(start_ease_frac, end_ease_frac, r)
-                interp_frac = unlerp_clamped(eased_head_ease_frac, eased_tail_ease_frac, ease(ease_type, ease_frac))
-                visual_progress = lerp(start_visual_progress, end_visual_progress, r)
-                travel = approach(visual_progress)
-                lane = lerp(ref_head_lane, ref_tail_lane, interp_frac)
-                pos = pre_rotation_vec_at(lane, travel)
-                ref_pos = lerp(start_ref, end_ref, unlerp_clamped(start_travel, end_travel, travel))
-                current_pos_offset = pos.x - ref_pos.x
-                total_pos_offsets += abs(current_pos_offset - last_pos_offset) ** 0.6
-                last_pos_offset = current_pos_offset
-            total_pos_offsets += abs(last_pos_offset) ** 0.6
-            curve_change_scale = total_pos_offsets * 1.5
-    alpha_change_scale = max(
-        (abs(start_alpha - end_alpha) * get_connector_alpha_option(kind)) ** 0.8 * 3,
-        (abs(start_alpha - end_alpha) * get_connector_alpha_option(kind)) ** 0.5 * abs(start_pos_y - end_pos_y) * 3,
-    )
+            if ref_head_lane != ref_tail_lane:
+                start_ref = pre_rotation_vec_at(ref_start_lane, start_travel)
+                end_ref = pre_rotation_vec_at(ref_end_lane, end_travel)
+                max_offset = 0.0
+                for r in (0.25, 0.5, 0.75):
+                    ease_frac = lerp(start_ease_frac, end_ease_frac, r)
+                    interp_frac = unlerp_clamped(eased_head_ease_frac, eased_tail_ease_frac, ease(ease_type, ease_frac))
+                    visual_progress = lerp(start_visual_progress, end_visual_progress, r)
+                    travel = approach(visual_progress)
+                    lane = lerp(ref_head_lane, ref_tail_lane, interp_frac)
+                    pos = pre_rotation_vec_at(lane, travel)
+                    ref_pos = lerp(start_ref, end_ref, unlerp_clamped(start_travel, end_travel, travel))
+                    max_offset = max(max_offset, abs(pos.x - ref_pos.x))
+                scale = max(scale, max_offset**0.5 * 2.5)
     quality = get_connector_quality_option(kind)
-    segment_count = max(1, ceil(max(curve_change_scale, alpha_change_scale) * quality * 10))
-
+    segment_count = max(1, ceil(scale * quality * 10))
     z_normal = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=False, layer=layer)
     if visual_state == ConnectorVisualState.ACTIVE and active_sprite.is_available:
         z_active = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=True, layer=layer)
