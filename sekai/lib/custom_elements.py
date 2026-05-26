@@ -6,9 +6,15 @@ from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp, unlerp, unlerp_clamped
 from sonolus.script.record import Record
 from sonolus.script.runtime import aspect_ratio, is_replay, is_watch, runtime_ui, screen, time
+from sonolus.script.sprite import ZIndex
 from sonolus.script.vec import Vec2
 
 from sekai.lib.buckets import SekaiWindow
+from sekai.lib.layer import (
+    LAYER_DAMAGE,
+    LAYER_JUDGMENT,
+    get_z_alt,
+)
 from sekai.lib.layout import (
     ComboType,
     Quad,
@@ -71,7 +77,7 @@ class ScoreIndicator:
     good_step: int
 
 
-def draw_combo_label(ap: bool, z: float, z1: float, combo: int):
+def draw_combo_label(ap: bool, combo: int):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.combo_label.available:
@@ -93,13 +99,17 @@ def draw_combo_label(ap: bool, z: float, z1: float, combo: int):
     a = ui.combo_config.alpha * 0.8 * (cos(time() * pi) + 1) / 2
     layout = layout_combo_label(screen_center, w=w / 2, h=h / 2)
     if ap or not Options.ap_effect:
-        ActiveSkin.combo_label.get_sprite(ComboType.NORMAL).draw(quad=layout, z=z1, a=ui.combo_config.alpha)
+        ActiveSkin.combo_label.get_sprite(ComboType.NORMAL).draw(
+            quad=layout, z=get_z_alt(LAYER_JUDGMENT, 1), a=ui.combo_config.alpha
+        )
     else:
-        ActiveSkin.combo_label.get_sprite(ComboType.AP).draw(quad=layout, z=z1, a=ui.combo_config.alpha)
-        ActiveSkin.combo_label.get_sprite(ComboType.GLOW).draw(quad=layout, z=z, a=a)
+        ActiveSkin.combo_label.get_sprite(ComboType.AP).draw(
+            quad=layout, z=get_z_alt(LAYER_JUDGMENT, 1), a=ui.combo_config.alpha
+        )
+        ActiveSkin.combo_label.get_sprite(ComboType.GLOW).draw(quad=layout, z=get_z_alt(LAYER_JUDGMENT), a=a)
 
 
-def draw_combo_number(draw_time: float, ap: bool, combo: int, z: float, z1: float, z2: float):
+def draw_combo_number(draw_time: float, ap: bool, combo: int):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.combo_number.available:
@@ -182,10 +192,12 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int, z: float, z1: floa
             start_x=start_x2,
         ),
     )
-    drawing_combo.draw_number(z=z, z1=z1, z2=z2)
+    drawing_combo.draw_number(
+        z=get_z_alt(LAYER_JUDGMENT), z1=get_z_alt(LAYER_JUDGMENT, 1), z2=get_z_alt(LAYER_JUDGMENT, 2)
+    )
 
 
-def draw_score_number(ap: bool, score: float, z1: float, z2: float, alpha: float = 1.0):
+def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
     if Options.hide_ui >= 2:
         return
 
@@ -253,7 +265,7 @@ def draw_score_number(ap: bool, score: float, z1: float, z2: float, alpha: float
         layout1=LayoutConfig(width=w, gap=digit_gap, scale=s, height=h, start_x=start_x),
         layout2=LayoutConfig(width=0, gap=0, scale=0, height=0, start_x=0),
     )
-    drawing_combo.draw_number(z=0, z1=z1, z2=z2)
+    drawing_combo.draw_number(z=0, z1=get_z_alt(LAYER_JUDGMENT), z2=get_z_alt(LAYER_JUDGMENT, 1))
 
 
 class CoreConfig(Record):
@@ -424,7 +436,7 @@ class ComboNumberLayout(Record):
                 )
 
 
-def draw_judgment_text(draw_time: float, judgment: Judgment, windows: SekaiWindow, accuracy: float, z: float):
+def draw_judgment_text(draw_time: float, judgment: Judgment, windows: SekaiWindow, accuracy: float):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.judgment.available:
@@ -445,11 +457,11 @@ def draw_judgment_text(draw_time: float, judgment: Judgment, windows: SekaiWindo
     s = unlerp_clamped(draw_time, draw_time + 0.064, time())
     layout = layout_combo_label(screen_center, w=w * s / 2, h=h * s / 2)
     ActiveSkin.judgment.get_sprite(judgment_type=judgment, windows=windows, accuracy=accuracy).draw(
-        quad=layout, z=z, a=a
+        quad=layout, z=get_z_alt(LAYER_JUDGMENT), a=a
     )
 
 
-def draw_judgment_accuracy(judgment: Judgment, accuracy: float, windows: SekaiWindow, wrong_way: bool, z: float):
+def draw_judgment_accuracy(judgment: Judgment, accuracy: float, windows: SekaiWindow, wrong_way: bool):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.accuracy_warning.available:
@@ -475,10 +487,10 @@ def draw_judgment_accuracy(judgment: Judgment, accuracy: float, windows: SekaiWi
         windows=windows.perfect,
         accuracy=accuracy,
         wrong_way=wrong_way,
-    ).draw(quad=layout, z=z, a=a)
+    ).draw(quad=layout, z=LAYER_JUDGMENT, a=a)
 
 
-def draw_damage_flash(draw_time: float, z: float):
+def draw_damage_flash(draw_time: float):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.damage_flash.is_available:
@@ -502,10 +514,10 @@ def draw_damage_flash(draw_time: float, z: float):
                 tl=Vec2(l_val, t_val),
                 tr=Vec2(0, t_val),
             )
-            ActiveSkin.damage_flash.draw(quad=layout, z=z, a=a * 0.8)
+            ActiveSkin.damage_flash.draw(quad=layout, z=LAYER_DAMAGE, a=a * 0.8)
 
 
-def draw_life_number(number: int, z: float, alpha: float = 1.0):
+def draw_life_number(number: int, z: ZIndex, alpha: float = 1.0):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.ui_number.available:
@@ -575,7 +587,7 @@ def draw_life_number(number: int, z: float, alpha: float = 1.0):
     drawing_ui.draw_number(z=z, a=alpha)
 
 
-def draw_score_bar_number(number: int, z: float, alpha: float = 1.0):
+def draw_score_bar_number(number: int, z: ZIndex, alpha: float = 1.0):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.ui_number.available:
@@ -645,7 +657,7 @@ def draw_score_bar_number(number: int, z: float, alpha: float = 1.0):
     drawing_ui.draw_number(z=z, a=alpha)
 
 
-def draw_score_bar_raw_number(number: int, z: float, time: float, alpha: float = 1.0):
+def draw_score_bar_raw_number(number: int, z: ZIndex, time: float, alpha: float = 1.0):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.ui_number.available:

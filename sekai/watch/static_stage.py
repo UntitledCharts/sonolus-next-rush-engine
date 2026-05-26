@@ -7,27 +7,13 @@ from sekai.lib.events import reset_fever_bounds
 from sekai.lib.initialization import LastNote
 from sekai.lib.layout import refresh_layout
 from sekai.lib.options import Options
-from sekai.lib.stage import draw_stage_and_accessories, init_stage_z_layers, play_lane_particle
+from sekai.lib.stage import draw_stage_and_accessories, play_lane_particle
 from sekai.lib.streams import Streams
 
 
 class WatchStaticStage(WatchArchetype):
     name = archetype_names.STATIC_STAGE
     dead_time: float = entity_memory()
-    z_layer_stage_lane: float = entity_memory()
-    z_layer_judgment: float = entity_memory()
-    z_layer_cover: float = entity_memory()
-    z_layer_cover_line: float = entity_memory()
-    z_layer_judgment_line: float = entity_memory()
-    z_layer_background_cover: float = entity_memory()
-    z_layer_stage: float = entity_memory()
-    z_layer_stage_cover: float = entity_memory()
-    z_layer_score: float = entity_memory()
-    z_layer_score_glow: float = entity_memory()
-    z_layer_score_bar: float = entity_memory()
-    z_layer_score_bar_mask: float = entity_memory()
-    z_layer_score_bar_rate: float = entity_memory()
-    z_layer_background: float = entity_memory()
 
     def spawn_time(self) -> float:
         return -1e8
@@ -36,7 +22,6 @@ class WatchStaticStage(WatchArchetype):
         return 1e8
 
     def initialize(self):
-        init_stage_z_layers(self)
         self.dead_time = -2
 
     @callback(order=-2)
@@ -54,20 +39,6 @@ class WatchStaticStage(WatchArchetype):
 
     def update_parallel(self):
         draw_stage_and_accessories(
-            self.z_layer_stage_lane,
-            self.z_layer_stage_cover,
-            self.z_layer_stage,
-            self.z_layer_judgment_line,
-            self.z_layer_cover,
-            self.z_layer_cover_line,
-            self.z_layer_judgment,
-            self.z_layer_background_cover,
-            self.z_layer_score,
-            self.z_layer_score_glow,
-            self.z_layer_score_bar,
-            self.z_layer_score_bar_mask,
-            self.z_layer_score_bar_rate,
-            self.z_layer_background,
             ScoreIndicator.ap,
             ScoreIndicator.score,
             ScoreIndicator.note_score,
