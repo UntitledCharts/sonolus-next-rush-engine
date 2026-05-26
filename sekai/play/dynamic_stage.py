@@ -157,7 +157,7 @@ class DynamicStage(PlayArchetype):
             rightmost = p.pivot_lane + 0.5 + floor(hi - p.pivot_lane - 0.5)
         if leftmost > rightmost:
             return
-        total_hitbox = layout_lane_area(leftmost - 0.5, rightmost + 0.5)
+        total_hitbox = layout_lane_area(leftmost - 1.5, rightmost + 1.5)
         empty_lanes = StageMemory.empty_lanes
         for touch in touches():
             if not total_hitbox.contains_point(touch.position):
