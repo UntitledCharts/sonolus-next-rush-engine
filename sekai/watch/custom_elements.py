@@ -10,7 +10,7 @@ from sekai.lib.custom_elements import (
     draw_judgment_text,
 )
 from sekai.lib.options import Options
-from sekai.watch import initialization, note
+from sekai.watch import note
 from sekai.watch.events import Fever
 
 
@@ -27,16 +27,8 @@ def spawn_custom(
 class ComboJudge(WatchArchetype):
     next_ref: EntityRef[note.WatchBaseNote] = entity_memory()
     note_index: int = entity_memory()
-    z: float = entity_memory()
-    z1: float = entity_memory()
-    z2: float = entity_memory()
     checker: float = entity_memory()
     name = archetype_names.COMBO_JUDGE
-
-    def initialize(self):
-        self.z = initialization.LayerCache.judgment
-        self.z1 = initialization.LayerCache.judgment1
-        self.z2 = initialization.LayerCache.judgment2
 
     def spawn_time(self) -> float:
         return note.WatchBaseNote.at(self.note_index).calc_time
@@ -51,24 +43,18 @@ class ComboJudge(WatchArchetype):
         current_note = note.WatchBaseNote.at(self.note_index)
         draw_combo_label(
             ap=current_note.ap,
-            z=self.z,
-            z1=self.z1,
             combo=current_note.combo,
         )
         draw_combo_number(
             draw_time=self.spawn_time(),
             ap=current_note.ap,
             combo=current_note.combo,
-            z=self.z,
-            z1=self.z1,
-            z2=self.z2,
         )
         draw_judgment_text(
             draw_time=self.spawn_time(),
             judgment=current_note.judgment,
             windows=current_note.judgment_window,
             accuracy=current_note.accuracy,
-            z=self.z,
         )
 
     @callback(order=3)
@@ -96,11 +82,7 @@ class ComboJudge(WatchArchetype):
 class JudgmentAccuracy(WatchArchetype):
     next_ref: EntityRef[note.WatchBaseNote] = entity_memory()
     note_index: int = entity_memory()
-    z: float = entity_memory()
     name = archetype_names.JUDGMENT_ACCURACY
-
-    def initialize(self):
-        self.z = initialization.LayerCache.judgment
 
     def spawn_time(self) -> float:
         if not Options.custom_accuracy:
@@ -121,18 +103,13 @@ class JudgmentAccuracy(WatchArchetype):
             windows=current_note.judgment_window,
             accuracy=current_note.accuracy,
             wrong_way=current_note.wrong_way_check,
-            z=self.z,
         )
 
 
 class DamageFlash(WatchArchetype):
     next_ref: EntityRef[note.WatchBaseNote] = entity_memory()
     note_index: int = entity_memory()
-    z: float = entity_memory()
     name = archetype_names.DAMAGE_FLASH
-
-    def initialize(self):
-        self.z = initialization.LayerCache.damage
 
     def spawn_time(self) -> float:
         if not Options.custom_damage:
@@ -147,7 +124,7 @@ class DamageFlash(WatchArchetype):
             return current_note.calc_time + 0.35
 
     def update_parallel(self):
-        draw_damage_flash(draw_time=self.spawn_time(), z=self.z)
+        draw_damage_flash(draw_time=self.spawn_time())
 
 
 CUSTOM_ARCHETYPES = (ComboJudge, JudgmentAccuracy, DamageFlash)

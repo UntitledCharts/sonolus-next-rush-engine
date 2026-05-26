@@ -9,7 +9,7 @@ from sonolus.script.particle import Particle, ParticleHandle
 from sonolus.script.quad import Quad, QuadLike
 from sonolus.script.record import Record
 from sonolus.script.runtime import time
-from sonolus.script.sprite import Sprite
+from sonolus.script.sprite import Sprite, ZIndex
 from sonolus.script.timing import beat_to_time
 
 from sekai.lib.ease import EaseType, ease
@@ -135,7 +135,11 @@ def get_guide_connector_sprite(kind: GuideConnectorKind) -> Sprite:
     return result
 
 
-def get_connector_z(kind: ConnectorKind, target_time: float, lane: float, active: bool, layer: ConnectorLayer) -> float:
+def get_connector_z(
+    kind: ConnectorKind, target_time: float, lane: float, active: bool, layer: ConnectorLayer
+) -> ZIndex:
+    layer_type = 0
+    etc = 0
     match kind:
         case (
             ConnectorKind.ACTIVE_NORMAL
@@ -145,37 +149,17 @@ def get_connector_z(kind: ConnectorKind, target_time: float, lane: float, active
         ):
             match layer:
                 case ConnectorLayer.TOP:
-                    return get_z(
-                        LAYER_ACTIVE_SLIDE_CONNECTOR_TOP,
-                        time=target_time,
-                        lane=lane,
-                        etc=get_active_connector_z_offset(kind, active),
-                        invert_time=True,
-                    )
+                    layer_type = LAYER_ACTIVE_SLIDE_CONNECTOR_TOP
+                    etc = get_active_connector_z_offset(kind, active)
                 case ConnectorLayer.BOTTOM:
-                    return get_z(
-                        LAYER_ACTIVE_SLIDE_CONNECTOR_BOTTOM,
-                        time=target_time,
-                        lane=lane,
-                        etc=get_active_connector_z_offset(kind, active),
-                        invert_time=True,
-                    )
+                    layer_type = LAYER_ACTIVE_SLIDE_CONNECTOR_BOTTOM
+                    etc = get_active_connector_z_offset(kind, active)
                 case ConnectorLayer.UNDER:
-                    return get_z(
-                        LAYER_ACTIVE_SLIDE_CONNECTOR_UNDER,
-                        time=target_time,
-                        lane=lane,
-                        etc=get_active_connector_z_offset(kind, active),
-                        invert_time=True,
-                    )
+                    layer_type = LAYER_ACTIVE_SLIDE_CONNECTOR_UNDER
+                    etc = get_active_connector_z_offset(kind, active)
                 case ConnectorLayer.OVER:
-                    return get_z(
-                        LAYER_ACTIVE_SLIDE_CONNECTOR_OVER,
-                        time=target_time,
-                        lane=lane,
-                        etc=get_active_connector_z_offset(kind, active),
-                        invert_time=True,
-                    )
+                    layer_type = LAYER_ACTIVE_SLIDE_CONNECTOR_OVER
+                    etc = get_active_connector_z_offset(kind, active)
                 case _:
                     assert_never(layer)
         case (
@@ -190,43 +174,25 @@ def get_connector_z(kind: ConnectorKind, target_time: float, lane: float, active
         ):
             match layer:
                 case ConnectorLayer.TOP:
-                    return get_z(
-                        LAYER_GUIDE_CONNECTOR_TOP,
-                        time=target_time,
-                        lane=lane,
-                        etc=kind - ConnectorKind.GUIDE_NEUTRAL,
-                        invert_time=True,
-                    )
+                    layer_type = LAYER_GUIDE_CONNECTOR_TOP
+                    etc = kind - ConnectorKind.GUIDE_NEUTRAL
                 case ConnectorLayer.BOTTOM:
-                    return get_z(
-                        LAYER_GUIDE_CONNECTOR_BOTTOM,
-                        time=target_time,
-                        lane=lane,
-                        etc=kind - ConnectorKind.GUIDE_NEUTRAL,
-                        invert_time=True,
-                    )
+                    layer_type = LAYER_GUIDE_CONNECTOR_BOTTOM
+                    etc = kind - ConnectorKind.GUIDE_NEUTRAL
                 case ConnectorLayer.UNDER:
-                    return get_z(
-                        LAYER_GUIDE_CONNECTOR_UNDER,
-                        time=target_time,
-                        lane=lane,
-                        etc=kind - ConnectorKind.GUIDE_NEUTRAL,
-                        invert_time=True,
-                    )
+                    layer_type = LAYER_GUIDE_CONNECTOR_UNDER
+                    etc = kind - ConnectorKind.GUIDE_NEUTRAL
                 case ConnectorLayer.OVER:
-                    return get_z(
-                        LAYER_GUIDE_CONNECTOR_OVER,
-                        time=target_time,
-                        lane=lane,
-                        etc=kind - ConnectorKind.GUIDE_NEUTRAL,
-                        invert_time=True,
-                    )
+                    layer_type = LAYER_GUIDE_CONNECTOR_OVER
+                    etc = kind - ConnectorKind.GUIDE_NEUTRAL
                 case _:
                     assert_never(layer)
         case ConnectorKind.NONE:
-            return 0.0
+            layer_type = 0
+            etc = 0
         case _:
             assert_never(kind)
+    return get_z(layer=layer_type, time=target_time, lane=lane, etc=etc, invert_time=True)
 
 
 def get_active_connector_z_offset(kind: ActiveConnectorKind, active: bool) -> int:
@@ -457,10 +423,7 @@ def draw_connector(
     quality = get_connector_quality_option(kind)
     segment_count = max(1, ceil(scale * quality * 10))
     z_normal = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=False, layer=layer)
-    if visual_state == ConnectorVisualState.ACTIVE and active_sprite.is_available:
-        z_active = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=True, layer=layer)
-    else:
-        z_active = z_normal
+    z_active = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=True, layer=layer)
 
     last_travel = start_travel
     last_lane = start_lane
