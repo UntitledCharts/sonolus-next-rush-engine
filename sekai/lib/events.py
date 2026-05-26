@@ -3,7 +3,15 @@ from sonolus.script.interval import lerp, unlerp_clamped
 from sonolus.script.quad import Quad, Rect
 from sonolus.script.vec import Vec2
 
-from sekai.lib.layer import LAYER_JUDGMENT_SKILL, get_z
+from sekai.lib.layer import (
+    LAYER_BACKGROUND_SIDE,
+    LAYER_GAUGE,
+    LAYER_JUDGMENT_SKILL,
+    LAYER_SKILL_BAR,
+    LAYER_SKILL_ETC,
+    LAYER_STAGE,
+    get_z_alt,
+)
 from sekai.lib.layout import (
     LANE_B,
     LANE_T,
@@ -49,7 +57,7 @@ class Fever:
     alpha_r: float
 
 
-def draw_fever_side_cover(z: float, time: float):
+def draw_fever_side_cover(time: float):
     if not ActiveSkin.background.is_available:
         return
     if Options.hide_ui >= 3:
@@ -69,16 +77,16 @@ def draw_fever_side_cover(z: float, time: float):
     layout1 = layout_fever_cover(l, 0)
     layout2 = layout_fever_cover(0, r)
     a = unlerp_clamped(0, 0.25, time) * 0.75
-    ActiveSkin.background.draw(layout1, z, a=a)
-    ActiveSkin.background.draw(layout2, z, a=a)
+    ActiveSkin.background.draw(layout1, LAYER_BACKGROUND_SIDE, a=a)
+    ActiveSkin.background.draw(layout2, LAYER_BACKGROUND_SIDE, a=a)
 
     if screen().t < DynamicLayout.t:
         return
     layout_sky = layout_fever_cover_sky()
-    ActiveSkin.background.draw(layout_sky, z, a=a)
+    ActiveSkin.background.draw(layout_sky, LAYER_BACKGROUND_SIDE, a=a)
 
 
-def draw_fever_side_bar(z: float, z_t: float, time: float):
+def draw_fever_side_bar(time: float):
     if Options.hide_ui >= 3:
         return
     if Options.fever_effect == 2:
@@ -122,23 +130,23 @@ def draw_fever_side_bar(z: float, z_t: float, time: float):
         )
 
         if a_left > 0:
-            ActiveSkin.sekai_fever_gauge_background.draw(layout1, z, a=a_left)
-            ActiveSkin.guide_neutral.draw(point1, z_t, a=a_left)
-            ActiveSkin.guide_neutral.draw(point2, z_t, a=a_left)
+            ActiveSkin.sekai_fever_gauge_background.draw(layout1, LAYER_STAGE, a=a_left)
+            ActiveSkin.guide_neutral.draw(point1, LAYER_GAUGE, a=a_left)
+            ActiveSkin.guide_neutral.draw(point2, LAYER_GAUGE, a=a_left)
         if a_right > 0:
-            ActiveSkin.sekai_fever_gauge_background.draw(layout2, z, a=a_right)
-            ActiveSkin.sekai_fever_text.draw(fever_text_layout, z_t, a=a_right)
-            ActiveSkin.sekai_super_fever_text.draw(super_fever_text_layout, z_t, a=a_right)
+            ActiveSkin.sekai_fever_gauge_background.draw(layout2, LAYER_STAGE, a=a_right)
+            ActiveSkin.sekai_fever_text.draw(fever_text_layout, LAYER_GAUGE, a=a_right)
+            ActiveSkin.sekai_super_fever_text.draw(super_fever_text_layout, LAYER_GAUGE, a=a_right)
     elif screen().t < DynamicLayout.t or not ActiveSkin.sekai_stage_fever_tablet.is_available:
         if ActiveSkin.sekai_stage_fever.is_available:
             layout = layout_sekai_stage()
-            ActiveSkin.sekai_stage_fever.draw(layout, z, a=a)
+            ActiveSkin.sekai_stage_fever.draw(layout, LAYER_STAGE, a=a)
     else:
         layout = layout_sekai_stage_t()
-        ActiveSkin.sekai_stage_fever_tablet.draw(layout, z, a=a)
+        ActiveSkin.sekai_stage_fever_tablet.draw(layout, LAYER_STAGE, a=a)
 
 
-def draw_fever_gauge(z: float, percentage: float):
+def draw_fever_gauge(percentage: float):
     if not ActiveSkin.sekai_fever_gauge.available:
         return
     if Options.hide_ui >= 3:
@@ -162,15 +170,15 @@ def draw_fever_gauge(z: float, percentage: float):
         layout2 = layout_dynamic_fever_side(r, r + thickness, percentage)
 
         if a_left > 0:
-            ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, z, a=a_left)
+            ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, LAYER_GAUGE, a=a_left)
         if a_right > 0:
-            ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, z, a=a_right)
+            ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, LAYER_GAUGE, a=a_right)
     else:
         t = lerp(LANE_B, LANE_T, percentage)
         layout1 = layout_fever_gauge_left(t)
         layout2 = layout_fever_gauge_right(t)
-        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, z, a=0.6)
-        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, z, a=0.6)
+        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, LAYER_GAUGE, a=0.6)
+        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, LAYER_GAUGE, a=0.6)
 
 
 def spawn_fever_start_particle(percentage: float):
@@ -237,7 +245,7 @@ def spawn_fever_chance_particle():
         ActiveParticles.fever_chance_lane.spawn(layout_lane2, 1, False)
 
 
-def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode, level: int):
+def draw_skill_bar(time: float, num: int, effect: SkillMode, level: int):
     if Options.hide_ui >= 3:
         return
     if not Options.skill_effect:
@@ -276,11 +284,11 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode
         layout @= layout_skill_bar(current_center, w, h)
     match effect:
         case SkillMode.SCORE:
-            ActiveSkin.skill_bar_score.draw(layout, z, anim)
+            ActiveSkin.skill_bar_score.draw(layout, LAYER_SKILL_BAR, anim)
         case SkillMode.HEAL:
-            ActiveSkin.skill_bar_life.draw(layout, z, anim)
+            ActiveSkin.skill_bar_life.draw(layout, LAYER_SKILL_BAR, anim)
         case SkillMode.JUDGMENT:
-            ActiveSkin.skill_bar_judgment.draw(layout, z, anim)
+            ActiveSkin.skill_bar_judgment.draw(layout, LAYER_SKILL_BAR, anim)
 
     if LevelConfig.ui_version == Version.v3:
         x = -7.5 + x_ratio
@@ -298,7 +306,7 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode
         h = 0.045
         w = h * 7
         layout @= layout_skill_bar(icon_current_center, w, h)
-    ActiveSkin.skill_icon.get_sprite(num).draw(layout, z2, anim)
+    ActiveSkin.skill_icon.get_sprite(num).draw(layout, LAYER_SKILL_ETC, anim)
 
     if LevelConfig.ui_version == Version.v3:
         x = -5.58 + x_ratio
@@ -331,9 +339,9 @@ def draw_skill_bar(z: float, z2: float, time: float, num: int, effect: SkillMode
         final_anim = anim
         layout @= layout_skill_bar(text_current_center, w, h)
     if time <= 1.5 or LevelConfig.ui_version == Version.v1:
-        ActiveSkin.skill_level.get_sprite(level).draw(layout, z2, final_anim)
+        ActiveSkin.skill_level.get_sprite(level).draw(layout, LAYER_SKILL_ETC, final_anim)
     else:
-        ActiveSkin.skill_value.get_sprite(effect).draw(layout, z2, final_anim)
+        ActiveSkin.skill_value.get_sprite(effect).draw(layout, LAYER_SKILL_ETC, final_anim)
 
 
 def draw_judgment_effect(time: float, l: float = -6, r: float = 6, stage_alpha: float = 1.0, y_offset: float = 0.0):
@@ -342,7 +350,7 @@ def draw_judgment_effect(time: float, l: float = -6, r: float = 6, stage_alpha: 
 
     anim = enter_progress - exit_progress
     layout = layout_skill_judgment_line(l, r, y_offset)
-    z = get_z(LAYER_JUDGMENT_SKILL)
+    z = get_z_alt(LAYER_JUDGMENT_SKILL)
     ActiveSkin.skill_judgment_line.draw(layout, z=z, a=anim * stage_alpha)
 
 
