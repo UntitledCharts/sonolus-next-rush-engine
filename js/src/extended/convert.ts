@@ -132,6 +132,8 @@ interface TimescaleChangeInfo {
 class ExtData {
     entities: ExtendedEntityData[]
     byArch = new Map<string, { idx: number; e: ExtendedEntityData }[]>()
+    byName = new Map<string, ExtendedEntityData>()
+    indexByEntity = new Map<ExtendedEntityData, number>()
     notes: { idx: number; e: ExtendedEntityData }[] = []
     connectors: { idx: number; e: ExtendedEntityData }[] = []
 
@@ -141,6 +143,9 @@ class ExtData {
             const arch = e.archetype
             if (!this.byArch.has(arch)) this.byArch.set(arch, [])
             this.byArch.get(arch)?.push({ idx, e })
+
+            if (e.name !== undefined && !this.byName.has(e.name)) this.byName.set(e.name, e)
+            if (!this.indexByEntity.has(e)) this.indexByEntity.set(e, idx)
 
             if (arch in noteTypeMapping) this.notes.push({ idx, e })
             if (arch in activeConnectorKindMapping) this.connectors.push({ idx, e })
@@ -243,12 +248,40 @@ function resolveOriginal(
     ref: number | string | undefined,
 ): ExtendedEntityData | undefined {
     if (typeof ref === 'number') return ext.get(ref)
-    if (typeof ref === 'string') return ext.entities.find((x) => x.name === ref)
+    if (typeof ref === 'string') return ext.byName.get(ref)
     return undefined
 }
 
 export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | undefined => {
     const ext = new ExtData(data.entities)
+
+    const connectorsByHeadRef = new Map<number | string, { idx: number; e: ExtendedEntityData }[]>()
+    const connectorsByTailRef = new Map<number | string, { idx: number; e: ExtendedEntityData }[]>()
+    const connectorsByStartRef = new Map<
+        number | string,
+        { idx: number; e: ExtendedEntityData }[]
+    >()
+    const pushConnectorIndex = (
+        map: Map<number | string, { idx: number; e: ExtendedEntityData }[]>,
+        key: number | string | undefined,
+        entry: { idx: number; e: ExtendedEntityData },
+    ) => {
+        if (key === undefined) return
+        const list = map.get(key)
+        if (list) list.push(entry)
+        else map.set(key, [entry])
+    }
+    for (const entry of ext.connectors) {
+        pushConnectorIndex(connectorsByHeadRef, getField(entry.e, 'head'), entry)
+        pushConnectorIndex(connectorsByTailRef, getField(entry.e, 'tail'), entry)
+        pushConnectorIndex(connectorsByStartRef, getField(entry.e, 'start'), entry)
+    }
+    const getConnectorsByHeadRef = (ref: number | string | undefined) =>
+        ref === undefined ? [] : (connectorsByHeadRef.get(ref) ?? [])
+    const getConnectorsByTailRef = (ref: number | string | undefined) =>
+        ref === undefined ? [] : (connectorsByTailRef.get(ref) ?? [])
+    const getConnectorsByStartRef = (ref: number | string | undefined) =>
+        ref === undefined ? [] : (connectorsByStartRef.get(ref) ?? [])
 
     const finalEntities: EntityBuilder[] = []
 
@@ -615,18 +648,12 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             if (headRef === undefined || visited.has(key)) return
             visited.add(key)
 
-            const nextConnectors = ext.connectors.filter(
-                (c) =>
-                    c.e.archetype === archetype &&
-                    getField(c.e, 'head') === headRef &&
-                    getField(c.e, 'start') === startRef,
+            const headConnectors = getConnectorsByHeadRef(headRef)
+            const nextConnectors = headConnectors.filter(
+                (c) => c.e.archetype === archetype && getField(c.e, 'start') === startRef,
             )
             if (nextConnectors.length === 0) {
-                nextConnectors.push(
-                    ...ext.connectors.filter(
-                        (c) => c.e.archetype === archetype && getField(c.e, 'head') === headRef,
-                    ),
-                )
+                nextConnectors.push(...headConnectors.filter((c) => c.e.archetype === archetype))
             }
 
             if (nextConnectors.length === 0) {
@@ -648,9 +675,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
         visit(tailRef)
         if (isScoredSlideTickRef(ultimateTailRef)) {
-            for (const connector of ext.connectors) {
+            for (const connector of getConnectorsByStartRef(startRef)) {
                 if (connector.e.archetype !== archetype) continue
-                if (getField(connector.e, 'start') !== startRef) continue
 
                 const candidateTailRef = getField(connector.e, 'tail')
                 const candidateTailBeat = getNum(
@@ -682,14 +708,11 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             visited.add(key)
             if (!isSlideTickRef(currentHeadRef)) return
 
-            let previousConnectors = ext.connectors.filter(
-                (c) => c.e.archetype === archetype && getField(c.e, 'tail') === currentHeadRef,
-            )
+            const tailConnectors = getConnectorsByTailRef(currentHeadRef)
+            let previousConnectors = tailConnectors.filter((c) => c.e.archetype === archetype)
             if (previousConnectors.length === 0) {
-                previousConnectors = ext.connectors.filter(
-                    (c) =>
-                        c.e.archetype in activeConnectorKindMapping &&
-                        getField(c.e, 'tail') === currentHeadRef,
+                previousConnectors = tailConnectors.filter(
+                    (c) => c.e.archetype in activeConnectorKindMapping,
                 )
             }
 
@@ -720,16 +743,11 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         startRef: number | string | undefined,
         headRef: number | string | undefined,
     ) {
+        const headConnectors = getConnectorsByHeadRef(headRef)
         return (
-            ext.connectors.find(
-                ({ e }) =>
-                    e.archetype === archetype &&
-                    getField(e, 'start') === startRef &&
-                    getField(e, 'head') === headRef,
-            ) ??
-            ext.connectors.find(
-                ({ e }) => e.archetype === archetype && getField(e, 'head') === headRef,
-            )
+            headConnectors.find(
+                ({ e }) => e.archetype === archetype && getField(e, 'start') === startRef,
+            ) ?? headConnectors.find(({ e }) => e.archetype === archetype)
         )
     }
 
@@ -763,7 +781,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
     function refKey(ref: number | string | undefined) {
         const original = resolveOriginal(ext, ref)
-        const index = original ? ext.entities.indexOf(original) : -1
+        const index = original ? (ext.indexByEntity.get(original) ?? -1) : -1
 
         return index >= 0 ? `index:${index}` : `${typeof ref}:${String(ref)}`
     }
