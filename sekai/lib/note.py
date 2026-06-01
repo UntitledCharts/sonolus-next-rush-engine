@@ -6,7 +6,7 @@ from sonolus.script.archetype import EntityRef, HapticType, PlayArchetype, Watch
 from sonolus.script.bucket import Bucket, Judgment
 from sonolus.script.easing import ease_in_cubic
 from sonolus.script.effect import Effect
-from sonolus.script.interval import Interval, lerp, remap_clamped
+from sonolus.script.interval import lerp, remap_clamped
 from sonolus.script.quad import Quad
 from sonolus.script.runtime import is_tutorial, is_watch, level_life, level_score, time
 from sonolus.script.sprite import Sprite
@@ -17,7 +17,6 @@ from sekai.lib.buckets import (
     EMPTY_JUDGMENT_WINDOW,
     FLICK_CRITICAL_WINDOW,
     FLICK_NORMAL_WINDOW,
-    FLICK_NORMAL_WINDOW_BAD,
     SLIDE_END_CRITICAL_WINDOW,
     SLIDE_END_FLICK_CRITICAL_WINDOW,
     SLIDE_END_FLICK_NORMAL_WINDOW,
@@ -26,9 +25,7 @@ from sekai.lib.buckets import (
     SLIDE_END_TRACE_NORMAL_WINDOW,
     SLIDE_TICK_JUDGMENT_WINDOW,
     TAP_CRITICAL_WINDOW,
-    TAP_CRITICAL_WINDOW_BAD,
     TAP_NORMAL_WINDOW,
-    TAP_NORMAL_WINDOW_BAD,
     TRACE_CRITICAL_WINDOW,
     TRACE_FLICK_CRITICAL_WINDOW,
     TRACE_FLICK_NORMAL_WINDOW,
@@ -1093,53 +1090,6 @@ def get_note_window(kind: NoteKind, is_connector_tick) -> SekaiWindow:
                 result @= SLIDE_TICK_JUDGMENT_WINDOW
         case NoteKind.ANCHOR | NoteKind.DAMAGE:
             result @= EMPTY_JUDGMENT_WINDOW
-        case _:
-            assert_never(kind)
-    return result
-
-
-def get_note_window_bad(kind: NoteKind) -> Interval:
-    result = +Interval
-    match kind:
-        case NoteKind.NORM_TAP | NoteKind.NORM_HEAD_TAP | NoteKind.NORM_TAIL_TAP:
-            result @= TAP_NORMAL_WINDOW_BAD
-        case NoteKind.CRIT_TAP | NoteKind.CRIT_HEAD_TAP | NoteKind.CRIT_TAIL_TAP:
-            result @= TAP_CRITICAL_WINDOW_BAD
-        case NoteKind.NORM_FLICK | NoteKind.NORM_HEAD_FLICK:
-            result @= FLICK_NORMAL_WINDOW_BAD
-        case NoteKind.CRIT_FLICK | NoteKind.CRIT_HEAD_FLICK:
-            result @= FLICK_NORMAL_WINDOW_BAD
-        case NoteKind.DAMAGE:
-            result @= Interval(0, 0)
-        case (
-            NoteKind.NORM_TAIL_FLICK
-            | NoteKind.CRIT_TAIL_FLICK
-            | NoteKind.NORM_TRACE
-            | NoteKind.NORM_HEAD_TRACE
-            | NoteKind.CRIT_TRACE
-            | NoteKind.CRIT_HEAD_TRACE
-            | NoteKind.NORM_TRACE_FLICK
-            | NoteKind.NORM_HEAD_TRACE_FLICK
-            | NoteKind.NORM_TAIL_TRACE_FLICK
-            | NoteKind.CRIT_TRACE_FLICK
-            | NoteKind.CRIT_HEAD_TRACE_FLICK
-            | NoteKind.CRIT_TAIL_TRACE_FLICK
-            | NoteKind.NORM_RELEASE
-            | NoteKind.NORM_HEAD_RELEASE
-            | NoteKind.NORM_TAIL_RELEASE
-            | NoteKind.CRIT_RELEASE
-            | NoteKind.CRIT_HEAD_RELEASE
-            | NoteKind.CRIT_TAIL_RELEASE
-            | NoteKind.NORM_TAIL_TRACE
-            | NoteKind.CRIT_TAIL_TRACE
-            | NoteKind.NORM_TAIL_TRACE_FLICK
-            | NoteKind.CRIT_TAIL_TRACE_FLICK
-            | NoteKind.NORM_TICK
-            | NoteKind.CRIT_TICK
-            | NoteKind.HIDE_TICK
-            | NoteKind.ANCHOR
-        ):
-            result @= Interval(-1, -1)
         case _:
             assert_never(kind)
     return result
