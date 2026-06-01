@@ -101,6 +101,9 @@ class BaseNote(PlayArchetype):
     target_scaled_time: CompositeTime = entity_data()
     target_y_offset: float = entity_data()
 
+    unadjusted_input_interval_data: Interval = entity_data()
+    perfect_window_end: float = entity_data()
+
     # The id of the tap that activated this note, for tap notes and flicks or released the note, for release notes.
     # This is set by the input manager rather than the note itself.
     captured_touch_id: int = shared_memory()
@@ -140,11 +143,11 @@ class BaseNote(PlayArchetype):
 
     @property
     def unadjusted_input_interval(self) -> Interval:
-        return self.judgment_window.bad + self.target_time
+        return self.unadjusted_input_interval_data
 
     @property
     def input_interval(self) -> Interval:
-        return self.judgment_window.bad + self.target_time + input_offset()
+        return self.unadjusted_input_interval_data + input_offset()
 
     def init_data(self):
         if self.data_init_done:
@@ -160,6 +163,9 @@ class BaseNote(PlayArchetype):
             self.direction = mirror_flick_direction(self.direction)
 
         self.target_time = beat_to_time(self.beat)
+        window = get_note_window(self.kind, self.active_head_ref.index > 0 or self.is_attached)
+        self.unadjusted_input_interval_data = window.bad + self.target_time
+        self.perfect_window_end = window.perfect.end
 
         if not self.is_attached:
             self.target_scaled_time = group_time_to_scaled_time(self.timescale_group, self.target_time)
@@ -376,14 +382,15 @@ class BaseNote(PlayArchetype):
             return
         if Options.disable_fake_notes and not self.is_scored:
             return
-        draw_note(
-            self.kind,
-            self.visual_lane,
-            self.size,
-            self.visual_progress,
-            self.direction,
-            self.target_time,
-        )
+        if self.kind != NoteKind.HIDE_TICK:
+            draw_note(
+                self.kind,
+                self.visual_lane,
+                self.size,
+                self.visual_progress,
+                self.direction,
+                self.target_time,
+            )
         if Options.show_hitboxes and self.is_scored:
             draw_start = min(self.input_interval.start, self.target_time - HITBOX_DRAW_MIN_EARLY_WINDOW)
             if draw_start <= time() <= self.input_interval.end:
@@ -487,14 +494,14 @@ class BaseNote(PlayArchetype):
         # After that, wrong-way has no impact anyway.
         if (
             not self.best_touch_matches_direction
-            and offset_adjusted_time() < self.target_time + self.judgment_window.perfect.end
+            and offset_adjusted_time() < self.target_time + self.perfect_window_end
         ):
             return False
 
         # If a new input could improve the judgment...
         if offset_adjusted_time() < self.target_time + (self.target_time - self.best_touch_time):
             # If we're still in the perfect window, wait for it to end.
-            if offset_adjusted_time() < self.target_time + self.judgment_window.perfect.end:
+            if offset_adjusted_time() < self.target_time + self.perfect_window_end:
                 return False
             # Otherwise, see if there's any ongoing touches in the hitbox.
             for touch in touches():
@@ -651,10 +658,10 @@ class BaseNote(PlayArchetype):
         # Either pre-target, or post-target within perfect window with wrong direction
         current_abs_error = abs(self.best_touch_time - self.target_time)
         if not self.best_touch_matches_direction:
-            current_abs_error = max(current_abs_error, self.judgment_window.perfect.end)
+            current_abs_error = max(current_abs_error, self.perfect_window_end)
         incoming_abs_error = abs(offset_adjusted_time() - self.target_time)
         if not has_correct_direction_touch:
-            incoming_abs_error = max(incoming_abs_error, self.judgment_window.perfect.end)
+            incoming_abs_error = max(incoming_abs_error, self.perfect_window_end)
         if incoming_abs_error < current_abs_error:
             self.best_touch_time = offset_adjusted_time()
             self.best_touch_matches_direction = has_correct_direction_touch
@@ -827,7 +834,7 @@ class BaseNote(PlayArchetype):
         error = self.judgment_window.bad.clamp(actual_time - self.target_time)
         self.result.judgment = judgment if not SkillActive.judgment or judgment == Judgment.MISS else Judgment.PERFECT
         if error in self.judgment_window.perfect:
-            self.result.accuracy = self.judgment_window.perfect.end
+            self.result.accuracy = self.perfect_window_end
         else:
             self.result.accuracy = error
         if self.result.bucket.id != -1:
