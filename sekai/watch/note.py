@@ -88,7 +88,7 @@ class WatchBaseNote(WatchArchetype):
     start_time: float = entity_data()
     target_scaled_time: CompositeTime = entity_data()
     target_y_offset: float = entity_data()
-    not_render: float = shared_memory()
+    not_render: float = entity_data()
 
     active_connector_info: ActiveConnectorInfo = shared_memory()
 
@@ -238,6 +238,7 @@ class WatchBaseNote(WatchArchetype):
 
         if self.played_hit_effects or not is_replay():
             self.spawn_critical_lane()
+            self.get_min_start_time()
 
     def get_min_start_time(self):
         if self.calc_time - self.visual_start_time > MIN_START_TIME:
