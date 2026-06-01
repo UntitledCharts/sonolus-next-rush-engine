@@ -7,6 +7,7 @@ from sonolus.script.archetype import (
     StandardImport,
     WatchArchetype,
     entity_data,
+    entity_memory,
     imported,
     shared_memory,
 )
@@ -88,11 +89,11 @@ class WatchBaseNote(WatchArchetype):
     start_time: float = entity_data()
     target_scaled_time: CompositeTime = entity_data()
     target_y_offset: float = entity_data()
-    not_render: float = entity_data()
+    not_render: float = entity_memory()
 
     active_connector_info: ActiveConnectorInfo = shared_memory()
 
-    hitbox: Hitbox = shared_memory()
+    hitbox: Hitbox = entity_memory()
 
     end_time: float = imported()
     played_hit_effects: bool = imported()
@@ -103,7 +104,6 @@ class WatchBaseNote(WatchArchetype):
     wrong_way_check: bool = imported()
     next_ref_accuracy: EntityRef[WatchBaseNote] = shared_memory()
     next_ref_damage_flash: EntityRef[WatchBaseNote] = shared_memory()
-    judgment_window: SekaiWindow = shared_memory()
     combo: int = shared_memory()
     count: int = shared_memory()
     ap: bool = shared_memory()
@@ -260,6 +260,10 @@ class WatchBaseNote(WatchArchetype):
 
     def despawn_time(self) -> float:
         return self.calc_time
+
+    @property
+    def judgment_window(self) -> SekaiWindow:
+        return get_note_window(self.kind, self.active_head_ref.index > 0 or self.is_attached)
 
     @property
     def calc_time(self) -> float:
