@@ -533,7 +533,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         anchor.set('#TIMESCALE_GROUP', tsg || defaultTsg)
         anchor.set('isAttached', 0)
         anchor.set('connectorEase', EaseType.LINEAR)
-        anchor.set('isSeparator', 1)
+        anchor.set('isSeparator', 0)
         anchor.set('segmentKind', kind)
         anchor.set('segmentAlpha', 1)
         anchor.set('segmentLayer', 0)
