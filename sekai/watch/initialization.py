@@ -148,8 +148,8 @@ def setting_combo(head: int, skill: int) -> None:
     combo = 0
     count = 0
     ap = False
-    accuracy = head
-    damage_flash = head
+    prev_acc = 0
+    prev_damage = 0
     current_note_weight = 0.0
 
     total_weight = +NeumaierSum
@@ -181,13 +181,21 @@ def setting_combo(head: int, skill: int) -> None:
         if is_replay() and ap:
             note.WatchBaseNote.at(ptr).at(ptr).ap = True
 
-        if is_replay() and judgment != Judgment.PERFECT and note.WatchBaseNote.at(ptr).at(ptr).played_hit_effects:
-            note.WatchBaseNote.at(ptr).at(accuracy).next_ref_accuracy.index = ptr
-            accuracy = ptr
+        if is_replay() and judgment != Judgment.PERFECT and note.WatchBaseNote.at(ptr).played_hit_effects:
+            if prev_acc > 0:
+                custom_elements.JudgmentAccuracy.spawn(
+                    note_index=prev_acc,
+                    next_ref=note.WatchBaseNote.at(ptr).ref(),
+                )
+            prev_acc = ptr
 
         if is_replay() and judgment == Judgment.MISS:
-            note.WatchBaseNote.at(ptr).at(damage_flash).next_ref_damage_flash.index = ptr
-            damage_flash = ptr
+            if prev_damage > 0:
+                custom_elements.DamageFlash.spawn(
+                    note_index=prev_damage,
+                    next_ref=note.WatchBaseNote.at(ptr).ref(),
+                )
+            prev_damage = ptr
 
         count += 1
         note.WatchBaseNote.at(ptr).count = count
@@ -211,6 +219,17 @@ def setting_combo(head: int, skill: int) -> None:
 
         LastNote.last_time = max(LastNote.last_time, note.WatchBaseNote.at(ptr).calc_time)
         ptr = note.WatchBaseNote.at(ptr).next_ref.index
+
+    if prev_acc > 0:
+        custom_elements.JudgmentAccuracy.spawn(
+            note_index=prev_acc,
+            next_ref=+EntityRef[note.WatchBaseNote],
+        )
+    if prev_damage > 0:
+        custom_elements.DamageFlash.spawn(
+            note_index=prev_damage,
+            next_ref=+EntityRef[note.WatchBaseNote],
+        )
 
     calculate_score(head, 1000000, total_weight.total)
 

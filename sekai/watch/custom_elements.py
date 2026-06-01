@@ -1,6 +1,4 @@
 from sonolus.script.archetype import EntityRef, WatchArchetype, callback, entity_memory
-from sonolus.script.bucket import Judgment
-from sonolus.script.runtime import is_replay
 
 from sekai.lib import archetype_names
 from sekai.lib.custom_elements import (
@@ -18,26 +16,12 @@ from sekai.watch.events import Fever
 
 def spawn_custom(
     next_ref: EntityRef[note.WatchBaseNote],
-    next_ref_accuracy: EntityRef[note.WatchBaseNote],
-    next_ref_damage_flash: EntityRef[note.WatchBaseNote],
     note_index: int,
-    judgment: Judgment,
-    played_hit_effects: bool,
 ):
     ComboJudge.spawn(
         next_ref=next_ref,
         note_index=note_index,
     )
-    if judgment != Judgment.PERFECT and played_hit_effects and is_replay():
-        JudgmentAccuracy.spawn(
-            next_ref=next_ref_accuracy,
-            note_index=note_index,
-        )
-    if judgment == Judgment.MISS and is_replay():
-        DamageFlash.spawn(
-            next_ref=next_ref_damage_flash,
-            note_index=note_index,
-        )
 
 
 class ComboJudge(WatchArchetype):
