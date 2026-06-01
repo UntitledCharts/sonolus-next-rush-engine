@@ -102,8 +102,6 @@ class WatchBaseNote(WatchArchetype):
     accuracy: StandardImport.ACCURACY = imported()
 
     wrong_way_check: bool = imported()
-    next_ref_accuracy: EntityRef[WatchBaseNote] = shared_memory()
-    next_ref_damage_flash: EntityRef[WatchBaseNote] = shared_memory()
     combo: int = shared_memory()
     count: int = shared_memory()
     ap: bool = shared_memory()
@@ -229,11 +227,7 @@ class WatchBaseNote(WatchArchetype):
         if self.is_scored:
             spawn_custom(
                 self.next_ref,
-                self.next_ref_accuracy,
-                self.next_ref_damage_flash,
                 self.index,
-                self.judgment,
-                self.played_hit_effects,
             )
 
         if self.played_hit_effects or not is_replay():
