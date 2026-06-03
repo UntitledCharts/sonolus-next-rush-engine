@@ -9,6 +9,8 @@ from sekai.lib.slot_effect import (
     SLOT_GLOW_EFFECT_DURATION,
     draw_slot_effect,
     draw_slot_glow_effect,
+    is_slot_generation_visible,
+    next_slot_generation,
 )
 
 
@@ -21,12 +23,20 @@ class SlotGlowEffect(PlayArchetype):
     size: float = entity_memory()
     y_offset: float = entity_memory()
     end_time: float = entity_memory()
+    generation: float = entity_memory()
+    generation_set: bool = entity_memory()
 
     def initialize(self):
         self.end_time = self.start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed
 
+    def update_sequential(self):
+        if self.despawn or self.generation_set:
+            return
+        self.generation = next_slot_generation(self.sprite, self.start_time)
+        self.generation_set = True
+
     def update_parallel(self):
-        if time() > self.end_time:
+        if time() > self.end_time or not is_slot_generation_visible(self.sprite, self.generation):
             self.despawn = True
             return
         draw_slot_glow_effect(
@@ -47,12 +57,20 @@ class SlotEffect(PlayArchetype):
     lane: float = entity_memory()
     y_offset: float = entity_memory()
     end_time: float = entity_memory()
+    generation: float = entity_memory()
+    generation_set: bool = entity_memory()
 
     def initialize(self):
         self.end_time = self.start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed
 
+    def update_sequential(self):
+        if self.despawn or self.generation_set:
+            return
+        self.generation = next_slot_generation(self.sprite, self.start_time)
+        self.generation_set = True
+
     def update_parallel(self):
-        if time() > self.end_time:
+        if time() > self.end_time or not is_slot_generation_visible(self.sprite, self.generation):
             self.despawn = True
             return
         draw_slot_effect(
