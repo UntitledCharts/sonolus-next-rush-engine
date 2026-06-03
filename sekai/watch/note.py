@@ -30,7 +30,6 @@ from sekai.lib.note import (
     get_leniency,
     get_note_bucket,
     get_note_effect_kind,
-    get_note_particles,
     get_visual_spawn_time,
     has_release_input,
     has_tap_input,
@@ -39,11 +38,11 @@ from sekai.lib.note import (
     mirror_flick_direction,
     play_note_hit_effects,
     schedule_note_auto_sfx,
+    schedule_note_particles,
     schedule_note_sfx,
     schedule_note_slot_effects,
 )
 from sekai.lib.options import Options
-from sekai.lib.particle import BaseParticles
 from sekai.lib.stage import DivisionParity, get_stage_props
 from sekai.lib.timescale import (
     CompositeTime,
@@ -56,7 +55,6 @@ from sekai.lib.timescale import (
 from sekai.play.note import HITBOX_DRAW_MIN_EARLY_WINDOW, derive_note_archetypes, get_note_window
 from sekai.watch.custom_elements import spawn_custom
 from sekai.watch.dynamic_stage import WatchDynamicStage
-from sekai.watch.particle_manager import ParticleManager
 
 MIN_START_TIME = 0.0167  # Executes the terminate process with a guaranteed minimum duration.
 
@@ -231,7 +229,7 @@ class WatchBaseNote(WatchArchetype):
             )
 
         if self.played_hit_effects or not is_replay():
-            self.spawn_critical_lane()
+            self.spawn_note_particles()
             self.get_min_start_time()
 
     def get_min_start_time(self):
@@ -241,11 +239,26 @@ class WatchBaseNote(WatchArchetype):
             self.not_render = True
             return self.calc_time - MIN_START_TIME
 
-    def spawn_critical_lane(self):
-        if self.is_scored and Options.lane_effect_enabled and (self.played_hit_effects or not is_replay()):
-            particles = get_note_particles(self.kind, self.direction)
-            if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
-                ParticleManager.spawn(lane=self.lane, size=self.size, target_time=self.calc_time, particles=particles)
+    def spawn_note_particles(self):
+        if not self.is_scored:
+            return
+        if not (Options.note_effect_enabled or Options.lane_effect_enabled):
+            return
+        if self.kind == NoteKind.HIDE_TICK:
+            return
+        t = self.calc_time
+        schedule_note_particles(
+            self.kind,
+            self.effect_kind,
+            self.visual_lane_at(t),
+            self.size,
+            t,
+            self.direction,
+            self.judgment,
+            y_offset=self.y_offset_at(t),
+            pivot_lane=self._stage_pivot_lane_at(t),
+            half_offset=self._stage_half_offset_at(t),
+        )
 
     def spawn_time(self) -> float:
         if DISABLE_NOTES or self.kind == NoteKind.ANCHOR:
