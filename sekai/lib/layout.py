@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import IntEnum
-from math import atan, ceil, floor, log, pi
+from math import atan, ceil, cos, floor, log, pi, sin
 from typing import Protocol, assert_never, cast
 
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
@@ -646,7 +646,10 @@ def get_perspective_y(target_y: float, travel: float = 1.0) -> float:
     if DynamicLayout.h_scale == 0 or travel == 0:
         return 0.0
 
-    return (target_y - DynamicLayout.t) / (DynamicLayout.h_scale * travel)
+    rot = DynamicLayout.rotate
+    edge_reach = screen().r * abs(sin(rot))
+    pre_y = target_y * cos(rot) + (edge_reach if target_y >= 0 else -edge_reach)
+    return (pre_y - DynamicLayout.t) / (DynamicLayout.h_scale * travel)
 
 
 def layout_sekai_stage() -> Quad:
@@ -1431,37 +1434,34 @@ def layout_skill_judgment_line(l: float = -6, r: float = 6, y_offset: float = 0.
 
 def layout_fever_cover(l, r) -> Quad:
     p = perspective_rect(l=l, r=r, t=0, b=get_perspective_y(-1))
+    big = 40.0
+    horiz = Vec2(big, 0).rotate(-DynamicLayout.rotate)
     quad = +Quad
-
-    safe_l = screen().bl.x - screen().w
-    safe_r = screen().br.x + screen().w
-    safe_t = screen().tl.y + screen().h
-    safe_b = screen().bl.y - screen().h
-
     if r == 0:
         quad @= Quad(
-            bl=Vec2(safe_l, safe_b),
+            bl=p.bl - horiz,
             br=p.bl,
-            tl=Vec2(safe_l, safe_t),
+            tl=p.tl - horiz,
             tr=p.tl,
         )
     else:
         quad @= Quad(
             bl=p.br,
-            br=Vec2(safe_r, safe_b),
+            br=p.br + horiz,
             tl=p.tr,
-            tr=Vec2(safe_r, safe_t),
+            tr=p.tr + horiz,
         )
     return quad
 
 
 def layout_fever_cover_sky() -> Quad:
-    p = perspective_rect(l=0, r=0, t=0, b=get_perspective_y(-1))
+    big = 40.0
+    rot = -DynamicLayout.rotate
     return Quad(
-        bl=Vec2(screen().bl.x, p.tl.y),
-        br=Vec2(screen().br.x, p.tr.y),
-        tl=screen().tl,
-        tr=screen().tr,
+        bl=Vec2(-big, DynamicLayout.t).rotate(rot),
+        br=Vec2(big, DynamicLayout.t).rotate(rot),
+        tl=Vec2(-big, big).rotate(rot),
+        tr=Vec2(big, big).rotate(rot),
     )
 
 
@@ -1603,11 +1603,13 @@ def compute_hitbox(
     tl_x_final, tr_x_final = bl_x_final, br_x_final
     b_y = note_y - vertical_extent
 
+    full_bottom = note_y - Vec2(screen().w, screen().h).magnitude
+
     if Options.hitbox_range == HitboxRange.FULL_VERTICAL:
-        b_y = screen().b
+        b_y = full_bottom
 
     elif Options.hitbox_range == HitboxRange.FULL_ADAPTIVE:
-        b_y = screen().b
+        b_y = full_bottom
 
         base_travel = approach(1.0)
         base_l_x = (lane - size) * base_travel * DynamicLayout.w_scale + DynamicLayout.x_translate
