@@ -38,7 +38,6 @@ from sekai.lib.note import (
     get_note_bucket,
     get_note_effect_kind,
     get_note_haptic_feedback,
-    get_note_particles,
     get_note_window,
     get_visual_spawn_time,
     has_release_input,
@@ -50,7 +49,6 @@ from sekai.lib.note import (
     schedule_note_auto_sfx,
 )
 from sekai.lib.options import Options
-from sekai.lib.particle import BaseParticles
 from sekai.lib.stage import DivisionParity, get_stage_props
 from sekai.lib.timescale import (
     CompositeTime,
@@ -65,7 +63,6 @@ from sekai.play.common import PlayLevelMemory
 from sekai.play.custom_elements import spawn_custom
 from sekai.play.dynamic_stage import DynamicStage
 from sekai.play.events import SkillActive
-from sekai.play.particle_manager import ParticleManager
 
 DEFAULT_BEST_TOUCH_TIME = -1e8
 HITBOX_DRAW_MIN_EARLY_WINDOW = 0.050
@@ -512,7 +509,7 @@ class BaseNote(PlayArchetype):
         return True
 
     def terminate(self):
-        if self.should_play_hit_effects:
+        if self.should_play_hit_effects and self.kind != NoteKind.HIDE_TICK:
             # We do this here for parallelism, and to reduce compilation time.
             play_note_hit_effects(
                 self.kind,
@@ -530,15 +527,6 @@ class BaseNote(PlayArchetype):
         self.end_time = offset_adjusted_time()
         self.played_hit_effects = self.should_play_hit_effects
 
-        if self.is_scored and Options.lane_effect_enabled and self.should_play_hit_effects:
-            particles = get_note_particles(self.kind, self.direction)
-            if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
-                ParticleManager.spawn(
-                    particles=particles,
-                    lane=self.lane,
-                    size=self.size,
-                    spawn_time=time(),
-                )
         if self.is_scored:
             self.wrong_way_check = self.wrong_way
             spawn_custom(

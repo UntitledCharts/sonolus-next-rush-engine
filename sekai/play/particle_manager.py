@@ -4,31 +4,41 @@ from sonolus.script.archetype import (
     PlayArchetype,
     entity_memory,
 )
-from sonolus.script.particle import ParticleHandle
-from sonolus.script.record import Record
+from sonolus.script.bucket import Judgment
 
 from sekai.lib import archetype_names
-from sekai.lib.particle import NoteParticleSet
-from sekai.lib.particle_manager import handle_critical_flick_lane_effect
-
-
-class ParticleEntry(Record):
-    particle: ParticleHandle
-    spawn_time: float
-    chunk_id: float
+from sekai.lib.layout import FlickDirection
+from sekai.lib.note import NoteEffectKind, NoteKind, handle_note_particles
 
 
 class ParticleManager(PlayArchetype):
-    particles: NoteParticleSet = entity_memory()
+    name = archetype_names.PARTICLE_MANAGER
+
+    kind: NoteKind = entity_memory()
+    effect_kind: NoteEffectKind = entity_memory()
     lane: float = entity_memory()
     size: float = entity_memory()
-    spawn_time: float = entity_memory()
-    name = archetype_names.PARTICLE_MANAGER
+    direction: FlickDirection = entity_memory()
+    judgment: Judgment = entity_memory()
+    y_offset: float = entity_memory()
+    pivot_lane: float = entity_memory()
+    half_offset: bool = entity_memory()
+    target_time: float = entity_memory()
 
     def update_sequential(self):
         if self.despawn:
             return
-        handle_critical_flick_lane_effect(self.particles, self.lane, self.size, self.spawn_time)
+        handle_note_particles(
+            self.kind,
+            self.effect_kind,
+            self.lane,
+            self.size,
+            self.direction,
+            self.judgment,
+            y_offset=self.y_offset,
+            pivot_lane=self.pivot_lane,
+            half_offset=self.half_offset,
+        )
 
     def update_parallel(self):
         if self.despawn:

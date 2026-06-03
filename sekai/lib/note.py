@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from enum import IntEnum, auto
+from math import ceil, floor
 from typing import assert_never, cast
 
 from sonolus.script.archetype import EntityRef, HapticType, PlayArchetype, WatchArchetype, get_archetype_by_name
@@ -76,6 +77,11 @@ from sekai.lib.particle import (
     ActiveParticles,
     BaseParticles,
     NoteParticleSet,
+)
+from sekai.lib.particle_manager import (
+    ParticleManageKind,
+    begin_particle_chunk,
+    emit_particle,
 )
 from sekai.lib.skin import (
     EMPTY_NOTE_SPRITE_SET,
@@ -834,27 +840,145 @@ def play_note_hit_effects(
         sfx.play(SFX_DISTANCE)
     if kind == NoteKind.DAMAGE and judgment == Judgment.PERFECT:
         return
+    if Options.note_effect_enabled or Options.lane_effect_enabled:
+        if is_tutorial():
+            handle_note_particles(
+                kind,
+                effect_kind,
+                lane,
+                size,
+                direction,
+                judgment,
+                y_offset=y_offset,
+                pivot_lane=pivot_lane,
+                half_offset=half_offset,
+                managed=False,
+            )
+        elif not is_watch():
+            schedule_note_particles(
+                kind,
+                effect_kind,
+                lane,
+                size,
+                time(),
+                direction,
+                judgment,
+                y_offset=y_offset,
+                pivot_lane=pivot_lane,
+                half_offset=half_offset,
+            )
+    if Options.slot_effect_enabled and not is_watch():
+        schedule_note_slot_effects(
+            kind,
+            lane,
+            size,
+            time(),
+            direction,
+            judgment,
+            y_offset=y_offset,
+            pivot_lane=pivot_lane,
+            half_offset=half_offset,
+        )
+
+
+def schedule_note_particles(
+    kind: NoteKind,
+    effect_kind: NoteEffectKind,
+    lane: float,
+    size: float,
+    target_time: float,
+    direction: FlickDirection,
+    judgment: Judgment,
+    y_offset: float = 0.0,
+    pivot_lane: float = 0.0,
+    half_offset: bool = False,
+):
+    if is_tutorial():
+        return
+    if kind == NoteKind.DAMAGE and judgment == Judgment.PERFECT:
+        return
+    get_archetype_by_name(archetype_names.PARTICLE_MANAGER).spawn(
+        kind=kind,
+        effect_kind=effect_kind,
+        lane=lane,
+        size=size,
+        direction=direction,
+        judgment=judgment,
+        y_offset=y_offset,
+        pivot_lane=pivot_lane,
+        half_offset=half_offset,
+        target_time=target_time,
+    )
+
+
+def handle_note_particles(
+    kind: NoteKind,
+    effect_kind: NoteEffectKind,
+    lane: float,
+    size: float,
+    direction: FlickDirection,
+    judgment: Judgment,
+    y_offset: float = 0.0,
+    pivot_lane: float = 0.0,
+    half_offset: bool = False,
+    managed: bool = True,
+):
+    if kind == NoteKind.DAMAGE and judgment == Judgment.PERFECT:
+        # An avoided damage note (perfect) plays no particles.
+        return
     particles = get_note_particles(kind, direction)
+    speed = Options.effect_animation_speed
     if Options.note_effect_enabled:
         linear_particle = particles.get_linear(judgment)
         if linear_particle.is_available:
-            layout = layout_linear_effect(lane, shear=0, y_offset=y_offset)
+            chunk = begin_particle_chunk(linear_particle) if managed else 0.0
             if linear_particle == particles.linear_good:
-                for slot_lane in iter_slot_lanes(lane, size):
-                    layout @= layout_linear_effect(slot_lane, shear=0)
-                    linear_particle.spawn(layout, duration=0.5 / Options.effect_animation_speed)
+                for slot_lane in _iter_bundled_slot_lanes(lane, size):
+                    emit_particle(
+                        linear_particle,
+                        layout_linear_effect(slot_lane, shear=0),
+                        0.5 / speed,
+                        ParticleManageKind.MULTI,
+                        slot_lane,
+                        chunk,
+                        managed,
+                    )
             else:
-                linear_particle.spawn(layout, duration=0.5 / Options.effect_animation_speed)
+                emit_particle(
+                    linear_particle,
+                    layout_linear_effect(lane, shear=0, y_offset=y_offset),
+                    0.5 / speed,
+                    ParticleManageKind.REST,
+                    0.0,
+                    chunk,
+                    managed,
+                )
         circular_particle = particles.get_circular(judgment)
         if circular_particle.is_available:
-            layout = layout_circular_effect(lane, w=1.75, h=1.05, y_offset=y_offset)
+            chunk = begin_particle_chunk(circular_particle) if managed else 0.0
             if circular_particle == particles.circular_good:
-                for slot_lane in iter_slot_lanes(lane, size):
-                    layout @= layout_circular_effect(slot_lane, w=1.75, h=1.05)
-                circular_particle.spawn(layout, duration=0.6 / Options.effect_animation_speed)
+                for slot_lane in _iter_bundled_slot_lanes(lane, size):
+                    emit_particle(
+                        circular_particle,
+                        layout_circular_effect(slot_lane, w=1.75, h=1.05),
+                        0.6 / speed,
+                        ParticleManageKind.MULTI,
+                        slot_lane,
+                        chunk,
+                        managed,
+                    )
             else:
-                circular_particle.spawn(layout, duration=0.6 / Options.effect_animation_speed)
+                emit_particle(
+                    circular_particle,
+                    layout_circular_effect(lane, w=1.75, h=1.05, y_offset=y_offset),
+                    0.6 / speed,
+                    ParticleManageKind.REST,
+                    0.0,
+                    chunk,
+                    managed,
+                )
         if particles.directional.is_available:
+            chunk = begin_particle_chunk(particles.directional) if managed else 0.0
             degree = (
                 45
                 if kind
@@ -877,40 +1001,123 @@ def play_note_hit_effects(
                     shear = -degree
                 case _:
                     assert_never(direction)
-            layout = layout_rotated2_linear_effect(lane, degree=shear, y_offset=y_offset)
-            particles.directional.spawn(layout, duration=0.32 / Options.effect_animation_speed)
+            emit_particle(
+                particles.directional,
+                layout_rotated2_linear_effect(lane, degree=shear, y_offset=y_offset),
+                0.32 / speed,
+                ParticleManageKind.REST,
+                0.0,
+                chunk,
+                managed,
+            )
         if particles.tick.is_available:
-            layout = layout_tick_effect(lane, y_offset=y_offset)
-            particles.tick.spawn(layout, duration=0.6 / Options.effect_animation_speed)
+            chunk = begin_particle_chunk(particles.tick) if managed else 0.0
+            emit_particle(
+                particles.tick,
+                layout_tick_effect(lane, y_offset=y_offset),
+                0.6 / speed,
+                ParticleManageKind.REST,
+                0.0,
+                chunk,
+                managed,
+            )
         slot_linear_particle = particles.get_slot_linear()
         if slot_linear_particle.is_available:
-            for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
-                layout = layout_linear_effect(slot_lane, shear=0, y_offset=y_offset)
-                slot_linear_particle.spawn(layout, duration=0.5 / Options.effect_animation_speed)
+            chunk = begin_particle_chunk(slot_linear_particle) if managed else 0.0
+            for slot_lane in _iter_bundled_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
+                emit_particle(
+                    slot_linear_particle,
+                    layout_linear_effect(slot_lane, shear=0, y_offset=y_offset),
+                    0.5 / speed,
+                    ParticleManageKind.MULTI,
+                    slot_lane,
+                    chunk,
+                    managed,
+                )
     if Options.lane_effect_enabled:
         lane_y_offset = (
             y_offset if kind in {NoteKind.CRIT_FLICK, NoteKind.CRIT_HEAD_FLICK, NoteKind.CRIT_TAIL_FLICK} else 0.0
         )
         if particles.lane.is_available:
-            if particles.lane.id != BaseParticles.critical_flick_note_lane_linear.id:
+            chunk = begin_particle_chunk(particles.lane) if managed else 0.0
+            if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
+                _emit_critical_flick_lane(particles.lane, lane, size, lane_y_offset, chunk, managed)
+            else:
                 for slot_lane in iter_slot_lanes(lane, size):
-                    layout = layout_particle_lane(slot_lane, 0.5, y_offset=lane_y_offset)
-                    particles.lane.spawn(layout, duration=1 / Options.effect_animation_speed)
+                    emit_particle(
+                        particles.lane,
+                        layout_particle_lane(slot_lane, 0.5, y_offset=lane_y_offset),
+                        1 / speed,
+                        ParticleManageKind.LANE,
+                        slot_lane,
+                        chunk,
+                        managed,
+                    )
         elif particles.lane_basic.is_available:
+            chunk = begin_particle_chunk(particles.lane_basic) if managed else 0.0
             for slot_lane in iter_slot_lanes(lane, size):
-                layout = layout_particle_lane(slot_lane, 0.5, y_offset=lane_y_offset)
-                particles.lane_basic.spawn(layout, duration=0.3 / Options.effect_animation_speed)
-    if Options.slot_effect_enabled and not is_watch():
-        schedule_note_slot_effects(
-            kind,
-            lane,
-            size,
-            time(),
-            direction,
-            judgment,
-            y_offset=y_offset,
-            pivot_lane=pivot_lane,
-            half_offset=half_offset,
+                emit_particle(
+                    particles.lane_basic,
+                    layout_particle_lane(slot_lane, 0.5, y_offset=lane_y_offset),
+                    0.3 / speed,
+                    ParticleManageKind.LANE,
+                    slot_lane,
+                    chunk,
+                    managed,
+                )
+
+
+def _iter_bundled_slot_lanes(lane: float, size: float, pivot_lane: float = 0.0, half_offset: bool = False):
+    for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
+        if -127 <= slot_lane <= 127:
+            yield slot_lane
+
+
+def _emit_critical_flick_lane(particle, center_lane: float, size: float, y_offset: float, chunk: float, managed: bool):
+    speed = Options.effect_animation_speed
+    min_i = floor(center_lane - size)
+    max_i = ceil(center_lane + size) - 1
+
+    if min_i < -127:
+        left_max_i = min(-128, max_i)
+        merged_center = (min_i + left_max_i + 1) / 2
+        merged_size = (left_max_i - min_i + 1) / 2
+        emit_particle(
+            particle,
+            layout_particle_lane(merged_center, merged_size, y_offset=y_offset),
+            1 / speed,
+            ParticleManageKind.LANE,
+            -127.0,
+            chunk,
+            managed,
+        )
+
+    if max_i > 126:
+        right_min_i = max(127, min_i)
+        merged_center = (right_min_i + max_i + 1) / 2
+        merged_size = (max_i - right_min_i + 1) / 2
+        emit_particle(
+            particle,
+            layout_particle_lane(merged_center, merged_size, y_offset=y_offset),
+            1 / speed,
+            ParticleManageKind.LANE,
+            127.0,
+            chunk,
+            managed,
+        )
+
+    start_i = max(-127, min_i)
+    end_i = min(126, max_i)
+    for i in range(start_i, end_i + 1):
+        slot_lane = i + 0.5
+        emit_particle(
+            particle,
+            layout_particle_lane(slot_lane, 0.5, y_offset=y_offset),
+            1 / speed,
+            ParticleManageKind.LANE,
+            slot_lane,
+            chunk,
+            managed,
         )
 
 

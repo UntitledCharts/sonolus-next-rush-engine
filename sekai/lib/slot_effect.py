@@ -1,3 +1,6 @@
+from sonolus.script.array import Dim
+from sonolus.script.containers import ArrayMap
+from sonolus.script.globals import level_memory
 from sonolus.script.interval import lerp, unlerp_clamped
 from sonolus.script.runtime import time
 from sonolus.script.sprite import Sprite
@@ -10,6 +13,39 @@ from sekai.lib.particle import ActiveParticles
 
 SLOT_GLOW_EFFECT_DURATION = 0.25
 SLOT_EFFECT_DURATION = 0.5
+
+SLOT_EFFECT_LIMIT = 6.0
+
+
+@level_memory
+class SlotEffectHandler:
+    generations: ArrayMap[float, float, Dim[256]]
+    last_start: ArrayMap[float, float, Dim[256]]
+
+
+def clear_slot_effects():
+    SlotEffectHandler.generations.clear()
+    SlotEffectHandler.last_start.clear()
+
+
+def next_slot_generation(sprite: Sprite, start_time: float) -> float:
+    sprite_id = sprite.id
+    if sprite_id in SlotEffectHandler.last_start and SlotEffectHandler.last_start[sprite_id] == start_time:
+        return SlotEffectHandler.generations[sprite_id]
+    if sprite_id in SlotEffectHandler.generations:
+        generation = SlotEffectHandler.generations[sprite_id] + 1
+    else:
+        generation = 0.0
+    SlotEffectHandler.generations[sprite_id] = generation
+    SlotEffectHandler.last_start[sprite_id] = start_time
+    return generation
+
+
+def is_slot_generation_visible(sprite: Sprite, generation: float) -> bool:
+    sprite_id = sprite.id
+    if sprite_id not in SlotEffectHandler.generations:
+        return True
+    return SlotEffectHandler.generations[sprite_id] - generation < SLOT_EFFECT_LIMIT
 
 
 def draw_slot_glow_effect(
