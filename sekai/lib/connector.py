@@ -416,7 +416,7 @@ def draw_connector(
     end_pos_y = pre_rotation_vec_at(end_lane, end_travel).y
 
     delta_alpha = abs(start_alpha - end_alpha) * get_connector_alpha_option(kind)
-    scale = delta_alpha * max(1.0, abs(start_pos_y - end_pos_y)) * 3 if delta_alpha else 0.0
+    scale = max(delta_alpha**0.8 * 3, delta_alpha**0.5 * abs(start_pos_y - end_pos_y) * 3) if delta_alpha else 0.0
     match ease_type:
         case EaseType.NONE:
             pass
