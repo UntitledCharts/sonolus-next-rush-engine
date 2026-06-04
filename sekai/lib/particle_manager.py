@@ -8,7 +8,6 @@ from sonolus.script.globals import level_memory
 from sonolus.script.particle import Particle, ParticleHandle
 from sonolus.script.quad import Quad
 from sonolus.script.record import Record
-from sonolus.script.runtime import time
 
 CHUNK_COUNT = 6.0
 
@@ -26,16 +25,16 @@ class ParticleManageKind(IntEnum):
 
 class ParticleEntry(Record):
     particle: ParticleHandle
-    chunk_id: float
-    particle_id: float
-    end_time: float
+    chunk_key: float
+    chunk_serial: float
 
 
 @level_memory
 class ParticleHandler:
-    entries: ArrayMap[float, ParticleEntry, Dim[512]]
+    entries: ArrayMap[float, ParticleEntry, Dim[8192]]
     chunk_ids: ArrayMap[float, float, Dim[256]]
-    serial: float
+    chunk_serial: float
+    entry_serial: float
 
 
 def clear_particles():
@@ -43,18 +42,16 @@ def clear_particles():
         entry.particle.destroy()
     ParticleHandler.entries.clear()
     ParticleHandler.chunk_ids.clear()
+    ParticleHandler.chunk_serial = 0
+    ParticleHandler.entry_serial = 0
 
 
-def begin_particle_chunk(particle: Particle) -> float:
-    particle_id = particle.id
-    prev = ParticleHandler.chunk_ids[particle_id] if particle_id in ParticleHandler.chunk_ids else -1.0  # noqa: SIM401
-    chunk = (prev + 1) % CHUNK_COUNT
-    ParticleHandler.chunk_ids[particle_id] = chunk
+def purge_particle_chunk(chunk_key: float):
     batched = True
     while batched:
         batch = +VarArray[float, PURGE_BATCH]
         for key, entry in ParticleHandler.entries.items():
-            if entry.end_time <= time() or (entry.particle_id == particle_id and entry.chunk_id == chunk):
+            if entry.chunk_key == chunk_key:
                 entry.particle.destroy()
                 batch.append(key)
                 if batch.is_full():
@@ -62,7 +59,29 @@ def begin_particle_chunk(particle: Particle) -> float:
         for key in batch:
             del ParticleHandler.entries[key]
         batched = batch.is_full()
-    return chunk
+
+
+def begin_particle_chunk(particle: Particle) -> float:
+    particle_id = particle.id
+    prev = ParticleHandler.chunk_ids[particle_id] if particle_id in ParticleHandler.chunk_ids else -1.0  # noqa: SIM401
+    chunk = (prev + 1) % CHUNK_COUNT
+    ParticleHandler.chunk_ids[particle_id] = chunk
+    chunk_key = particle_id * CHUNK_COUNT + chunk
+    purge_particle_chunk(chunk_key)
+    ParticleHandler.chunk_serial += 1
+    return chunk_key
+
+
+def evict_oldest_particle_chunk():
+    if not ParticleHandler.entries.is_full():
+        return
+    oldest_chunk_key = 0.0
+    oldest_chunk_serial = ParticleHandler.chunk_serial + 1
+    for entry in ParticleHandler.entries.values():
+        if entry.chunk_serial < oldest_chunk_serial:
+            oldest_chunk_key = entry.chunk_key
+            oldest_chunk_serial = entry.chunk_serial
+    purge_particle_chunk(oldest_chunk_key)
 
 
 def emit_particle(
@@ -71,7 +90,7 @@ def emit_particle(
     duration: float,
     manage_kind: ParticleManageKind,
     slot: float,
-    chunk: float,
+    chunk_key: float,
     managed: bool,
 ):
     if not managed:
@@ -82,19 +101,15 @@ def emit_particle(
         key = particle_id * PARTICLE_ID_STRIDE + (slot * 2 + SLOT_OFFSET)
         if key in ParticleHandler.entries:
             ParticleHandler.entries[key].particle.destroy()
-        elif ParticleHandler.entries.is_full():
-            particle.spawn(layout, duration=duration)
-            return
+        else:
+            evict_oldest_particle_chunk()
     else:
-        if ParticleHandler.entries.is_full():
-            particle.spawn(layout, duration=duration)
-            return
-        ParticleHandler.serial += 1
-        key = -ParticleHandler.serial
+        evict_oldest_particle_chunk()
+        ParticleHandler.entry_serial += 1
+        key = -ParticleHandler.entry_serial
     handle = particle.spawn(layout, duration=duration)
     ParticleHandler.entries[key] = ParticleEntry(
         particle=handle,
-        chunk_id=chunk,
-        particle_id=particle_id,
-        end_time=time() + duration,
+        chunk_key=chunk_key,
+        chunk_serial=ParticleHandler.chunk_serial,
     )
