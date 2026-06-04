@@ -198,6 +198,7 @@ class WatchBaseNote(WatchArchetype):
                     y_offset=self._basic_y_offset_at(self.end_time),
                     pivot_lane=self._stage_pivot_lane_at(self.end_time),
                     half_offset=self._stage_half_offset_at(self.end_time),
+                    group_id=self.index,
                 )
             self.result.bucket_value = self.accuracy * 1000
         else:
@@ -213,6 +214,7 @@ class WatchBaseNote(WatchArchetype):
                     y_offset=self._basic_y_offset_at(self.target_time),
                     pivot_lane=self._stage_pivot_lane_at(self.target_time),
                     half_offset=self._stage_half_offset_at(self.target_time),
+                    group_id=self.index,
                 )
 
         self.result.target_time = self.target_time

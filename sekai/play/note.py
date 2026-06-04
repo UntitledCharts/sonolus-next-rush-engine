@@ -521,6 +521,7 @@ class BaseNote(PlayArchetype):
                 y_offset=self.visual_y_offset,
                 pivot_lane=self.visual_pivot_lane,
                 half_offset=self.visual_half_offset,
+                slot_effect_group_id=self.index,
             )
         if self.is_scored:
             self.result.haptic = get_note_haptic_feedback(self.kind, self.result.judgment)

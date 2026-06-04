@@ -25,6 +25,7 @@ class ParticleManageKind(IntEnum):
 
 class ParticleEntry(Record):
     particle: ParticleHandle
+    particle_id: float
     chunk_key: float
     chunk_serial: float
 
@@ -72,15 +73,17 @@ def begin_particle_chunk(particle: Particle) -> float:
     return chunk_key
 
 
-def evict_oldest_particle_chunk():
-    if not ParticleHandler.entries.is_full():
-        return
+def evict_oldest_particle_chunk(particle_id: float):
     oldest_chunk_key = 0.0
     oldest_chunk_serial = ParticleHandler.chunk_serial + 1
     for entry in ParticleHandler.entries.values():
+        if entry.particle_id != particle_id:
+            continue
         if entry.chunk_serial < oldest_chunk_serial:
             oldest_chunk_key = entry.chunk_key
             oldest_chunk_serial = entry.chunk_serial
+    if oldest_chunk_serial > ParticleHandler.chunk_serial:
+        return
     purge_particle_chunk(oldest_chunk_key)
 
 
@@ -101,15 +104,15 @@ def emit_particle(
         key = particle_id * PARTICLE_ID_STRIDE + (slot * 2 + SLOT_OFFSET)
         if key in ParticleHandler.entries:
             ParticleHandler.entries[key].particle.destroy()
-        else:
-            evict_oldest_particle_chunk()
     else:
-        evict_oldest_particle_chunk()
         ParticleHandler.entry_serial += 1
         key = -ParticleHandler.entry_serial
+    if ParticleHandler.entries.is_full():
+        evict_oldest_particle_chunk(particle_id)
     handle = particle.spawn(layout, duration=duration)
     ParticleHandler.entries[key] = ParticleEntry(
         particle=handle,
+        particle_id=particle_id,
         chunk_key=chunk_key,
         chunk_serial=ParticleHandler.chunk_serial,
     )

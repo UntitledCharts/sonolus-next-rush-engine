@@ -24,6 +24,7 @@ class WatchSlotGlowEffect(WatchArchetype):
     size: float = entity_memory()
     y_offset: float = entity_memory()
     end_time: float = entity_memory()
+    group_id: float = entity_memory()
     generation: float = entity_memory()
     generation_set: bool = entity_memory()
 
@@ -43,7 +44,7 @@ class WatchSlotGlowEffect(WatchArchetype):
             return
         if self.generation_set:
             return
-        self.generation = next_slot_generation(self.sprite, self.start_time)
+        self.generation = next_slot_generation(self.sprite, self.group_id)
         self.generation_set = True
 
     def update_parallel(self):
@@ -67,6 +68,7 @@ class WatchSlotEffect(WatchArchetype):
     lane: float = entity_memory()
     y_offset: float = entity_memory()
     end_time: float = entity_memory()
+    group_id: float = entity_memory()
     generation: float = entity_memory()
     generation_set: bool = entity_memory()
 
@@ -86,7 +88,7 @@ class WatchSlotEffect(WatchArchetype):
             return
         if self.generation_set:
             return
-        self.generation = next_slot_generation(self.sprite, self.start_time)
+        self.generation = next_slot_generation(self.sprite, self.group_id)
         self.generation_set = True
 
     def update_parallel(self):

@@ -833,6 +833,7 @@ def play_note_hit_effects(
     y_offset: float = 0.0,
     pivot_lane: float = 0.0,
     half_offset: bool = False,
+    slot_effect_group_id: float = 0.0,
 ):
     # Damage with overridden sfx can play, so this goes before the damage check
     sfx = get_note_effect(effect_kind, judgment)
@@ -878,6 +879,7 @@ def play_note_hit_effects(
             y_offset=y_offset,
             pivot_lane=pivot_lane,
             half_offset=half_offset,
+            group_id=slot_effect_group_id,
         )
 
 
@@ -1202,6 +1204,7 @@ def schedule_note_slot_effects(
     y_offset: float = 0.0,
     pivot_lane: float = 0.0,
     half_offset: bool = False,
+    group_id: float = 0.0,
 ):
     if is_tutorial():
         return
@@ -1212,13 +1215,18 @@ def schedule_note_slot_effects(
     if slot_sprite.is_available:
         for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
             get_archetype_by_name(archetype_names.SLOT_EFFECT).spawn(
-                sprite=slot_sprite, start_time=target_time, lane=slot_lane, y_offset=y_offset
+                sprite=slot_sprite, start_time=target_time, lane=slot_lane, y_offset=y_offset, group_id=group_id
             )
     slot_glow_sprite = sprite_set.slot_glow.get_sprite(judgment)
     if slot_glow_sprite.is_available:
         for slot_lane in iter_slot_lanes(lane, size):
             get_archetype_by_name(archetype_names.SLOT_GLOW_EFFECT).spawn(
-                sprite=slot_glow_sprite, start_time=target_time, lane=slot_lane, size=size, y_offset=y_offset
+                sprite=slot_glow_sprite,
+                start_time=target_time,
+                lane=slot_lane,
+                size=size,
+                y_offset=y_offset,
+                group_id=group_id,
             )
 
 
