@@ -9,8 +9,6 @@ from sonolus.script.particle import Particle, ParticleHandle
 from sonolus.script.quad import Quad
 from sonolus.script.record import Record
 
-CHUNK_COUNT = 6.0
-
 PARTICLE_ID_STRIDE = 8192.0
 SLOT_OFFSET = 512.0
 
@@ -33,7 +31,6 @@ class ParticleEntry(Record):
 @level_memory
 class ParticleHandler:
     entries: ArrayMap[float, ParticleEntry, Dim[8192]]
-    chunk_ids: ArrayMap[float, float, Dim[256]]
     chunk_serial: float
     entry_serial: float
 
@@ -42,7 +39,6 @@ def clear_particles():
     for entry in ParticleHandler.entries.values():
         entry.particle.destroy()
     ParticleHandler.entries.clear()
-    ParticleHandler.chunk_ids.clear()
     ParticleHandler.chunk_serial = 0
     ParticleHandler.entry_serial = 0
 
@@ -64,13 +60,26 @@ def purge_particle_chunk(chunk_key: float):
 
 def begin_particle_chunk(particle: Particle) -> float:
     particle_id = particle.id
-    prev = ParticleHandler.chunk_ids[particle_id] if particle_id in ParticleHandler.chunk_ids else -1.0  # noqa: SIM401
-    chunk = (prev + 1) % CHUNK_COUNT
-    ParticleHandler.chunk_ids[particle_id] = chunk
-    chunk_key = particle_id * CHUNK_COUNT + chunk
-    purge_particle_chunk(chunk_key)
+    active_chunks = +VarArray[float, Dim[6]]
+    oldest_chunk_key = 0.0
+    oldest_chunk_serial = ParticleHandler.chunk_serial + 1
+    for entry in ParticleHandler.entries.values():
+        if entry.particle_id != particle_id:
+            continue
+        if entry.chunk_serial < oldest_chunk_serial:
+            oldest_chunk_key = entry.chunk_key
+            oldest_chunk_serial = entry.chunk_serial
+        seen = False
+        for chunk_key in active_chunks:
+            if chunk_key == entry.chunk_key:
+                seen = True
+                break
+        if not seen and not active_chunks.is_full():
+            active_chunks.append(entry.chunk_key)
+    if active_chunks.is_full():
+        purge_particle_chunk(oldest_chunk_key)
     ParticleHandler.chunk_serial += 1
-    return chunk_key
+    return ParticleHandler.chunk_serial
 
 
 def evict_oldest_particle_chunk(particle_id: float):
