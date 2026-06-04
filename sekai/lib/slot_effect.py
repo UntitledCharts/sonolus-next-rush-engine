@@ -20,24 +20,24 @@ SLOT_EFFECT_LIMIT = 6.0
 @level_memory
 class SlotEffectHandler:
     generations: ArrayMap[float, float, Dim[256]]
-    last_start: ArrayMap[float, float, Dim[256]]
+    last_group: ArrayMap[float, float, Dim[256]]
 
 
 def clear_slot_effects():
     SlotEffectHandler.generations.clear()
-    SlotEffectHandler.last_start.clear()
+    SlotEffectHandler.last_group.clear()
 
 
-def next_slot_generation(sprite: Sprite, start_time: float) -> float:
+def next_slot_generation(sprite: Sprite, group_id: float) -> float:
     sprite_id = sprite.id
-    if sprite_id in SlotEffectHandler.last_start and SlotEffectHandler.last_start[sprite_id] == start_time:
+    if sprite_id in SlotEffectHandler.last_group and SlotEffectHandler.last_group[sprite_id] == group_id:
         return SlotEffectHandler.generations[sprite_id]
     if sprite_id in SlotEffectHandler.generations:
         generation = SlotEffectHandler.generations[sprite_id] + 1
     else:
         generation = 0.0
     SlotEffectHandler.generations[sprite_id] = generation
-    SlotEffectHandler.last_start[sprite_id] = start_time
+    SlotEffectHandler.last_group[sprite_id] = group_id
     return generation
 
 
