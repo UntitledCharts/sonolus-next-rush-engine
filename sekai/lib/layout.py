@@ -1603,7 +1603,7 @@ def compute_hitbox(
     tl_x_final, tr_x_final = bl_x_final, br_x_final
     b_y = note_y - vertical_extent
 
-    full_bottom = note_y - Vec2(screen().w, screen().h).magnitude
+    full_bottom = screen().b * cos(transform.rotate) - screen().r * abs(sin(transform.rotate))
 
     if Options.hitbox_range == HitboxRange.FULL_VERTICAL:
         b_y = full_bottom
@@ -1611,10 +1611,11 @@ def compute_hitbox(
     elif Options.hitbox_range == HitboxRange.FULL_ADAPTIVE:
         b_y = full_bottom
 
-        base_travel = approach(1.0)
-        base_l_x = (lane - size) * base_travel * DynamicLayout.w_scale + DynamicLayout.x_translate
-        base_r_x = (lane + size) * base_travel * DynamicLayout.w_scale + DynamicLayout.x_translate
-        base_y = base_travel * DynamicLayout.h_scale + DynamicLayout.t
+        base_travel = approach_at_tilt(1.0, tilt)
+        base_width = width_factor_at_tilt(base_travel, tilt)
+        base_l_x = (lane - size) * base_width * transform.w_scale + transform.x_translate
+        base_r_x = (lane + size) * base_width * transform.w_scale + transform.x_translate
+        base_y = base_travel * transform.h_scale + transform.t
 
         bl_x_final = interpolate_hitbox_edge_x(base_l_x, base_y, l_x, note_y, b_y) - (leniency * lane_w)
         br_x_final = interpolate_hitbox_edge_x(base_r_x, base_y, r_x, note_y, b_y) + (leniency * lane_w)
