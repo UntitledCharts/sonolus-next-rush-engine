@@ -23,6 +23,7 @@ class ParticleManager(WatchArchetype):
     pivot_lane: float = entity_memory()
     half_offset: bool = entity_memory()
     target_time: float = entity_memory()
+    group_id: float = entity_memory()
     check: bool = entity_memory()
 
     def spawn_time(self) -> float:
@@ -45,6 +46,7 @@ class ParticleManager(WatchArchetype):
             y_offset=self.y_offset,
             pivot_lane=self.pivot_lane,
             half_offset=self.half_offset,
+            group_id=self.group_id,
         )
         if is_skip():
             clear_particles()

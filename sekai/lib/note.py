@@ -867,6 +867,7 @@ def play_note_hit_effects(
                 y_offset=y_offset,
                 pivot_lane=pivot_lane,
                 half_offset=half_offset,
+                group_id=slot_effect_group_id,
             )
     if Options.slot_effect_enabled and not is_watch():
         schedule_note_slot_effects(
@@ -894,6 +895,7 @@ def schedule_note_particles(
     y_offset: float = 0.0,
     pivot_lane: float = 0.0,
     half_offset: bool = False,
+    group_id: float = 0.0,
 ):
     if is_tutorial():
         return
@@ -910,6 +912,7 @@ def schedule_note_particles(
         pivot_lane=pivot_lane,
         half_offset=half_offset,
         target_time=target_time,
+        group_id=group_id,
     )
 
 
@@ -924,6 +927,7 @@ def handle_note_particles(
     pivot_lane: float = 0.0,
     half_offset: bool = False,
     managed: bool = True,
+    group_id: float = 0.0,
 ):
     if kind == NoteKind.DAMAGE and judgment == Judgment.PERFECT:
         # An avoided damage note (perfect) plays no particles.
@@ -933,8 +937,8 @@ def handle_note_particles(
     if Options.note_effect_enabled:
         linear_particle = particles.get_linear(judgment)
         if linear_particle.is_available:
-            chunk = begin_particle_chunk(linear_particle) if managed else 0.0
             if linear_particle == particles.linear_good:
+                chunk = begin_particle_chunk(linear_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
                 for slot_lane in _iter_bundled_slot_lanes(lane, size):
                     emit_particle(
                         linear_particle,
@@ -946,6 +950,7 @@ def handle_note_particles(
                         managed,
                     )
             else:
+                chunk = begin_particle_chunk(linear_particle, group_id, ParticleManageKind.REST) if managed else 0.0
                 emit_particle(
                     linear_particle,
                     layout_linear_effect(lane, shear=0, y_offset=y_offset),
@@ -957,8 +962,8 @@ def handle_note_particles(
                 )
         circular_particle = particles.get_circular(judgment)
         if circular_particle.is_available:
-            chunk = begin_particle_chunk(circular_particle) if managed else 0.0
             if circular_particle == particles.circular_good:
+                chunk = begin_particle_chunk(circular_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
                 for slot_lane in _iter_bundled_slot_lanes(lane, size):
                     emit_particle(
                         circular_particle,
@@ -970,6 +975,7 @@ def handle_note_particles(
                         managed,
                     )
             else:
+                chunk = begin_particle_chunk(circular_particle, group_id, ParticleManageKind.REST) if managed else 0.0
                 emit_particle(
                     circular_particle,
                     layout_circular_effect(lane, w=1.75, h=1.05, y_offset=y_offset),
@@ -980,7 +986,7 @@ def handle_note_particles(
                     managed,
                 )
         if particles.directional.is_available:
-            chunk = begin_particle_chunk(particles.directional) if managed else 0.0
+            chunk = begin_particle_chunk(particles.directional, group_id, ParticleManageKind.REST) if managed else 0.0
             degree = (
                 45
                 if kind
@@ -1013,7 +1019,7 @@ def handle_note_particles(
                 managed,
             )
         if particles.tick.is_available:
-            chunk = begin_particle_chunk(particles.tick) if managed else 0.0
+            chunk = begin_particle_chunk(particles.tick, group_id, ParticleManageKind.REST) if managed else 0.0
             emit_particle(
                 particles.tick,
                 layout_tick_effect(lane, y_offset=y_offset),
@@ -1025,7 +1031,7 @@ def handle_note_particles(
             )
         slot_linear_particle = particles.get_slot_linear()
         if slot_linear_particle.is_available:
-            chunk = begin_particle_chunk(slot_linear_particle) if managed else 0.0
+            chunk = begin_particle_chunk(slot_linear_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
             for slot_lane in _iter_bundled_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
                 emit_particle(
                     slot_linear_particle,
@@ -1041,7 +1047,7 @@ def handle_note_particles(
             y_offset if kind in {NoteKind.CRIT_FLICK, NoteKind.CRIT_HEAD_FLICK, NoteKind.CRIT_TAIL_FLICK} else 0.0
         )
         if particles.lane.is_available:
-            chunk = begin_particle_chunk(particles.lane) if managed else 0.0
+            chunk = begin_particle_chunk(particles.lane, group_id, ParticleManageKind.LANE) if managed else 0.0
             if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
                 _emit_critical_flick_lane(particles.lane, lane, size, lane_y_offset, chunk, managed)
             else:
@@ -1056,7 +1062,7 @@ def handle_note_particles(
                         managed,
                     )
         elif particles.lane_basic.is_available:
-            chunk = begin_particle_chunk(particles.lane_basic) if managed else 0.0
+            chunk = begin_particle_chunk(particles.lane_basic, group_id, ParticleManageKind.LANE) if managed else 0.0
             for slot_lane in iter_slot_lanes(lane, size):
                 emit_particle(
                     particles.lane_basic,
