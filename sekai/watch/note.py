@@ -260,6 +260,7 @@ class WatchBaseNote(WatchArchetype):
             y_offset=self.y_offset_at(t),
             pivot_lane=self._stage_pivot_lane_at(t),
             half_offset=self._stage_half_offset_at(t),
+            group_id=self.index,
         )
 
     def spawn_time(self) -> float:

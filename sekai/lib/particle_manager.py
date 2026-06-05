@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import IntEnum
+from math import floor
 
 from sonolus.script.array import Dim
 from sonolus.script.containers import ArrayMap, VarArray
@@ -12,6 +13,7 @@ from sonolus.script.record import Record
 PARTICLE_ID_STRIDE = 8192.0
 SLOT_OFFSET = 512.0
 
+CHUNK_COUNT = 6.0
 PURGE_BATCH = 64
 
 
@@ -58,28 +60,22 @@ def purge_particle_chunk(chunk_key: float):
         batched = batch.is_full()
 
 
-def begin_particle_chunk(particle: Particle) -> float:
+def particle_group_slot(group_id: float) -> float:
+    return group_id - floor(group_id / CHUNK_COUNT) * CHUNK_COUNT
+
+
+def particle_slot_key(particle_id: float, slot: float) -> float:
+    return particle_id * PARTICLE_ID_STRIDE + slot
+
+
+def begin_particle_chunk(particle: Particle, group_id: float, manage_kind: ParticleManageKind) -> float:
     particle_id = particle.id
-    active_chunks = +VarArray[float, Dim[6]]
-    oldest_chunk_key = 0.0
-    oldest_chunk_serial = ParticleHandler.chunk_serial + 1
-    for entry in ParticleHandler.entries.values():
-        if entry.particle_id != particle_id:
-            continue
-        if entry.chunk_serial < oldest_chunk_serial:
-            oldest_chunk_key = entry.chunk_key
-            oldest_chunk_serial = entry.chunk_serial
-        seen = False
-        for chunk_key in active_chunks:
-            if chunk_key == entry.chunk_key:
-                seen = True
-                break
-        if not seen and not active_chunks.is_full():
-            active_chunks.append(entry.chunk_key)
-    if active_chunks.is_full():
-        purge_particle_chunk(oldest_chunk_key)
+    slot = particle_group_slot(group_id)
+    chunk_key = particle_id * CHUNK_COUNT + slot
+    if manage_kind != ParticleManageKind.REST:
+        purge_particle_chunk(chunk_key)
     ParticleHandler.chunk_serial += 1
-    return ParticleHandler.chunk_serial
+    return chunk_key
 
 
 def evict_oldest_particle_chunk(particle_id: float):
@@ -109,6 +105,20 @@ def emit_particle(
         particle.spawn(layout, duration=duration)
         return
     particle_id = particle.id
+    if manage_kind == ParticleManageKind.REST:
+        slot = chunk_key - particle_id * CHUNK_COUNT
+        key = particle_slot_key(particle_id, slot)
+        if key in ParticleHandler.entries:
+            ParticleHandler.entries[key].particle.destroy()
+            del ParticleHandler.entries[key]
+        handle = particle.spawn(layout, duration=duration)
+        ParticleHandler.entries[key] = ParticleEntry(
+            particle=handle,
+            particle_id=particle_id,
+            chunk_key=chunk_key,
+            chunk_serial=ParticleHandler.chunk_serial,
+        )
+        return
     if manage_kind == ParticleManageKind.LANE:
         key = particle_id * PARTICLE_ID_STRIDE + (slot * 2 + SLOT_OFFSET)
         if key in ParticleHandler.entries:
