@@ -107,16 +107,16 @@ def initial_list(entity_count):
         mro = WatchArchetype._get_mro_id_array(info.archetype_id)
         is_note = note_id in mro
         is_skill = skill_id in mro
-        if (is_note and note.WatchBaseNote.at(entity_index).is_scored) or is_skill:
-            if is_note:
-                note.WatchBaseNote.at(entity_index).init_data()
+        if is_note:
+            note.WatchBaseNote.at(entity_index).init_data()
+            if note.WatchBaseNote.at(entity_index).is_scored:
                 note.WatchBaseNote.at(entity_index).next_ref.index = note_head
                 note_head = entity_index
                 note_length += 1
-            elif is_skill:
-                Skill.at(entity_index).next_ref.index = skill_head
-                skill_head = entity_index
-                skill_length += 1
+        elif is_skill:
+            Skill.at(entity_index).next_ref.index = skill_head
+            skill_head = entity_index
+            skill_length += 1
 
     return note_head, note_length, skill_head, skill_length
 

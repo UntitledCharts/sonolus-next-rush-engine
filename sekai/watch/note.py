@@ -140,7 +140,7 @@ class WatchBaseNote(WatchArchetype):
         if DISABLE_NOTES:
             self.result.target_time = 1e8
             return
-        self.init_data()
+        # self.init_data()
 
         self.result.bucket = get_note_bucket(self.kind)
 

@@ -181,7 +181,7 @@ class BaseNote(PlayArchetype):
     def preprocess(self):
         if DISABLE_NOTES:
             return
-        self.init_data()
+        # self.init_data()
 
         self.result.bucket = get_note_bucket(self.kind)
 
