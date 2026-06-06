@@ -59,6 +59,9 @@ class WatchSlotGlowEffect(WatchArchetype):
             y_offset=self.y_offset,
         )
 
+    def terminate(self):
+        self.generation_set = False
+
 
 class WatchSlotEffect(WatchArchetype):
     name = archetype_names.SLOT_EFFECT
@@ -101,6 +104,9 @@ class WatchSlotEffect(WatchArchetype):
             self.lane,
             y_offset=self.y_offset,
         )
+
+    def terminate(self):
+        self.generation_set = False
 
 
 WATCH_SLOT_EFFECT_ARCHETYPES = (
