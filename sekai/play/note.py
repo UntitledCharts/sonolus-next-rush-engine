@@ -192,8 +192,8 @@ class BaseNote(PlayArchetype):
         if self.is_attached:
             attach_head = self.attach_head_ref.get()
             attach_tail = self.attach_tail_ref.get()
-            attach_head.init_data()
-            attach_tail.init_data()
+            # attach_head.init_data()
+            # attach_tail.init_data()
             self.connector_ease = attach_head.connector_ease
             lane, size = get_attach_params(
                 ease_type=attach_head.connector_ease,
