@@ -17,7 +17,6 @@ from sekai.lib.stage import (
     get_stage_props,
 )
 from sekai.preview.layout import (
-    PREVIEW_COLUMN_SECS,
     PREVIEW_DYNAMIC_STAGE_BORDER_DEFAULT_W,
     PREVIEW_DYNAMIC_STAGE_BORDER_LIGHT_W,
     PREVIEW_DYNAMIC_STAGE_BORDER_MEDIUM_W,
@@ -32,6 +31,7 @@ from sekai.preview.layout import (
     layout_preview_lane_rotated_strip,
     layout_preview_lane_strip,
     layout_preview_top_cover,
+    preview_column_secs,
     time_to_preview_col,
 )
 
@@ -85,9 +85,10 @@ def draw_preview_dynamic_stage(stage: DynamicStageLike, start_time: float, end_t
     start_col = max(0, time_to_preview_col(start_time))
     end_col = min(PreviewLayout.column_count - 1, time_to_preview_col(end_time))
 
+    secs = preview_column_secs()
     for col in range(start_col, end_col + 1):
-        col_t_lo = max(start_time, col * PREVIEW_COLUMN_SECS)
-        col_t_hi = min(end_time, (col + 1) * PREVIEW_COLUMN_SECS)
+        col_t_lo = max(start_time, col * secs)
+        col_t_hi = min(end_time, (col + 1) * secs)
         if col_t_hi <= col_t_lo:
             continue
 

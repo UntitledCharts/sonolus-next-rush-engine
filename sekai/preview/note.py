@@ -29,7 +29,6 @@ from sekai.lib.stage import get_stage_props
 from sekai.play.note import derive_note_archetypes
 from sekai.preview.dynamic_stage import PreviewDynamicStage
 from sekai.preview.layout import (
-    PreviewData,
     get_adjusted_time,
     layout_preview_flick_arrow,
     layout_preview_flick_arrow_fallback,
@@ -38,13 +37,16 @@ from sekai.preview.layout import (
     layout_preview_slim_note_body,
     layout_preview_slim_note_body_fallback,
     layout_preview_tick,
+    preview_column_secs,
+    preview_y_axis_to_y,
     time_to_preview_col,
-    time_to_preview_y,
+    time_to_preview_y_axis,
 )
 
 
 class PreviewBaseNote(PreviewArchetype):
     beat: StandardImport.BEAT
+    timescale_group: StandardImport.TIMESCALE_GROUP
     stage_ref: EntityRef[PreviewDynamicStage] = imported(name="stage")
     lane: float = imported()
     size: float = imported()
@@ -65,6 +67,10 @@ class PreviewBaseNote(PreviewArchetype):
     data_init_done: bool = entity_data()
     rel_lane: float = entity_data()
     target_time: float = entity_data()
+    preview_col: int = entity_data()
+    preview_y: float = entity_data()
+    preview_axis: float = entity_data()
+    preview_adjusted_time: float = entity_data()
 
     def init_data(self):
         if self.data_init_done:
@@ -88,13 +94,13 @@ class PreviewBaseNote(PreviewArchetype):
             self.next_ref.get().prev_ref = self.ref()
 
     def preprocess(self):
-        self.init_data()
+        # self.init_data()
 
         if self.is_attached:
             attach_head = self.attach_head_ref.get()
             attach_tail = self.attach_tail_ref.get()
-            attach_head.init_data()
-            attach_tail.init_data()
+            # attach_head.init_data()
+            # attach_tail.init_data()
             self.connector_ease = attach_head.connector_ease
             lane, size = get_attach_params(
                 ease_type=attach_head.connector_ease,
@@ -109,19 +115,27 @@ class PreviewBaseNote(PreviewArchetype):
             self.lane = lane
             self.size = size
 
-        PreviewData.max_time = max(PreviewData.max_time, self.target_time)
-
-        if self.is_scored:
-            col = max(time_to_preview_col(self.target_time), 0)
-            if col < len(PreviewData.note_counts_by_col):
-                PreviewData.note_counts_by_col[col] += 1
+        col = max(time_to_preview_col(self.target_time, self.timescale_group.index), 0)
+        y_axis = time_to_preview_y_axis(self.target_time, col, self.timescale_group.index)
+        self.preview_col = col
+        self.preview_y = preview_y_axis_to_y(y_axis)
+        self.preview_axis = col * preview_column_secs() + y_axis
+        self.preview_adjusted_time = get_adjusted_time(self.target_time, col)
 
     def render(self):
         if abs(self.lane) > 12:
             return
         if not self.is_scored:
             return
-        draw_note(self.kind, self.lane, self.size, self.direction, self.target_time)
+        draw_note(
+            self.kind,
+            self.lane,
+            self.size,
+            self.direction,
+            self.preview_col,
+            self.preview_y,
+            self.preview_adjusted_time,
+        )
 
     @property
     def head_ease_frac(self) -> float:
@@ -157,20 +171,26 @@ class PreviewBaseNote(PreviewArchetype):
         return self._basic_visual_lane_at(t)
 
 
-def draw_note(kind: NoteKind, lane: float, size: float, direction: FlickDirection, target_time: float):
-    col = time_to_preview_col(target_time)
-    y = time_to_preview_y(target_time, col)
+def draw_note(
+    kind: NoteKind,
+    lane: float,
+    size: float,
+    direction: FlickDirection,
+    col: int,
+    y: float,
+    adjusted_time: float,
+):
     sprite_set = get_note_sprite_set(kind, direction)
-    draw_note_body(sprite_set.body, kind, lane, size, target_time, col, y)
-    draw_note_arrow(sprite_set.arrow, kind, lane, size, target_time, direction, col, y)
-    draw_note_tick(sprite_set.tick, lane, target_time, col, y)
+    draw_note_body(sprite_set.body, kind, lane, size, col, y, adjusted_time)
+    draw_note_arrow(sprite_set.arrow, kind, lane, size, direction, col, y, adjusted_time)
+    draw_note_tick(sprite_set.tick, lane, col, y, adjusted_time)
 
 
 def draw_note_body(
-    sprites: BodySpriteSet, kind: NoteKind, lane: float, size: float, target_time: float, col: int, y: float
+    sprites: BodySpriteSet, kind: NoteKind, lane: float, size: float, col: int, y: float, adjusted_time: float
 ):
     layer = get_note_body_layer(kind)
-    z = get_z(layer, time=get_adjusted_time(target_time, col), lane=lane)
+    z = get_z(layer, time=adjusted_time, lane=lane)
     match sprites.render_type:
         case BodyRenderType.NORMAL:
             left_layout, middle_layout, right_layout = layout_preview_regular_note_body(lane, size, col, y)
@@ -195,14 +215,14 @@ def draw_note_arrow(
     kind: NoteKind,
     lane: float,
     size: float,
-    target_time: float,
     direction: FlickDirection,
     col: int,
     y: float,
+    adjusted_time: float,
 ):
     z = get_z(
         get_flick_layer(kind),
-        time=get_adjusted_time(target_time, col),
+        time=adjusted_time,
         lane=lane,
         etc=direction,
     )
@@ -215,8 +235,8 @@ def draw_note_arrow(
             sprites.get_sprite(size, direction).draw(layout, z=z)
 
 
-def draw_note_tick(sprite: Sprite, lane: float, target_time: float, col: int, y: float):
-    z = get_z(LAYER_NOTE_TICK, time=get_adjusted_time(target_time, col), lane=lane)
+def draw_note_tick(sprite: Sprite, lane: float, col: int, y: float, adjusted_time: float):
+    z = get_z(LAYER_NOTE_TICK, time=adjusted_time, lane=lane)
     layout = layout_preview_tick(lane, col, y)
     sprite.draw(layout, z=z)
 

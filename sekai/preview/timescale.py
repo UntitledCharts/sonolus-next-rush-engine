@@ -1,4 +1,6 @@
-from sonolus.script.archetype import PreviewArchetype, StandardImport, entity_data
+from __future__ import annotations
+
+from sonolus.script.archetype import EntityRef, PreviewArchetype, StandardImport, callback, entity_data, imported
 from sonolus.script.printing import PrintColor, PrintFormat
 from sonolus.script.quad import Quad
 from sonolus.script.timing import beat_to_time
@@ -18,6 +20,7 @@ class PreviewTimescaleChange(PreviewArchetype):
     timescale_skip: StandardImport.TIMESCALE_SKIP
     timescale_group: StandardImport.TIMESCALE_GROUP
     timescale_ease: StandardImport.TIMESCALE_EASE
+    next_ref: EntityRef[PreviewTimescaleChange] = imported(name="next")
 
     time: float = entity_data()
 
@@ -53,6 +56,9 @@ class PreviewTimescaleChange(PreviewArchetype):
 class PreviewTimescaleGroup(PreviewArchetype):
     name = archetype_names.TIMESCALE_GROUP
 
+    first_ref: EntityRef[PreviewTimescaleChange] = imported(name="first")
+
+    @callback(order=-2)
     def preprocess(self):
         if PreviewData.min_timescale_group == 0:
             PreviewData.min_timescale_group = self.index

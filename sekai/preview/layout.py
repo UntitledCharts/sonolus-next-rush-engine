@@ -11,11 +11,12 @@ from sonolus.script.quad import Quad, Rect
 from sonolus.script.runtime import HorizontalAlign, ScrollDirection, canvas, screen
 from sonolus.script.vec import Vec2
 
-from sekai.lib.layout import NOTE_EDGE_W, NOTE_SLIM_EDGE_W, FlickDirection
+from sekai.lib.layout import NOTE_EDGE_W, NOTE_SLIM_EDGE_W, FlickDirection, preempt_time
 from sekai.lib.level_config import LevelConfig
-from sekai.lib.options import Options
+from sekai.lib.options import Options, PreviewDisplayMode
 
 PREVIEW_COLUMN_SECS = 2
+PREVIEW_MIN_COLUMN_SECS = 0.25
 
 PREVIEW_MARGIN_Y = 0.125
 PREVIEW_MARGIN_X = 0.26
@@ -65,6 +66,7 @@ PREVIEW_DYNAMIC_STAGE_EPS = 0.001
 @level_data
 class PreviewData:
     max_time: float
+    max_col: int
     note_counts_by_col: Array[int, Dim[1000]]
     min_timescale_group: int
 
@@ -77,12 +79,18 @@ class PreviewLayout:
     lane_bound: float
 
 
+def preview_column_secs() -> float:
+    if Options.preview_display_mode == PreviewDisplayMode.EDITOR:
+        return PREVIEW_COLUMN_SECS
+    return max(preempt_time(), PREVIEW_MIN_COLUMN_SECS)
+
+
 def init_preview_layout():
-    PreviewLayout.column_count = time_to_preview_col(PreviewData.max_time) + 1
+    PreviewLayout.column_count = max(PreviewData.max_col, time_to_preview_col(PreviewData.max_time)) + 1
     PreviewLayout.column_width = (
         PREVIEW_DYNAMIC_STAGE_COLUMN_WIDTH if LevelConfig.dynamic_stages else PREVIEW_CLASSIC_COLUMN_WIDTH
     )
-    PreviewLayout.visible_secs = PreviewLayout.column_count * PREVIEW_COLUMN_SECS
+    PreviewLayout.visible_secs = PreviewLayout.column_count * preview_column_secs()
     PreviewLayout.lane_bound = (
         PREVIEW_DYNAMIC_STAGE_LANE_BOUND if LevelConfig.dynamic_stages else PREVIEW_CLASSIC_LANE_BOUND
     )
@@ -93,14 +101,30 @@ def init_preview_layout():
     )
 
 
-def time_to_preview_col(time: float) -> int:
-    return floor(time / PREVIEW_COLUMN_SECS)
+def time_to_preview_col(time: float, group: int = 0) -> int:
+    return floor(time / preview_column_secs())
 
 
-def time_to_preview_y(time: float, col: int) -> float:
+def time_to_preview_y_axis(time: float, col: int, group: int = 0) -> float:
+    return time - col * preview_column_secs()
+
+
+def preview_y_axis_to_y(axis: float) -> float:
+    return lerp(PREVIEW_Y_MIN, PREVIEW_Y_MAX, axis / preview_column_secs())
+
+
+def preview_axis_to_col(axis: float) -> int:
+    return floor(axis / preview_column_secs())
+
+
+def preview_axis_to_y(axis: float, col: int) -> float:
+    return preview_y_axis_to_y(axis - col * preview_column_secs())
+
+
+def time_to_preview_y(time: float, col: int, group: int = 0) -> float:
     if col is None:
-        col = time_to_preview_col(time)
-    return lerp(PREVIEW_Y_MIN, PREVIEW_Y_MAX, (time - col * PREVIEW_COLUMN_SECS) / PREVIEW_COLUMN_SECS)
+        col = time_to_preview_col(time, group)
+    return preview_y_axis_to_y(time_to_preview_y_axis(time, col, group))
 
 
 def lane_to_preview_x(lane: float, col: int) -> float:
@@ -109,7 +133,7 @@ def lane_to_preview_x(lane: float, col: int) -> float:
 
 def get_adjusted_time(time: float, col: int) -> float:
     # get_z only supports time within +/- 30s accurately, so we adjust time to be relative to the column's time
-    return time - col * PREVIEW_COLUMN_SECS
+    return time - col * preview_column_secs()
 
 
 def layout_preview_lane_by_edges(l: float, r: float, col: int) -> Rect:

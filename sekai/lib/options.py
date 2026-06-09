@@ -59,6 +59,11 @@ class Version(IntEnum):
     v1 = 1
 
 
+class PreviewDisplayMode(IntEnum):
+    EDITOR = 0
+    INGAME = 1
+
+
 @options
 class Options:
     speed: float = slider_option(
@@ -378,6 +383,16 @@ class Options:
         min=0.0,
         max=0.2,
         step=0.01,
+    )
+    preview_display_mode: PreviewDisplayMode = select_option(
+        name="Preview Display Mode",
+        description="Controls preview note placement. 'Ingame' uses note speed based spacing",
+        scope="Rush",
+        values=[
+            "Editor",
+            "Ingame",
+        ],
+        default=PreviewDisplayMode.EDITOR,
     )
     effect_animation_speed: float = slider_option(
         name="Effect Animation Speed",

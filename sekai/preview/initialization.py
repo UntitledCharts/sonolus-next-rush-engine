@@ -14,11 +14,11 @@ from sekai.lib.level_config import EngineRevision, LevelConfig, init_level_confi
 from sekai.lib.particle import init_particles
 from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.ui import init_ui
+from sekai.preview import note
 from sekai.preview.dynamic_stage import PreviewCameraChange
 from sekai.preview.events import PreviewSkill
 from sekai.preview.layout import (
     PREVIEW_CAMERA_MARKER_ALPHA,
-    PREVIEW_COLUMN_SECS,
     PREVIEW_DYNAMIC_STAGE_DIVIDER_W,
     PREVIEW_DYNAMIC_STAGE_TIME_INCREMENT,
     PreviewData,
@@ -28,7 +28,9 @@ from sekai.preview.layout import (
     layout_preview_camera_jump_connector,
     layout_preview_column_divider,
     layout_preview_lane_rotated_strip,
+    preview_column_secs,
     print_at_col_top,
+    time_to_preview_col,
 )
 from sekai.preview.stage import draw_preview_cover, draw_preview_stage
 
@@ -39,7 +41,7 @@ class PreviewInitialization(PreviewArchetype):
     revision: EngineRevision = imported(name="revision", default=EngineRevision.LATEST)
     first_camera_ref: EntityRef[PreviewCameraChange] = imported(name="firstCamera")
 
-    @callback(order=1)
+    @callback(order=-1)
     def preprocess(self):
         init_level_config(self.revision)
         init_skin()
@@ -49,6 +51,7 @@ class PreviewInitialization(PreviewArchetype):
         if not ActiveSkin.lane_background_preview.is_available:
             LevelConfig.dynamic_stages = False
 
+        init_notes()
         init_preview_layout()
         init_event_list(self.first_camera_ref)
         init_skill()
@@ -70,7 +73,13 @@ def print_preview_col_head_text():
         if col < len(PreviewData.note_counts_by_col):
             combo += PreviewData.note_counts_by_col[col]
             print_at_col_top(combo, col, fmt=PrintFormat.ENTITY_COUNT, color=PrintColor.RED, side="right")
-        print_at_col_top((col + 1) * PREVIEW_COLUMN_SECS, col, fmt=PrintFormat.TIME, color=PrintColor.CYAN, side="left")
+        print_at_col_top(
+            (col + 1) * preview_column_secs(),
+            col,
+            fmt=PrintFormat.TIME,
+            color=PrintColor.CYAN,
+            side="left",
+        )
 
 
 def draw_beat_lines():
@@ -108,8 +117,8 @@ def draw_camera_markers():
     z_edge = get_z_alt(LAYER_BEAT_LINE, 1)
     z_target = get_z_alt(LAYER_BEAT_LINE, 2)
     for col in range(PreviewLayout.column_count):
-        col_t_lo = col * PREVIEW_COLUMN_SECS
-        col_t_hi = (col + 1) * PREVIEW_COLUMN_SECS
+        col_t_lo = col * preview_column_secs()
+        col_t_hi = (col + 1) * preview_column_secs()
 
         t_a = col_t_lo
         camera_a = +CameraInfo
@@ -251,6 +260,25 @@ def init_skill():
     sorted_list_head = sort_entities(list_head)
 
     setting_count(sorted_list_head.index)
+
+
+def init_notes():
+    entity_count = 0
+    while entity_info_at(entity_count).index == entity_count:
+        entity_count += 1
+
+    note_id = note.PreviewBaseNote._compile_time_id()
+    for i in range(entity_count):
+        entity_index = entity_count - 1 - i
+        info = entity_info_at(entity_index)
+        if note_id in PreviewArchetype._get_mro_id_array(info.archetype_id):
+            preview_note = note.PreviewBaseNote.at(entity_index)
+            preview_note.init_data()
+            PreviewData.max_time = max(PreviewData.max_time, preview_note.target_time)
+            col = max(time_to_preview_col(preview_note.target_time, preview_note.timescale_group.index), 0)
+            PreviewData.max_col = max(PreviewData.max_col, col)
+            if preview_note.is_scored and col < len(PreviewData.note_counts_by_col):
+                PreviewData.note_counts_by_col[col] += 1
 
 
 def initial_list(entity_count):

@@ -20,11 +20,11 @@ from sekai.lib.layout import get_alpha
 from sekai.lib.level_config import LevelConfig
 from sekai.preview import note
 from sekai.preview.layout import (
-    PREVIEW_COLUMN_SECS,
     get_adjusted_time,
     layout_preview_slide_connector_segment,
+    preview_axis_to_y,
+    preview_column_secs,
     time_to_preview_col,
-    time_to_preview_y,
 )
 
 
@@ -54,10 +54,12 @@ class PreviewConnector(PreviewArchetype):
             head_ref=self.head_ref,
             head_size=head.size,
             head_target_time=head.target_time,
+            head_preview_axis=head.preview_axis,
             head_ease_frac=head.head_ease_frac,
             tail_ref=self.tail_ref,
             tail_size=tail.size,
             tail_target_time=tail.target_time,
+            tail_preview_axis=tail.preview_axis,
             tail_ease_frac=tail.tail_ease_frac,
             segment_head_target_time=self.segment_head.target_time,
             segment_head_lane=self.segment_head.lane,
@@ -90,10 +92,12 @@ def draw_connector(
     head_ref: EntityRef[note.PreviewBaseNote],
     head_size: float,
     head_target_time: float,
+    head_preview_axis: float,
     head_ease_frac: float,
     tail_ref: EntityRef[note.PreviewBaseNote],
     tail_size: float,
     tail_target_time: float,
+    tail_preview_axis: float,
     tail_ease_frac: float,
     segment_head_target_time: float,
     segment_head_lane: float,
@@ -166,7 +170,7 @@ def draw_connector(
         case EaseType.NONE | EaseType.LINEAR if head_alpha == tail_alpha and not LevelConfig.dynamic_stages:
             quality_dist_scale = 0
         case _:
-            quality_dist_scale = 100 / PREVIEW_COLUMN_SECS * (tail_target_time - head_target_time)
+            quality_dist_scale = 100 * abs(tail_target_time - head_target_time) / preview_column_secs()
     quality_alpha_scale = 30 * abs(head_alpha - tail_alpha)
     segment_count = max(1, ceil(get_connector_quality_option(kind) * max(quality_dist_scale, quality_alpha_scale)))
 
@@ -180,7 +184,8 @@ def draw_connector(
     last_size = head_size
     last_alpha = head_alpha
     last_target_time = head_target_time
-    last_col = time_to_preview_col(head_target_time)
+    last_axis = head_preview_axis
+    last_col = time_to_preview_col(last_target_time)
 
     for i in range(1, segment_count + 1):
         next_frac = i / segment_count
@@ -195,6 +200,7 @@ def draw_connector(
         next_lane = lerp(head_lane_at_t, tail_lane_at_t, next_interp_frac)
         next_size = max(1e-3, lerp(head_size, tail_size, next_interp_frac))
         next_alpha = lerp(head_alpha, tail_alpha, next_frac)
+        next_axis = lerp(head_preview_axis, tail_preview_axis, next_frac)
         next_col = time_to_preview_col(next_target_time)
 
         a = clamp(
@@ -208,10 +214,14 @@ def draw_connector(
 
         for col in range(last_col, next_col + 1):
             z = get_connector_z(
-                kind, get_adjusted_time(segment_head_target_time, col), segment_head_lane, active=False, layer=layer
+                kind,
+                get_adjusted_time(segment_head_target_time, col),
+                segment_head_lane,
+                active=False,
+                layer=layer,
             )
-            start_y = time_to_preview_y(last_target_time, col)
-            end_y = time_to_preview_y(next_target_time, col)
+            start_y = preview_axis_to_y(last_axis, col)
+            end_y = preview_axis_to_y(next_axis, col)
             for layout in layout_preview_slide_connector_segment(
                 start_lane=last_lane,
                 start_size=last_size,
@@ -227,4 +237,5 @@ def draw_connector(
         last_size = next_size
         last_alpha = next_alpha
         last_target_time = next_target_time
+        last_axis = next_axis
         last_col = next_col
