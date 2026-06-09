@@ -9,7 +9,7 @@ from sonolus.script.interval import clamp, lerp, remap_clamped, unlerp_clamped
 from sonolus.script.particle import Particle, ParticleHandle
 from sonolus.script.quad import Quad, QuadLike
 from sonolus.script.record import Record
-from sonolus.script.runtime import time
+from sonolus.script.runtime import offset_adjusted_time, time
 from sonolus.script.sprite import Sprite, ZIndex
 from sonolus.script.timing import beat_to_time
 
@@ -600,11 +600,17 @@ def connector_sfx_matches_kind(kind: ConnectorKind, sfx_kind: ActiveConnectorKin
 
 
 def normal_connector_sfx_is_active() -> bool:
-    return ConnectorSfxState.normal_active_time >= ConnectorSfxState.normal_inactive_time
+    return (
+        ConnectorSfxState.normal_active_time >= ConnectorSfxState.normal_inactive_time
+        and offset_adjusted_time() >= ConnectorSfxState.normal_active_time
+    )
 
 
 def critical_connector_sfx_is_active() -> bool:
-    return ConnectorSfxState.critical_active_time >= ConnectorSfxState.critical_inactive_time
+    return (
+        ConnectorSfxState.critical_active_time >= ConnectorSfxState.critical_inactive_time
+        and offset_adjusted_time() >= ConnectorSfxState.critical_active_time
+    )
 
 
 def update_circular_connector_particle(
