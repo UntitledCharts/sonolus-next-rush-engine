@@ -703,6 +703,13 @@ def get_perspective_y(target_y: float, travel: float = 1.0) -> float:
     return (pre_y - DynamicLayout.t) / (DynamicLayout.h_scale * travel)
 
 
+def get_note_spawn_depth() -> float:
+    if Options.stage_cover:
+        return Layout.cover_depth
+    vanish_ext = LANE_T - DynamicLayout.lane_t
+    return Layout.cover_depth - vanish_ext
+
+
 def layout_sekai_stage() -> Quad:
     w = (2048 / 1420) * 12 / 2
     h = 1176 / 850
@@ -735,7 +742,7 @@ def layout_particle_lane(lane: float, size: float, y_offset: float = 0.0) -> Qua
         l=lane - (size + 0.01),
         r=lane + (size + 0.01),
         t=DynamicLayout.lane_t,
-        b=DynamicLayout.lane_b,
+        b=get_perspective_y(-1, approach(1 - y_offset)),
         travel=approach(1 - y_offset),
     )
 
