@@ -697,10 +697,18 @@ def get_perspective_y(target_y: float, travel: float = 1.0) -> float:
     if DynamicLayout.h_scale == 0 or travel == 0:
         return 0.0
 
-    rot = DynamicLayout.rotate
-    edge_reach = screen().r * abs(sin(rot))
-    pre_y = target_y * cos(rot) + (edge_reach if target_y >= 0 else -edge_reach)
+    pre_y = screen_bound_pre_rotation_y(DynamicLayout.rotate, target_y)
     return (pre_y - DynamicLayout.t) / (DynamicLayout.h_scale * travel)
+
+
+def screen_bound_pre_rotation_y(rotate: float, target_y: float) -> float:
+    c = cos(rotate)
+    edge_reach = screen().r * abs(sin(rotate))
+    if target_y >= 0:
+        edge_y = screen().t if c >= 0 else screen().b
+        return edge_y * c + edge_reach
+    edge_y = screen().b if c >= 0 else screen().t
+    return edge_y * c - edge_reach
 
 
 def get_note_spawn_depth() -> float:
@@ -1669,7 +1677,7 @@ def compute_hitbox(
     tl_x_final, tr_x_final = bl_x_final, br_x_final
     b_y = note_y - vertical_extent
 
-    full_bottom = screen().b * cos(transform.rotate) - screen().r * abs(sin(transform.rotate))
+    full_bottom = screen_bound_pre_rotation_y(transform.rotate, screen().b)
 
     if Options.hitbox_range == HitboxRange.FULL_VERTICAL:
         b_y = full_bottom
