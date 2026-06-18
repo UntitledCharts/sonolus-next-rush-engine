@@ -32,7 +32,7 @@ class ParticleEntry(Record):
 
 @level_memory
 class ParticleHandler:
-    entries: ArrayMap[float, ParticleEntry, Dim[8192]]
+    entries: ArrayMap[float, ParticleEntry, Dim[256]]
     chunk_serial: float
     entry_serial: float
 
