@@ -208,7 +208,9 @@ def init_layout():
         Layout.approach_start = clamp(candidate, 0, 0.99)
 
     bg = background()
-    if is_play() or is_watch():
+    if Options.background_auto_correction:
+        background_zoom = 1.0
+    elif is_play() or is_watch():
         background_zoom = background_camera_zoom(bg)
     else:
         background_zoom = 1.0
@@ -291,6 +293,34 @@ def background_camera_zoom(bg: QuadLike) -> float:
     margin_y = max(abs(raised_target.y - raised_anchor.y), abs(lane_target.y - lane_anchor.y))
 
     return max((cover_x + margin_x) / bw, (cover_y + margin_y) / bh, 1.0)
+
+
+def background_auto_correction_zoom(bg: QuadLike, target: Vec2, anchor: Vec2, rotate: float) -> float:
+    c = abs(cos(rotate))
+    s = abs(sin(rotate))
+    if c < 1e-6:
+        c = 0.0
+    if s < 1e-6:
+        s = 0.0
+
+    screen_half_w = (screen().r - screen().l) / 2
+    screen_half_h = (screen().t - screen().b) / 2
+    cover_x = screen_half_w * c + screen_half_h * s
+    cover_y = screen_half_w * s + screen_half_h * c
+
+    return max(
+        (cover_x + anchor.x) / max(target.x - bg.bl.x, 1e-6),
+        (cover_x - anchor.x) / max(bg.br.x - target.x, 1e-6),
+        (cover_y + anchor.y) / max(target.y - bg.bl.y, 1e-6),
+        (cover_y - anchor.y) / max(bg.tl.y - target.y, 1e-6),
+        1.0,
+    )
+
+
+def corrected_background_camera_zoom(bg: QuadLike, zoom: float, target: Vec2, anchor: Vec2, rotate: float) -> float:
+    if not Options.background_auto_correction:
+        return zoom
+    return max(zoom, background_auto_correction_zoom(bg, target, anchor, rotate), 1.0)
 
 
 def get_camera_info(target_time: float | None = None, left_limit: bool = False) -> CameraInfo:
@@ -478,6 +508,7 @@ def apply_camera_zoom(transform: LayoutTransform, zoom: float, target: Vec2, anc
     DynamicLayout.x_translate = zoomed.x_translate
     DynamicLayout.rotate = zoomed.rotate
     bg = Layout.initial_background
+    zoom = corrected_background_camera_zoom(bg, zoom, target, anchor, rotate)
     rot = -rotate
     set_background(
         Quad(

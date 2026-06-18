@@ -458,6 +458,12 @@ class Options:
         scope="Next Sekai",
         default=False,
     )
+    background_auto_correction: bool = toggle_option(
+        name="Background Auto Correction",
+        scope="Rush",
+        advanced=True,
+        default=False,
+    )
     hitbox_range: HitboxRange = select_option(
         name="Hitbox",
         advanced=True,
