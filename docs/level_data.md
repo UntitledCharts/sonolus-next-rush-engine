@@ -191,6 +191,9 @@ Comprised of many archetypes according to the following naming scheme:
   * UNDER = 2
   * OVER = 3
 * **segmentThroughJudgeLine**: Whether connectors in this segment should draw themselves passing through the judge line rather than cutting off there. Defaults to false.
+* **segmentPresentation**: How the connectors for this segment are drawn. Takes on one of the following values:
+  * DEFAULT = 0
+  * FULL_SCREEN = 1
 * **attachHead (ref?[Note])**: The optional head the note attaches to for its **lane**, **size**, and **effective timescale**.
 * **attachTail (ref?[Note])**: The optional tail the note attaches to for its **lane**, **size**, and **effective timescale**.
 * **effectKind (EffectKind)**: What kind of sound effect the note plays when hit. Takes on one of the following values:
