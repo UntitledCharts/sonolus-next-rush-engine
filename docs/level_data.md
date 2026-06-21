@@ -37,6 +37,9 @@ Represents a dynamic stage. The presence of at least one **Stage** enables dynam
 
 * **fromStart (bool)**: If true, draw the stage from the level start, even before the first **StageMaskChange** event.
 * **untilEnd (bool)**: If true, keep drawing the stage through the end of the level, even after the last **StageMaskChange** event.
+* **generateSimLines (GenerateSimLines)**: Controls how notes on this stage participate in simultaneous line generation. Defaults to GLOBAL. Takes on one of the following values:
+  * GLOBAL = 0
+  * ISOLATED = 1
 * **firstMaskChange (ref?[StageMaskChange])**: A reference to the first **StageMaskChange** event.
 * **firstPivotChange (ref?[StagePivotChange])**: A reference to the first **StagePivotChange** event.
 * **firstStyleChange (ref?[StageStyleChange])**: A reference to the first **StageStyleChange** event.
