@@ -1,5 +1,5 @@
 from enum import IntEnum
-from math import cos, floor, pi
+from math import floor, sin
 
 from sonolus.script.bucket import Judgment
 from sonolus.script.globals import level_memory
@@ -28,6 +28,8 @@ from sekai.lib.options import Options, Version
 from sekai.lib.skin import (
     ActiveSkin,
 )
+
+AP_EFFECT_SPEED = 4.1887903
 
 
 @level_memory
@@ -96,7 +98,7 @@ def draw_combo_label(ap: bool, combo: int):
     base_h = 0.04225 * ui.combo_config.scale
     base_w = base_h * 3.22 * 6.65
     h, w = transform_fixed_size(base_h, base_w)
-    a = ui.combo_config.alpha * 0.8 * (cos(time() * pi) + 1) / 2
+    a = ui.combo_config.alpha * (sin(time() * AP_EFFECT_SPEED) + 1) * 0.5
     layout = layout_combo_label(screen_center, w=w / 2, h=h / 2)
     if ap or not Options.ap_effect:
         ActiveSkin.combo_label.get_sprite(ComboType.NORMAL).draw(
@@ -148,7 +150,7 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int):
         if time() >= draw_time + 0.112
         else 0
     )
-    a3 = ui.combo_config.alpha * 0.8 * (cos(time() * pi) + 1) / 2
+    a3 = ui.combo_config.alpha * (sin(time() * AP_EFFECT_SPEED) + 1) * 0.5
 
     h, w = transform_fixed_size(base_h, base_w)
     h2, w2 = transform_fixed_size(base_h2, base_w2)
@@ -227,7 +229,7 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
     s = 1.0
 
     a = ui.combo_config.alpha
-    a3 = ui.combo_config.alpha * 0.8 * (cos(time() * pi) + 1) / 2
+    a3 = ui.combo_config.alpha * (sin(time() * AP_EFFECT_SPEED) + 1) * 0.5
 
     h, w = transform_fixed_size(base_h, base_w)
 
