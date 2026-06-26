@@ -37,6 +37,9 @@ Represents a dynamic stage. The presence of at least one **Stage** enables dynam
 
 * **fromStart (bool)**: If true, draw the stage from the level start, even before the first **StageMaskChange** event.
 * **untilEnd (bool)**: If true, keep drawing the stage through the end of the level, even after the last **StageMaskChange** event.
+* **generateSimLines (GenerateSimLines)**: Controls how notes on this stage participate in simultaneous line generation. Defaults to GLOBAL. Takes on one of the following values:
+  * GLOBAL = 0
+  * ISOLATED = 1
 * **firstMaskChange (ref?[StageMaskChange])**: A reference to the first **StageMaskChange** event.
 * **firstPivotChange (ref?[StagePivotChange])**: A reference to the first **StagePivotChange** event.
 * **firstStyleChange (ref?[StageStyleChange])**: A reference to the first **StageStyleChange** event.
@@ -191,6 +194,9 @@ Comprised of many archetypes according to the following naming scheme:
   * UNDER = 2
   * OVER = 3
 * **segmentThroughJudgeLine**: Whether connectors in this segment should draw themselves passing through the judge line rather than cutting off there. Defaults to false.
+* **segmentPresentation**: How the connectors for this segment are drawn. Takes on one of the following values:
+  * DEFAULT = 0
+  * FULL_SCREEN = 1
 * **attachHead (ref?[Note])**: The optional head the note attaches to for its **lane**, **size**, and **effective timescale**.
 * **attachTail (ref?[Note])**: The optional tail the note attaches to for its **lane**, **size**, and **effective timescale**.
 * **effectKind (EffectKind)**: What kind of sound effect the note plays when hit. Takes on one of the following values:

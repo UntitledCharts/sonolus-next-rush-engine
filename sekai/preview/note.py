@@ -7,7 +7,7 @@ from sonolus.script.interval import lerp, unlerp_clamped
 from sonolus.script.sprite import Sprite
 from sonolus.script.timing import beat_to_time
 
-from sekai.lib.connector import ConnectorKind, ConnectorLayer
+from sekai.lib.connector import ConnectorKind, ConnectorLayer, SegmentPresentation
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.layer import (
     LAYER_NOTE_TICK,
@@ -58,6 +58,7 @@ class PreviewBaseNote(PreviewArchetype):
     segment_alpha: float = imported(name="segmentAlpha")
     segment_layer: ConnectorLayer = imported(name="segmentLayer")
     segment_through_judge_line: bool = imported(name="segmentThroughJudgeLine")
+    segment_presentation: SegmentPresentation = imported(name="segmentPresentation")
     attach_head_ref: EntityRef[PreviewBaseNote] = imported(name="attachHead")
     attach_tail_ref: EntityRef[PreviewBaseNote] = imported(name="attachTail")
     next_ref: EntityRef[PreviewBaseNote] = imported(name="next")

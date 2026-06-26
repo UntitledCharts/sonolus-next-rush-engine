@@ -10,7 +10,7 @@ from sonolus.script.archetype import PlayArchetype
 from sonolus.script.level import Level, LevelData
 from sonolus.script.timing import TimescaleEase
 
-from sekai.lib.connector import ConnectorKind, ConnectorLayer
+from sekai.lib.connector import ConnectorKind, ConnectorLayer, SegmentPresentation
 from sekai.lib.ease import EaseType
 from sekai.lib.layout import FlickDirection, ZoomVerticalAlign
 from sekai.lib.level_config import EngineRevision
@@ -157,6 +157,7 @@ class LevelNote:
     segment_alpha: float = 1.0
     segment_layer: ConnectorLayer = ConnectorLayer.TOP
     segment_through_judge_line: bool = False
+    segment_presentation: SegmentPresentation = SegmentPresentation.DEFAULT
     connector_ease: EaseType = EaseType.LINEAR
     attach: LevelSlide | None = None
 
@@ -286,6 +287,7 @@ def build_level(
             "segment_alpha": level_note.segment_alpha,
             "segment_layer": level_note.segment_layer,
             "segment_through_judge_line": level_note.segment_through_judge_line,
+            "segment_presentation": level_note.segment_presentation,
             "timescale_group": ts_group.ref(),
         }
         if level_note.stage is not None:

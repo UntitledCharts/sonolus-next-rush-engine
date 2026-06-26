@@ -3,13 +3,14 @@ from math import ceil, cos, pi, sin
 from typing import Literal, assert_never
 
 from sonolus.script.archetype import EntityRef
+from sonolus.script.easing import ease_out_cubic
 from sonolus.script.effect import Effect, LoopedEffectHandle
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp, lerp, remap_clamped, unlerp_clamped
 from sonolus.script.particle import Particle, ParticleHandle
 from sonolus.script.quad import Quad, QuadLike
 from sonolus.script.record import Record
-from sonolus.script.runtime import offset_adjusted_time, time
+from sonolus.script.runtime import offset_adjusted_time, screen, time
 from sonolus.script.sprite import Sprite, ZIndex
 from sonolus.script.timing import beat_to_time
 
@@ -74,6 +75,11 @@ class ConnectorLayer(IntEnum):
     BOTTOM = 1
     UNDER = 2
     OVER = 3
+
+
+class SegmentPresentation(IntEnum):
+    DEFAULT = 0
+    FULL_SCREEN = 1
 
 
 ActiveConnectorKind = Literal[
@@ -296,17 +302,30 @@ def draw_connector(
     segment_tail_target_time: float,
     segment_tail_alpha: float,
     layer: ConnectorLayer,
+    presentation: SegmentPresentation = SegmentPresentation.DEFAULT,
     bypass_tail_target_time_check: bool = False,
 ):
-    if (
-        (head_visual_progress < DynamicLayout.progress_start and tail_visual_progress < DynamicLayout.progress_start)
-        or (
-            head_visual_progress > DynamicLayout.progress_cutoff
-            and tail_visual_progress > DynamicLayout.progress_cutoff
-        )
-        or head_visual_progress == tail_visual_progress
-    ):
-        return
+    match presentation:
+        case SegmentPresentation.DEFAULT:
+            if (
+                (
+                    head_visual_progress < DynamicLayout.progress_start
+                    and tail_visual_progress < DynamicLayout.progress_start
+                )
+                or (
+                    head_visual_progress > DynamicLayout.progress_cutoff
+                    and tail_visual_progress > DynamicLayout.progress_cutoff
+                )
+                or head_visual_progress == tail_visual_progress
+            ):
+                return
+        case SegmentPresentation.FULL_SCREEN:
+            if head_target_time == tail_target_time or not (
+                min(head_target_time, tail_target_time) <= time() <= max(head_target_time, tail_target_time)
+            ):
+                return
+        case _:
+            assert_never(presentation)
 
     if Options.disable_fake_notes and kind in {
         ConnectorKind.ACTIVE_FAKE_NORMAL,
@@ -379,6 +398,73 @@ def draw_connector(
 
     if time() >= tail_target_time and not bypass_tail_target_time_check:
         return
+
+    z_normal = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=False, layer=layer)
+    z_active = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=True, layer=layer)
+
+    match presentation:
+        case SegmentPresentation.DEFAULT:
+            draw_connector_default(
+                kind=kind,
+                visual_state=visual_state,
+                ease_type=ease_type,
+                normal_sprite=normal_sprite,
+                active_sprite=active_sprite,
+                segment_head_target_time=segment_head_target_time,
+                z_normal=z_normal,
+                z_active=z_active,
+                head_lane=head_lane,
+                head_size=head_size,
+                head_visual_progress=head_visual_progress,
+                head_target_time=head_target_time,
+                head_ease_frac=head_ease_frac,
+                head_alpha=head_alpha,
+                tail_lane=tail_lane,
+                tail_size=tail_size,
+                tail_visual_progress=tail_visual_progress,
+                tail_target_time=tail_target_time,
+                tail_ease_frac=tail_ease_frac,
+                tail_alpha=tail_alpha,
+            )
+        case SegmentPresentation.FULL_SCREEN:
+            draw_connector_full_screen(
+                kind=kind,
+                visual_state=visual_state,
+                normal_sprite=normal_sprite,
+                active_sprite=active_sprite,
+                z_normal=z_normal,
+                z_active=z_active,
+                head_target_time=head_target_time,
+                head_alpha=head_alpha,
+                tail_target_time=tail_target_time,
+                tail_alpha=tail_alpha,
+            )
+        case _:
+            assert_never(presentation)
+
+
+def draw_connector_default(
+    kind: ConnectorKind,
+    visual_state: ConnectorVisualState,
+    ease_type: EaseType,
+    normal_sprite: Sprite,
+    active_sprite: Sprite,
+    segment_head_target_time: float,
+    z_normal: ZIndex,
+    z_active: ZIndex,
+    head_lane: float,
+    head_size: float,
+    head_visual_progress: float,
+    head_target_time: float,
+    head_ease_frac: float,
+    head_alpha: float,
+    tail_lane: float,
+    tail_size: float,
+    tail_visual_progress: float,
+    tail_target_time: float,
+    tail_ease_frac: float,
+    tail_alpha: float,
+):
     start_visual_progress = clamp(head_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
     end_visual_progress = clamp(tail_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
     start_frac = unlerp_clamped(head_visual_progress, tail_visual_progress, start_visual_progress)
@@ -441,8 +527,6 @@ def draw_connector(
                 scale = max(scale, max_offset**0.5 * 2.5)
     quality = get_connector_quality_option(kind)
     segment_count = max(1, ceil(scale * quality * 10))
-    z_normal = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=False, layer=layer)
-    z_active = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=True, layer=layer)
 
     last_travel = start_travel
     last_lane = start_lane
@@ -511,6 +595,44 @@ def get_cross_fate_opacities(a, t, period):
     opacity2 = a * (opacity2_base + correction * opacity1_base * opacity2_base)
 
     return opacity1, opacity2
+
+
+def draw_connector_full_screen(
+    kind: ConnectorKind,
+    visual_state: ConnectorVisualState,
+    normal_sprite: Sprite,
+    active_sprite: Sprite,
+    z_normal: ZIndex,
+    z_active: ZIndex,
+    head_target_time: float,
+    head_alpha: float,
+    tail_target_time: float,
+    tail_alpha: float,
+):
+    judge_frac = unlerp_clamped(head_target_time, tail_target_time, time())
+    judge_alpha = lerp(head_alpha, tail_alpha, judge_frac)
+    base_a = clamp(get_alpha(time()) * judge_alpha * get_connector_alpha_option(kind), 0, 1)
+    draw_connector_quad(screen(), visual_state, normal_sprite, active_sprite, z_normal, z_active, base_a)
+
+
+def draw_connector_quad(
+    layout: QuadLike,
+    visual_state: ConnectorVisualState,
+    normal_sprite: Sprite,
+    active_sprite: Sprite,
+    z_normal: ZIndex,
+    z_active: ZIndex,
+    base_a: float,
+):
+    if visual_state == ConnectorVisualState.ACTIVE and active_sprite.is_available:
+        if Options.connector_animation:
+            a_modifier = (cos(2 * pi * time()) + 1) / 2
+            normal_sprite.draw(layout, z=z_normal, a=base_a * ease_out_cubic(a_modifier))
+            active_sprite.draw(layout, z=z_active, a=base_a * ease_out_cubic(1 - a_modifier))
+        else:
+            active_sprite.draw(layout, z=z_active, a=base_a)
+    else:
+        normal_sprite.draw(layout, z=z_normal, a=base_a * (1 if visual_state != ConnectorVisualState.INACTIVE else 0.5))
 
 
 class ActiveConnectorInfo(Record):

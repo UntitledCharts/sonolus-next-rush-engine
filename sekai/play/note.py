@@ -25,7 +25,7 @@ from sonolus.script.timing import beat_to_time
 from sekai.debug import DISABLE_NOTES
 from sekai.lib import archetype_names
 from sekai.lib.buckets import WINDOW_SCALE, SekaiWindow
-from sekai.lib.connector import ActiveConnectorInfo, ConnectorKind, ConnectorLayer
+from sekai.lib.connector import ActiveConnectorInfo, ConnectorKind, ConnectorLayer, SegmentPresentation
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.layout import DynamicLayout, FlickDirection, Hitbox, Layout, compute_hitbox_at_time, progress_to
 from sekai.lib.note import (
@@ -83,6 +83,7 @@ class BaseNote(PlayArchetype):
     segment_alpha: float = imported(name="segmentAlpha")
     segment_layer: ConnectorLayer = imported(name="segmentLayer")
     segment_through_judge_line: bool = imported(name="segmentThroughJudgeLine")
+    segment_presentation: SegmentPresentation = imported(name="segmentPresentation")
     attach_head_ref: EntityRef[BaseNote] = imported(name="attachHead")
     attach_tail_ref: EntityRef[BaseNote] = imported(name="attachTail")
     next_ref: EntityRef[BaseNote] = imported(name="next")

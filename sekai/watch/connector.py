@@ -195,6 +195,7 @@ class WatchConnector(WatchArchetype):
                 segment_tail_target_time=segment_tail.target_time,
                 segment_tail_alpha=segment_tail.segment_alpha,
                 layer=segment_head.segment_layer,
+                presentation=segment_head.segment_presentation,
                 bypass_tail_target_time_check=segment_head.segment_through_judge_line,
             )
         if Options.show_hitboxes and self.active_head_ref.index > 0 and time() in self.visual_active_interval:
