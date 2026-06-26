@@ -913,7 +913,7 @@ def draw_stage_cover(alpha):
             case StageCoverMode.STAGE:
                 if not LevelConfig.dynamic_stages:
                     layout = layout_stage_cover()
-                    ActiveSkin.cover.draw(layout, z=get_z_alt(LAYER_COVER), a=Options.stage_cover_alpha * alpha * alpha)
+                    ActiveSkin.cover.draw(layout, z=get_z_alt(LAYER_COVER), a=Options.stage_cover_alpha * alpha)
             case StageCoverMode.STAGE_AND_LINE:
                 if not LevelConfig.dynamic_stages:
                     cover_layout, line_layout = layout_stage_cover_and_line()
