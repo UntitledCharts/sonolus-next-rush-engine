@@ -263,6 +263,11 @@ def schedule_auto_connector_sfx_kind(entity_count: int, sfx_kind: ActiveConnecto
                 continue
             if not connector_sfx_matches_kind(connector.segment_head.segment_kind, sfx_kind):
                 continue
+            if connector.active_head.target_time == connector.active_tail.target_time:
+                # Zero-length slide: its activation and release land on the same instant, which the
+                # hold-wins-over-release tie-break would otherwise leave stuck on. It holds for no
+                # duration, so skip it entirely.
+                continue
             active_event_time = connector.active_head.target_time
             inactive_event_time = connector.active_tail.target_time
             if current_time < active_event_time < next_time:
@@ -288,6 +293,9 @@ def schedule_auto_connector_sfx_kind(entity_count: int, sfx_kind: ActiveConnecto
             if connector.active_head_ref.index <= 0:
                 continue
             if not connector_sfx_matches_kind(connector.segment_head.segment_kind, sfx_kind):
+                continue
+            if connector.active_head.target_time == connector.active_tail.target_time:
+                # See the matching skip above: a zero-length slide must not touch the hold state.
                 continue
             if connector.active_head.target_time == next_time:
                 if inactive_time == CONNECTOR_SFX_INACTIVE_TIME_INIT:
