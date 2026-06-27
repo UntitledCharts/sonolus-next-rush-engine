@@ -1,6 +1,7 @@
 from enum import IntEnum
 from math import floor, sin
 
+from sonolus.script.array import Array, Dim
 from sonolus.script.bucket import Judgment
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp, unlerp, unlerp_clamped
@@ -20,6 +21,7 @@ from sekai.lib.layout import (
     Quad,
     UIMargin,
     layout_combo_label,
+    layout_dead_effect_quads,
     transform_fixed_size,
     transform_static_quad,
 )
@@ -30,6 +32,29 @@ from sekai.lib.skin import (
 )
 
 AP_EFFECT_SPEED = 4.1887903
+
+
+@level_memory
+class FixedUiLayout:
+    combo_label: Quad
+    judgment_accuracy: Quad
+    damage_flash: Array[Quad, Dim[4]]
+
+
+def init_fixed_ui_layout():
+    ui = runtime_ui()
+
+    combo_base_h = 0.04225 * ui.combo_config.scale
+    combo_base_w = combo_base_h * 3.22 * 6.65
+    combo_h, combo_w = transform_fixed_size(combo_base_h, combo_base_w)
+    FixedUiLayout.combo_label = layout_combo_label(Vec2(x=5.337, y=0.485), w=combo_w / 2, h=combo_h / 2)
+
+    accuracy_base_h = 0.054 * 1.3 * ui.judgment_config.scale
+    accuracy_base_w = accuracy_base_h * 23.6
+    accuracy_h, accuracy_w = transform_fixed_size(accuracy_base_h, accuracy_base_w)
+    FixedUiLayout.judgment_accuracy = layout_combo_label(Vec2(x=0, y=0.723), w=accuracy_w / 2, h=accuracy_h / 2)
+
+    FixedUiLayout.damage_flash = layout_dead_effect_quads()
 
 
 @level_memory
@@ -93,13 +118,8 @@ def draw_combo_label(ap: bool, combo: int):
 
     ui = runtime_ui()
 
-    screen_center = Vec2(x=5.337, y=0.485)
-
-    base_h = 0.04225 * ui.combo_config.scale
-    base_w = base_h * 3.22 * 6.65
-    h, w = transform_fixed_size(base_h, base_w)
     a = ui.combo_config.alpha * (sin(time() * AP_EFFECT_SPEED) + 1) * 0.5
-    layout = layout_combo_label(screen_center, w=w / 2, h=h / 2)
+    layout = FixedUiLayout.combo_label
     if ap or not Options.ap_effect:
         ActiveSkin.combo_label.get_sprite(ComboType.NORMAL).draw(
             quad=layout, z=get_z_alt(LAYER_JUDGMENT, 1), a=ui.combo_config.alpha
@@ -477,13 +497,8 @@ def draw_judgment_accuracy(judgment: Judgment, accuracy: float, windows: SekaiWi
 
     ui = runtime_ui()
 
-    screen_center = Vec2(x=0, y=0.723)
-
-    base_h = 0.054 * 1.3 * ui.judgment_config.scale
-    base_w = base_h * 23.6
-    h, w = transform_fixed_size(base_h, base_w)
     a = ui.judgment_config.alpha
-    layout = layout_combo_label(screen_center, w=w / 2, h=h / 2)
+    layout = FixedUiLayout.judgment_accuracy
     ActiveSkin.accuracy_warning.get_sprite(
         judgment=judgment,
         windows=windows.perfect,
@@ -503,20 +518,8 @@ def draw_damage_flash(draw_time: float):
     t = unlerp_clamped(draw_time, draw_time + 0.35, time())
     a = 0.768 * t**0.1 * (1 - t) ** 1.35
 
-    for i in range(2):
-        for j in range(2):
-            l_val = screen().l if j == 0 else screen().r
-            if i == 0:
-                t_val = screen().t
-            else:
-                t_val = screen().b
-            layout = Quad(
-                bl=Vec2(l_val, 0),
-                br=Vec2(0, 0),
-                tl=Vec2(l_val, t_val),
-                tr=Vec2(0, t_val),
-            )
-            ActiveSkin.damage_flash.draw(quad=layout, z=LAYER_DAMAGE, a=a * 0.8)
+    for k in range(len(FixedUiLayout.damage_flash)):
+        ActiveSkin.damage_flash.draw(quad=FixedUiLayout.damage_flash[k], z=LAYER_DAMAGE, a=a * 0.8)
 
 
 def draw_life_number(number: int, z: ZIndex, alpha: float = 1.0):

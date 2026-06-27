@@ -25,9 +25,17 @@ from sekai.lib.connector import (
     schedule_connector_sfx,
     schedule_connector_sfx_between,
 )
-from sekai.lib.custom_elements import LifeManager, NeumaierSum
+from sekai.lib.custom_elements import LifeManager, NeumaierSum, init_fixed_ui_layout
 from sekai.lib.initialization import LastNote, calculate_note_weight, sort_entities_by_time
-from sekai.lib.layout import init_layout, init_ui_margin
+from sekai.lib.layout import (
+    StaticStageData,
+    init_layout,
+    init_ui_margin,
+    layout_background_cover,
+    layout_dead_effect_quads,
+    layout_sekai_stage,
+    layout_static_ui,
+)
 from sekai.lib.level_config import (
     EngineRevision,
     init_level_config,
@@ -69,6 +77,11 @@ class WatchInitialization(WatchArchetype):
         init_ui_version(ActiveSkin.ui_checker.check)
         init_ui_margin()
         init_ui()
+        init_fixed_ui_layout()
+        StaticStageData.ui_layout = layout_static_ui()
+        StaticStageData.layout_stage = layout_sekai_stage()
+        StaticStageData.background_cover = layout_background_cover()
+        StaticStageData.dead_effect_quads = layout_dead_effect_quads()
         init_buckets()
         init_particle_version(ActiveParticles.ui_checker.check)
         init_score(note.WATCH_NOTE_ARCHETYPES)

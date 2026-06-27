@@ -5,6 +5,7 @@ from math import atan, ceil, cos, floor, log, pi, sin
 from typing import Protocol, assert_never, cast
 
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
+from sonolus.script.array import Array, Dim
 from sonolus.script.debug import static_error
 from sonolus.script.globals import level_data, level_memory
 from sonolus.script.interval import clamp, lerp, remap, unlerp
@@ -1155,6 +1156,52 @@ def layout_background_cover() -> Quad:
         tl=screen().tl,
         tr=screen().tr,
     )
+
+
+def layout_dead_effect_quads() -> Array[Quad, Dim[4]]:
+    result = +Array[Quad, Dim[4]]
+    for i in range(2):
+        for j in range(2):
+            l_val = screen().l if j == 0 else screen().r
+            t_val = screen().t if i == 0 else screen().b
+            result[i * 2 + j] = Quad(
+                bl=Vec2(l_val, 0),
+                br=Vec2(0, 0),
+                tl=Vec2(l_val, t_val),
+                tr=Vec2(0, t_val),
+            )
+    return result
+
+
+class StaticUiLayout(Record):
+    life_bar: Quad
+    score_bar: Quad
+    score_gauge: Quad
+    score_rank: Quad
+    score_rank_text: Quad
+    custom_tag: Quad
+
+
+def layout_static_ui() -> StaticUiLayout:
+    return StaticUiLayout(
+        life_bar=layout_life_bar(),
+        score_bar=layout_score_bar(),
+        score_gauge=layout_score_gauge(score_type=ScoreGaugeType.NORMAL),
+        score_rank=layout_score_rank(),
+        score_rank_text=layout_score_rank_text(),
+        custom_tag=layout_custom_tag(),
+    )
+
+
+@level_data
+class StaticStageData:
+    # Session constants for the (single, persistent) static stage: written once in preprocess and
+    # read-only during gameplay, so they live in level_data rather than per-entity memory, which is
+    # capped at 64 floats.
+    ui_layout: StaticUiLayout
+    layout_stage: Quad
+    background_cover: Quad
+    dead_effect_quads: Array[Quad, Dim[4]]
 
 
 def layout_fallback_judge_line() -> Quad:

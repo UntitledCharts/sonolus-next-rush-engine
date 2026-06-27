@@ -13,8 +13,17 @@ from sekai.lib.connector import (
     init_connector_sfx_times,
     schedule_connector_sfx,
 )
+from sekai.lib.custom_elements import init_fixed_ui_layout
 from sekai.lib.initialization import LastNote, calculate_note_weight, sort_entities_by_time
-from sekai.lib.layout import init_layout, init_ui_margin
+from sekai.lib.layout import (
+    StaticStageData,
+    init_layout,
+    init_ui_margin,
+    layout_background_cover,
+    layout_dead_effect_quads,
+    layout_sekai_stage,
+    layout_static_ui,
+)
 from sekai.lib.level_config import (
     EngineRevision,
     init_level_config,
@@ -26,11 +35,13 @@ from sekai.lib.options import Options, SkillMode
 from sekai.lib.particle import ActiveParticles, init_particles
 from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.ui import init_ui
-from sekai.play import custom_elements, input_manager, note, static_stage
+from sekai.play import custom_elements, note
 from sekai.play.common import init_play_common
 from sekai.play.connector import Connector, ConnectorSfxManager
 from sekai.play.dynamic_stage import CameraChange
 from sekai.play.events import Fever, Skill
+from sekai.play.input_manager import InputManager
+from sekai.play.static_stage import StaticStage
 
 
 class Initialization(PlayArchetype):
@@ -51,6 +62,11 @@ class Initialization(PlayArchetype):
         init_ui_version(ActiveSkin.ui_checker.check)
         init_ui_margin()
         init_ui()
+        init_fixed_ui_layout()
+        StaticStageData.ui_layout = layout_static_ui()
+        StaticStageData.layout_stage = layout_sekai_stage()
+        StaticStageData.background_cover = layout_background_cover()
+        StaticStageData.dead_effect_quads = layout_dead_effect_quads()
         init_buckets()
         init_particle_version(ActiveParticles.ui_checker.check)
         init_score(note.NOTE_ARCHETYPES)
@@ -68,8 +84,8 @@ class Initialization(PlayArchetype):
             schedule_auto_connector_sfx()
 
     def initialize(self):
-        static_stage.StaticStage.spawn()
-        input_manager.InputManager.spawn()
+        StaticStage.spawn()
+        InputManager.spawn()
         ConnectorSfxManager.spawn()
         self.replay_revision = self.revision
 

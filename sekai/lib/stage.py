@@ -6,10 +6,11 @@ from typing import Protocol, assert_never, cast
 
 from sonolus.script import runtime
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
+from sonolus.script.array import Array, Dim
 from sonolus.script.interval import clamp, interp, lerp, unlerp_clamped
 from sonolus.script.quad import Quad
 from sonolus.script.record import Record
-from sonolus.script.runtime import is_multiplayer, is_play, is_replay, is_watch, screen, time
+from sonolus.script.runtime import is_multiplayer, is_play, is_replay, is_watch, time
 from sonolus.script.sprite import ZIndex
 from sonolus.script.vec import Vec2
 
@@ -36,19 +37,14 @@ from sekai.lib.layer import (
 from sekai.lib.layout import (
     DynamicLayout,
     ScoreGaugeType,
+    StaticUiLayout,
     approach,
     current_stage_tilt,
-    layout_background_cover,
-    layout_custom_tag,
     layout_full_width_stage_cover,
     layout_hidden_cover,
-    layout_life_bar,
     layout_life_gauge,
     layout_particle_lane,
-    layout_score_bar,
     layout_score_gauge,
-    layout_score_rank,
-    layout_score_rank_text,
     layout_sekai_stage,
     layout_stage_cover,
     layout_stage_cover_and_line,
@@ -409,24 +405,28 @@ def get_stage_props(stage: DynamicStageLike, target_time: float | None = None, l
 
 
 def draw_stage_and_accessories(
-    ap,
-    score,
-    note_score,
-    note_time,
-    percentage,
-    life=1000.0,
-    last_time=1e8,
-    dead_time=1e8,
+    ap: bool,
+    score: float,
+    note_score: float,
+    note_time: float,
+    percentage: float,
+    background_cover: Quad,
+    dead_effect_quads: Array[Quad, Dim[4]],
+    ui_layout: StaticUiLayout,
+    life: float = 1000.0,
+    last_time: float = 1e8,
+    dead_time: float = 1e8,
+    layout_stage: Quad = Quad.zero(),  # noqa: B008
 ):
     ui_alpha = 1.0
     if Options.ui_intro and time() < -1.0:
         ui_alpha = unlerp_clamped(-2.0, -1.0, time())
     if not LevelConfig.skip_default_stage:
-        draw_basic_stage(ui_alpha)
+        draw_basic_stage(ui_alpha, layout_stage)
     draw_stage_cover(ui_alpha)
-    draw_auto_play()
-    draw_background_cover()
-    draw_dead(life, dead_time)
+    draw_auto_play(ui_layout)
+    draw_background_cover(background_cover)
+    draw_dead(life, dead_time, background_cover, dead_effect_quads)
     draw_score_number(
         ap=ap,
         score=percentage,
@@ -435,12 +435,14 @@ def draw_stage_and_accessories(
     draw_life_bar(
         life,
         last_time,
+        ui_layout,
         alpha=ui_alpha,
     )
     draw_score_bar(
         score,
         note_score,
         note_time,
+        ui_layout,
         alpha=ui_alpha,
     )
 
@@ -451,7 +453,7 @@ def normalize_transition[T](value: Transition[T] | T) -> Transition[T]:
     return Transition(start=value, end=value, progress=0)
 
 
-def draw_basic_stage(alpha=1.0):
+def draw_basic_stage(alpha=1.0, layout=Quad.zero()):  # noqa: B008
     if not Options.show_lane:
         return
     if (
@@ -459,7 +461,7 @@ def draw_basic_stage(alpha=1.0):
         and ActiveSkin.sekai_stage_cover.is_available
         and not LevelConfig.dynamic_stages
     ):
-        draw_sekai_divided_stage(LAYER_STAGE_LANE, LAYER_COVER, alpha)
+        draw_sekai_divided_stage(LAYER_STAGE_LANE, LAYER_COVER, alpha, layout)
     else:
         draw_dynamic_stage(
             lane=0,
@@ -478,11 +480,15 @@ def draw_sekai_stage(z_stage, alpha):
     ActiveSkin.sekai_stage.draw(layout, z=z_stage, a=alpha)
 
 
-def draw_sekai_divided_stage(z_stage_lane, z_stage_cover, alpha):
-    layout = layout_sekai_stage()
-    ActiveSkin.sekai_stage_lane.draw(layout, z=z_stage_lane, a=alpha)
+def draw_sekai_divided_stage(z_stage_lane, z_stage_cover, alpha, layout):
+    resolved = +Quad
+    if layout == Quad.zero():
+        resolved @= layout_sekai_stage()
+    else:
+        resolved @= layout
+    ActiveSkin.sekai_stage_lane.draw(resolved, z=z_stage_lane, a=alpha)
     if Options.lane_alpha > 0:
-        ActiveSkin.sekai_stage_cover.draw(layout, z=z_stage_cover, a=Options.lane_alpha * alpha)
+        ActiveSkin.sekai_stage_cover.draw(resolved, z=z_stage_cover, a=Options.lane_alpha * alpha)
 
 
 def get_judgment_sprites(judge_line_color: JudgeLineColor) -> JudgmentSpriteSet:
@@ -929,41 +935,29 @@ def draw_stage_cover(alpha):
         ActiveSkin.cover.draw(layout, z=get_z_alt(LAYER_COVER), a=alpha)
 
 
-def draw_background_cover():
+def draw_background_cover(background_cover):
     if Options.background_alpha != 1:
-        layout = layout_background_cover()
-        ActiveSkin.background.draw(layout, z=get_z_alt(LAYER_BACKGROUND_COVER), a=1 - Options.background_alpha)
+        ActiveSkin.background.draw(
+            background_cover, z=get_z_alt(LAYER_BACKGROUND_COVER), a=1 - Options.background_alpha
+        )
 
 
-def draw_dead(life, dead_time):
+def draw_dead(life, dead_time, background_cover, dead_effect_quads):
     if life == 0:
         if not ActiveSkin.dead_effect.is_available:
-            layout = layout_background_cover()
-            ActiveSkin.background.draw(layout, z=get_z_alt(LAYER_BACKGROUND), a=0.3)
+            ActiveSkin.background.draw(background_cover, z=get_z_alt(LAYER_BACKGROUND), a=0.3)
         else:
             a = unlerp_clamped(0, 0.25, time() - dead_time)
 
-            for i in range(2):
-                for j in range(2):
-                    l_val = screen().l if j == 0 else screen().r
-                    if i == 0:
-                        t_val = screen().t
-                    else:
-                        t_val = screen().b
-                    layout = Quad(
-                        bl=Vec2(l_val, 0),
-                        br=Vec2(0, 0),
-                        tl=Vec2(l_val, t_val),
-                        tr=Vec2(0, t_val),
-                    )
-                    ActiveSkin.dead_effect.draw(quad=layout, z=get_z_alt(LAYER_BACKGROUND), a=a)
+            for k in range(len(dead_effect_quads)):
+                ActiveSkin.dead_effect.draw(quad=dead_effect_quads[k], z=get_z_alt(LAYER_BACKGROUND), a=a)
 
 
-def draw_auto_play():
+def draw_auto_play(ui_layout):
     if time() < 0:
         return
     if Options.custom_tag and is_watch() and not is_replay() and Options.hide_ui < 2:
-        layout = layout_custom_tag()
+        layout = ui_layout.custom_tag
         a = 0.8 * (cos(time() * pi) + 1) / 2
         ActiveSkin.auto_live.draw(layout, z=get_z_alt(LAYER_JUDGMENT), a=a)
 
@@ -971,6 +965,7 @@ def draw_auto_play():
 def draw_life_bar(
     life,
     last_time,
+    ui_layout,
     alpha,
 ):
     if Options.hide_ui >= 2:
@@ -982,7 +977,7 @@ def draw_life_bar(
     if not ActiveSkin.life.bar.available:
         return
     draw_life_number(life, get_z_alt(LAYER_JUDGMENT, 4), alpha)
-    bar_layout = layout_life_bar()
+    bar_layout = ui_layout.life_bar
     if is_multiplayer():
         ActiveSkin.life.bar.get_sprite(LifeBarType.DISABLE, life).draw(
             bar_layout, z=get_z_alt(LAYER_JUDGMENT, 3), a=alpha
@@ -1005,6 +1000,7 @@ def draw_score_bar(
     score,
     note_score,
     note_time,
+    ui_layout,
     alpha,
 ):
     if Options.hide_ui >= 2:
@@ -1017,27 +1013,23 @@ def draw_score_bar(
         return
     draw_score_bar_number(score, get_z_alt(LAYER_JUDGMENT, 4), alpha)
     draw_score_bar_raw_number(number=note_score, z=get_z_alt(LAYER_JUDGMENT, 4), time=time() - note_time, alpha=alpha)
-    bar_layout = layout_score_bar()
+    bar_layout = ui_layout.score_bar
     ActiveSkin.score.bar.draw(bar_layout, z=get_z_alt(LAYER_JUDGMENT, 2), a=alpha)
     ActiveSkin.score.panel.draw(bar_layout, z=get_z_alt(LAYER_JUDGMENT, 4), a=alpha)
     rank = get_score_rank(score)
     if score > 0:
         gauge = get_gauge_progress(score)
-        gauge_normal_layout = layout_score_gauge(score_type=ScoreGaugeType.NORMAL)
-        ActiveSkin.score.gauge.normal.draw(gauge_normal_layout, z=get_z_alt(LAYER_JUDGMENT), a=alpha)
+        ActiveSkin.score.gauge.normal.draw(ui_layout.score_gauge, z=get_z_alt(LAYER_JUDGMENT), a=alpha)
 
         gauge_mask_layout = layout_score_gauge(gauge, ScoreGaugeType.MASK)
         ActiveSkin.score.gauge.mask.draw(gauge_mask_layout, z=get_z_alt(LAYER_JUDGMENT, 1), a=alpha)
     else:
-        gauge_cover_layout = layout_score_gauge(score_type=ScoreGaugeType.NORMAL)
-        ActiveSkin.score.gauge.cover.draw(gauge_cover_layout, z=get_z_alt(LAYER_JUDGMENT), a=alpha)
+        ActiveSkin.score.gauge.cover.draw(ui_layout.score_gauge, z=get_z_alt(LAYER_JUDGMENT), a=alpha)
     if LevelConfig.ui_version == Version.v3 or rank != ScoreRankType.D:
-        score_rank_layout = layout_score_rank()
-        ActiveSkin.score.rank.get_sprite(rank).draw(score_rank_layout, z=get_z_alt(LAYER_JUDGMENT, 4), a=alpha)
+        ActiveSkin.score.rank.get_sprite(rank).draw(ui_layout.score_rank, z=get_z_alt(LAYER_JUDGMENT, 4), a=alpha)
     if LevelConfig.ui_version == Version.v3:
-        score_rank_text_layout = layout_score_rank_text()
         ActiveSkin.score.rank_text.get_sprite(rank).draw(
-            score_rank_text_layout, z=get_z_alt(LAYER_JUDGMENT, 4), a=alpha
+            ui_layout.score_rank_text, z=get_z_alt(LAYER_JUDGMENT, 4), a=alpha
         )
 
 

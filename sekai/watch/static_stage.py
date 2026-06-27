@@ -5,7 +5,10 @@ from sekai.lib import archetype_names
 from sekai.lib.custom_elements import LifeManager, ScoreIndicator
 from sekai.lib.events import reset_fever_bounds
 from sekai.lib.initialization import LastNote
-from sekai.lib.layout import refresh_layout
+from sekai.lib.layout import (
+    StaticStageData,
+    refresh_layout,
+)
 from sekai.lib.options import Options
 from sekai.lib.stage import draw_stage_and_accessories, play_lane_particle
 from sekai.lib.streams import Streams
@@ -44,9 +47,13 @@ class WatchStaticStage(WatchArchetype):
             ScoreIndicator.note_score,
             ScoreIndicator.note_time,
             ScoreIndicator.percentage,
+            StaticStageData.background_cover,
+            StaticStageData.dead_effect_quads,
+            StaticStageData.ui_layout,
             LifeManager.life,
             LastNote.last_time,
             self.dead_time,
+            StaticStageData.layout_stage,
         )
         if LifeManager.life == 0 and self.dead_time != -2:
             self.dead_time = time()
