@@ -1,4 +1,5 @@
 from sonolus.script.archetype import EntityRef, PlayArchetype, callback, entity_info_at, exported, imported
+from sonolus.script.containers import sort_linked_entities
 from sonolus.script.runtime import level_score
 
 from sekai.lib import archetype_names
@@ -155,71 +156,94 @@ def schedule_auto_connector_sfx():
 
 def schedule_auto_connector_sfx_kind(entity_count: int, sfx_kind: ActiveConnectorKind):
     connector_id = Connector._compile_time_id()
+
+    # Collect matching connectors into a linked list once (instead of re-scanning every entity for
+    # every event). Scanning in reverse yields ascending entity order, so that ties on activation
+    # time keep the original "highest entity index wins" active-connector tie-break after the sort.
+    list_head = 0
+    for i in range(entity_count - 1, -1, -1):
+        info = entity_info_at(i)
+        mro = PlayArchetype._get_mro_id_array(info.archetype_id)
+        if connector_id not in mro:
+            continue
+        connector = Connector.at(i)
+        if connector.active_head_ref.index <= 0:
+            continue
+        if not connector_sfx_matches_kind(connector.segment_head.segment_kind, sfx_kind):
+            continue
+        if connector.active_head.target_time == connector.active_tail.target_time:
+            # Zero-length slide: its activation and release land on the same instant, which the
+            # hold-wins-over-release tie-break would otherwise leave stuck on. It holds for no
+            # duration, so skip it entirely.
+            continue
+        connector.sfx_act_next.index = list_head
+        connector.sfx_deact_next.index = list_head
+        list_head = i
+
+    if list_head <= 0:
+        return
+
+    def act_time(c):
+        return c.active_head.target_time
+
+    def act_next(c):
+        return c.sfx_act_next
+
+    def deact_time(c):
+        return c.active_tail.target_time
+
+    def deact_next(c):
+        return c.sfx_deact_next
+
+    # O(N log N) merge sorts: one list ordered by activation time, one by deactivation time. Both
+    # start from the same head; the activation sort only rewrites sfx_act_next, leaving the
+    # sfx_deact_next chain (still headed at list_head) intact for the deactivation sort.
+    act_ref = sort_linked_entities(Connector.at(list_head).ref(), get_value=act_time, get_next_ref=act_next).index
+    deact_ref = sort_linked_entities(
+        Connector.at(list_head).ref(), get_value=deact_time, get_next_ref=deact_next
+    ).index
+
+    # Two-pointer merge sweep through the activation/deactivation events in time order, reproducing
+    # the original hold state machine exactly.
     current_time = -1e8
     active_time = CONNECTOR_SFX_ACTIVE_TIME_INIT
     inactive_time = CONNECTOR_SFX_INACTIVE_TIME_INIT
     active_connector_index = 0
 
-    while True:
+    while act_ref > 0 or deact_ref > 0:
         next_time = 1e8
-        for i in range(entity_count):
-            info = entity_info_at(i)
-            mro = PlayArchetype._get_mro_id_array(info.archetype_id)
-            if connector_id not in mro:
-                continue
-            connector = Connector.at(i)
-            if connector.active_head_ref.index <= 0:
-                continue
-            if not connector_sfx_matches_kind(connector.segment_head.segment_kind, sfx_kind):
-                continue
-            if connector.active_head.target_time == connector.active_tail.target_time:
-                # Zero-length slide: its activation and release land on the same instant, which the
-                # hold-wins-over-release tie-break would otherwise leave stuck on. It holds for no
-                # duration, so skip it entirely.
-                continue
-            active_event_time = connector.active_head.target_time
-            inactive_event_time = connector.active_tail.target_time
-            if current_time < active_event_time < next_time:
-                next_time = active_event_time
-            if current_time < inactive_event_time < next_time:
-                next_time = inactive_event_time
-        if next_time == 1e8:
-            break
+        if act_ref > 0:
+            next_time = Connector.at(act_ref).active_head.target_time
+        if deact_ref > 0:
+            deact_event_time = Connector.at(deact_ref).active_tail.target_time
+            if deact_event_time < next_time:
+                next_time = deact_event_time
+
         if active_time >= inactive_time and active_connector_index > 0:
-            active_connector = Connector.at(active_connector_index)
             schedule_connector_sfx(
                 sfx_kind,
-                active_connector.segment_head.timescale_group,
+                Connector.at(active_connector_index).segment_head.timescale_group,
                 current_time,
                 next_time,
             )
-        for i in range(entity_count):
-            info = entity_info_at(i)
-            mro = PlayArchetype._get_mro_id_array(info.archetype_id)
-            if connector_id not in mro:
-                continue
-            connector = Connector.at(i)
-            if connector.active_head_ref.index <= 0:
-                continue
-            if not connector_sfx_matches_kind(connector.segment_head.segment_kind, sfx_kind):
-                continue
-            if connector.active_head.target_time == connector.active_tail.target_time:
-                # See the matching skip above: a zero-length slide must not touch the hold state.
-                continue
-            if connector.active_head.target_time == next_time:
-                if inactive_time == CONNECTOR_SFX_INACTIVE_TIME_INIT:
-                    inactive_time = next_time
-                active_time = next_time
-                active_connector_index = i
-            if connector.active_tail.target_time == next_time:
+
+        while act_ref > 0 and Connector.at(act_ref).active_head.target_time == next_time:
+            if inactive_time == CONNECTOR_SFX_INACTIVE_TIME_INIT:
                 inactive_time = next_time
+            active_time = next_time
+            active_connector_index = act_ref
+            act_ref = Connector.at(act_ref).sfx_act_next.index
+
+        while deact_ref > 0 and Connector.at(deact_ref).active_tail.target_time == next_time:
+            inactive_time = next_time
+            deact_ref = Connector.at(deact_ref).sfx_deact_next.index
+
         current_time = next_time
 
     if active_time >= inactive_time and active_connector_index > 0:
-        active_connector = Connector.at(active_connector_index)
         schedule_connector_sfx(
             sfx_kind,
-            active_connector.segment_head.timescale_group,
+            Connector.at(active_connector_index).segment_head.timescale_group,
             current_time,
             LastNote.last_time,
         )

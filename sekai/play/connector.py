@@ -78,6 +78,11 @@ class Connector(PlayArchetype):
     last_visual_state: ConnectorVisualState = entity_memory()
     delay: bool = entity_memory()
     can_consume_empty: bool = entity_memory()
+    # Temporary linked-list pointers used only during preprocess to sort connectors by their
+    # activation / deactivation times for the auto-SFX sweep (see schedule_auto_connector_sfx_kind).
+    # entity_data (not entity_memory) so they can be written cross-entity from Initialization.preprocess.
+    sfx_act_next: EntityRef[Connector] = entity_data()
+    sfx_deact_next: EntityRef[Connector] = entity_data()
 
     @callback(order=1)  # After note preprocessing is done
     def preprocess(self):
