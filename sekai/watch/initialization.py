@@ -51,7 +51,7 @@ from sekai.lib.streams import Streams
 from sekai.lib.ui import init_ui
 from sekai.watch import custom_elements, note
 from sekai.watch.connector import WatchConnector
-from sekai.watch.dynamic_stage import WatchCameraChange
+from sekai.watch.dynamic_stage import WatchCameraChange, WatchStageTransformChange
 from sekai.watch.events import Fever, Skill
 from sekai.watch.static_stage import WatchScheduledLaneEffect, WatchStaticStage
 
@@ -63,6 +63,7 @@ class WatchInitialization(WatchArchetype):
     replay_revision: EngineRevision = imported(name="replayRevision", default=EngineRevision.BASE)
     initial_life: int = imported(name="initialLife", default=1000)
     first_camera_ref: EntityRef[WatchCameraChange] = imported(name="firstCamera")
+    first_stage_transform_ref: EntityRef[WatchStageTransformChange] = imported(name="firstStageTransform")
 
     is_multi: bool = imported()
 
@@ -92,6 +93,7 @@ class WatchInitialization(WatchArchetype):
         LifeManager.max_life = max(2000, self.initial_life * 2)
 
         init_event_list(self.first_camera_ref)
+        init_event_list(self.first_stage_transform_ref)
         WatchStaticStage.spawn()
 
         for input_time, lanes in Streams.empty_input_lanes.iter_items_from(-2):

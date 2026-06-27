@@ -15,6 +15,7 @@ from sekai.lib.options import Options
 from sekai.lib.stage import (
     DivisionParity,
     JudgeLineColor,
+    JudgeLineStyle,
     StageBorderStyle,
     get_draw_end_time,
     get_draw_start_time,
@@ -52,6 +53,28 @@ class PreviewCameraChange(PreviewArchetype, BaseEvent):
             self.lane *= -1
             self.zoom_target_lane *= -1
             self.rotate *= -1
+
+
+class PreviewStageTransformChange(PreviewArchetype, BaseEvent):
+    name = archetype_names.STAGE_TRANSFORM_CHANGE
+
+    beat: StandardImport.BEAT
+    rotate: float = imported()
+    x_lane_translate: float = imported(name="xLaneTranslate")
+    y_lane_translate: float = imported(name="yLaneTranslate")
+    ease: EaseType = imported()
+    next_ref: EntityRef[PreviewStageTransformChange] = imported(name="next")
+
+    time: float = entity_data()
+
+    @callback(order=-2)
+    def preprocess(self):
+        LevelConfig.dynamic_stages = True
+        self.time = beat_to_time(self.beat)
+        self.rotate = self.rotate * pi / 180
+        if Options.mirror:
+            self.rotate *= -1
+            self.x_lane_translate *= -1
 
 
 class PreviewDynamicStage(PreviewArchetype):
@@ -135,11 +158,14 @@ class PreviewStageStyleChange(PreviewArchetype, BaseEvent):
     stage_ref: EntityRef[PreviewDynamicStage] = imported(name="stage")
     beat: StandardImport.BEAT
     judge_line_color: JudgeLineColor = imported(name="judgeLineColor")
+    judge_line_style: JudgeLineStyle = imported(name="judgeLineStyle")
     left_border_style: StageBorderStyle = imported(name="leftBorderStyle")
     right_border_style: StageBorderStyle = imported(name="rightBorderStyle")
+    full_width: bool = imported(name="fullWidth")
     alpha: float = imported()
     lane_alpha: float = imported(name="laneAlpha")
     judge_line_alpha: float = imported(name="judgeLineAlpha")
+    division_line_alpha: float = imported(name="divisionLineAlpha", default=1)
     ease: EaseType = imported()
     next_ref: EntityRef[PreviewStageStyleChange] = imported(name="next")
 

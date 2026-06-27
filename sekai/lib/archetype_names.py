@@ -8,6 +8,7 @@ TIMESCALE_GROUP = StandardArchetypeName.TIMESCALE_GROUP
 INITIALIZATION = "Initialization"
 STATIC_STAGE = "StaticStage"
 CAMERA_CHANGE = "CameraChange"
+STAGE_TRANSFORM_CHANGE = "StageTransformChange"
 STAGE = "Stage"
 STAGE_MASK_CHANGE = "StageMaskChange"
 STAGE_PIVOT_CHANGE = "StagePivotChange"

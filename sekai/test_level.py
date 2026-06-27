@@ -12,11 +12,10 @@ from sekai.level_utils import (
     LevelStageStyleChange,
     build_level,
 )
-from sekai.lib.connector import ConnectorKind
+from sekai.lib.connector import ConnectorKind, ConnectorLayer, SegmentPresentation
 from sekai.lib.ease import EaseType
-from sekai.lib.layout import ZoomVerticalAlign
 from sekai.lib.note import NoteKind
-from sekai.lib.stage import DivisionParity, JudgeLineColor, StageBorderStyle
+from sekai.lib.stage import DivisionParity, JudgeLineColor, JudgeLineStyle, StageBorderStyle
 
 SLIDE_START_BEAT = 4.0
 SLIDE_END_BEAT = 20.0
@@ -100,6 +99,8 @@ stage_b_pivot_changes = [
     for i, beat in enumerate(_stage_b_oscillation_beats())
 ]
 
+# stage_b ramps division_line_alpha from full to faint so the lane dividers visibly fade out over the song
+# (multiplicative with the lane's own alpha) without touching the judge line or borders.
 stage_b = LevelStage(
     from_start=True,
     until_end=True,
@@ -114,7 +115,19 @@ stage_b = LevelStage(
             alpha=1.0,
             lane_alpha=1.0,
             judge_line_alpha=1.0,
-            ease=EaseType.LINEAR,
+            division_line_alpha=1.0,
+            ease=EaseType.IN_OUT_QUAD,
+        ),
+        LevelStageStyleChange(
+            beat=18.0,
+            judge_line_color=JudgeLineColor.PURPLE,
+            left_border_style=StageBorderStyle.DEFAULT,
+            right_border_style=StageBorderStyle.DEFAULT,
+            alpha=1.0,
+            lane_alpha=1.0,
+            judge_line_alpha=1.0,
+            division_line_alpha=0.25,
+            ease=EaseType.IN_OUT_QUAD,
         ),
     ],
 )
@@ -124,12 +137,8 @@ stage_b = LevelStage(
 camera_changes = [
     LevelCameraChange(beat=0.0, stage_tilt=1.0, ease=EaseType.IN_OUT_QUAD),  # classic perspective
     LevelCameraChange(beat=4.0, stage_tilt=1.0, ease=EaseType.IN_OUT_QUAD),
-    LevelCameraChange(
-        beat=10.0, stage_tilt=0.4, zoom=0.25, zoom_vertical_align=ZoomVerticalAlign.CENTER, ease=EaseType.IN_OUT_QUAD
-    ),  # flat: vertical lanes, square notes
-    LevelCameraChange(
-        beat=14.0, stage_tilt=0.4, zoom=0.25, zoom_vertical_align=ZoomVerticalAlign.CENTER, ease=EaseType.IN_OUT_QUAD
-    ),  # hold flat for inspection
+    LevelCameraChange(beat=10.0, stage_tilt=0.4, ease=EaseType.IN_OUT_QUAD),  # flat: vertical lanes
+    LevelCameraChange(beat=14.0, stage_tilt=0.4, ease=EaseType.IN_OUT_QUAD),  # hold flat for inspection
     LevelCameraChange(beat=20.0, stage_tilt=0.99, ease=EaseType.IN_OUT_QUAD),  # back to classic
 ]
 
@@ -248,9 +257,56 @@ fever_start = LevelFeverStart(beat=100)
 test_skill = LevelSkill(beat=1.0, effect=2)
 
 
+# Full-screen guide overlay: exercises SegmentPresentation.FULL_SCREEN. While a segment is at the
+# judge line (the current time falls within its target-time span), it fills the entire screen with
+# the guide sprite at that segment's alpha sampled at the judge line, ignoring camera/zoom/tilt.
+# The per-segment alpha ramps so the overlay intensity changes as successive segments cross the
+# judge line; nothing is drawn before the first or after the last note. The window (beats 8-12.5)
+# overlaps the flat-tilt hold (beats 10-14) to confirm the quad still covers the whole screen.
+full_screen_guide_segments = [(8.0, 0.15), (9.5, 2), (11.0, 0.15), (12.5, 0.4)]
+full_screen_guide = LevelSlide()
+full_screen_guide.notes = [
+    LevelNote(
+        beat=beat,
+        lane=0.0,
+        size=1.0,
+        kind=NoteKind.ANCHOR,
+        stage=guide_stage,
+        is_separator=True,
+        segment_kind=ConnectorKind.GUIDE_BLUE,
+        segment_alpha=alpha,
+        segment_presentation=SegmentPresentation.FULL_SCREEN,
+        connector_ease=EaseType.LINEAR,
+        segment_layer=ConnectorLayer.OVER,
+    )
+    for beat, alpha in full_screen_guide_segments
+]
+
+
 # A separate stage on the right hosting a flick on every beat, to exercise flick rendering
 # (bodies + arrows) under the tilt sweep. Its mask (lanes 4..6) sits just past stage_b's pulled-in
 # right swing, so the visible masks don't overlap.
+#
+# It also exercises judge_line_style / full_width: it starts as a normal red judge line, fades into a
+# SINGLE_LINE judge line (lanes 4..6) around the flat-camera hold so the single-line look and the
+# suppressed slot effect on the flicks can be inspected without covering the screen, then widens to a
+# full-width single line and finally to a full-width default judge line at the very end.
+def _right_flick_style(beat: float, style: JudgeLineStyle, full_width: bool) -> LevelStageStyleChange:
+    return LevelStageStyleChange(
+        beat=beat,
+        judge_line_color=JudgeLineColor.RED,
+        judge_line_style=style,
+        left_border_style=StageBorderStyle.DEFAULT,
+        right_border_style=StageBorderStyle.DEFAULT,
+        full_width=full_width,
+        alpha=1.0,
+        lane_alpha=1.0,
+        judge_line_alpha=1.0,
+        division_line_alpha=1.0,
+        ease=EaseType.IN_OUT_QUAD,
+    )
+
+
 right_flick_stage = LevelStage(
     from_start=True,
     until_end=True,
@@ -269,16 +325,13 @@ right_flick_stage = LevelStage(
         ),
     ],
     style_changes=[
-        LevelStageStyleChange(
-            beat=0.0,
-            judge_line_color=JudgeLineColor.RED,
-            left_border_style=StageBorderStyle.DEFAULT,
-            right_border_style=StageBorderStyle.DEFAULT,
-            alpha=1.0,
-            lane_alpha=1.0,
-            judge_line_alpha=1.0,
-            ease=EaseType.LINEAR,
-        ),
+        _right_flick_style(0.0, JudgeLineStyle.DEFAULT, full_width=False),
+        _right_flick_style(6.0, JudgeLineStyle.DEFAULT, full_width=False),  # hold default
+        _right_flick_style(9.0, JudgeLineStyle.SINGLE_LINE, full_width=False),  # fade to single line
+        _right_flick_style(14.0, JudgeLineStyle.SINGLE_LINE, full_width=False),  # hold single line (slot effect off)
+        _right_flick_style(17.0, JudgeLineStyle.SINGLE_LINE, full_width=True),  # widen to full-width single line
+        _right_flick_style(19.0, JudgeLineStyle.SINGLE_LINE, full_width=True),  # hold full-width single line
+        _right_flick_style(20.0, JudgeLineStyle.DEFAULT, full_width=True),  # full-width default judge line
     ],
 )
 
@@ -306,6 +359,7 @@ entities = [
     fever_chance,
     fever_start,
     test_skill,
+    full_screen_guide,
     *attached_notes,
     *right_flicks,
 ]

@@ -7,7 +7,14 @@ from sekai.lib.skin import BaseSkin
 from sekai.play.bpm_change import BpmChange
 from sekai.play.connector import CONNECTOR_ARCHETYPES
 from sekai.play.custom_elements import CUSTOM_ARCHETYPES
-from sekai.play.dynamic_stage import CameraChange, DynamicStage, StageMaskChange, StagePivotChange, StageStyleChange
+from sekai.play.dynamic_stage import (
+    CameraChange,
+    DynamicStage,
+    StageMaskChange,
+    StagePivotChange,
+    StageStyleChange,
+    StageTransformChange,
+)
 from sekai.play.events import EVENT_ARCHETYPES
 from sekai.play.initialization import Initialization
 from sekai.play.input_manager import InputManager
@@ -22,6 +29,7 @@ play_mode = PlayMode(
     archetypes=[
         Initialization,
         CameraChange,
+        StageTransformChange,
         DynamicStage,
         StageMaskChange,
         StagePivotChange,

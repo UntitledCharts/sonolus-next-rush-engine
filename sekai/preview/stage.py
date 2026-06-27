@@ -115,7 +115,9 @@ def draw_preview_dynamic_stage(stage: DynamicStageLike, start_time: float, end_t
 
 def slice_lane_alpha(props_a: StageProps, props_b: StageProps) -> float:
     """Mask alpha (a * lane_alpha) averaged across the slice endpoints."""
-    return (props_a.a * props_a.lane_alpha + props_b.a * props_b.lane_alpha) / 2
+    alpha_a = props_a.a * props_a.lane_alpha * (1 - props_a.full_width)
+    alpha_b = props_b.a * props_b.lane_alpha * (1 - props_b.full_width)
+    return (alpha_a + alpha_b) / 2
 
 
 def draw_dynamic_stage_lane_bg_slice(
@@ -271,7 +273,8 @@ def draw_dynamic_stage_dividers_slice(
     z_a: ZIndex,
     z_b: ZIndex,
 ):
-    alpha = slice_lane_alpha(props_a, props_b)
+    division_line_alpha = (props_a.division_line_alpha + props_b.division_line_alpha) / 2
+    alpha = slice_lane_alpha(props_a, props_b) * division_line_alpha
     if alpha <= 0:
         return
 

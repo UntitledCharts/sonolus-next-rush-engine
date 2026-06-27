@@ -25,6 +25,7 @@ from sekai.lib.options import Options
 from sekai.lib.stage import (
     DivisionParity,
     JudgeLineColor,
+    JudgeLineStyle,
     StageBorderStyle,
     StageProps,
     get_draw_end_time,
@@ -68,6 +69,34 @@ class CameraChange(PlayArchetype, BaseEvent):
             self.lane *= -1
             self.zoom_target_lane *= -1
             self.rotate *= -1
+
+    def spawn_order(self) -> float:
+        return 1e8
+
+    def should_spawn(self) -> bool:
+        return False
+
+
+class StageTransformChange(PlayArchetype, BaseEvent):
+    name = archetype_names.STAGE_TRANSFORM_CHANGE
+
+    beat: StandardImport.BEAT
+    rotate: float = imported()
+    x_lane_translate: float = imported(name="xLaneTranslate")
+    y_lane_translate: float = imported(name="yLaneTranslate")
+    ease: EaseType = imported()
+    next_ref: EntityRef[StageTransformChange] = imported(name="next")
+
+    time: float = entity_data()
+
+    @callback(order=-2)
+    def preprocess(self):
+        LevelConfig.dynamic_stages = True
+        self.time = beat_to_time(self.beat)
+        self.rotate = self.rotate * pi / 180
+        if Options.mirror:
+            self.rotate *= -1
+            self.x_lane_translate *= -1
 
     def spawn_order(self) -> float:
         return 1e8
@@ -260,11 +289,14 @@ class StageStyleChange(PlayArchetype, BaseEvent):
     stage_ref: EntityRef[DynamicStage] = imported(name="stage")
     beat: StandardImport.BEAT
     judge_line_color: JudgeLineColor = imported(name="judgeLineColor")
+    judge_line_style: JudgeLineStyle = imported(name="judgeLineStyle")
     left_border_style: StageBorderStyle = imported(name="leftBorderStyle")
     right_border_style: StageBorderStyle = imported(name="rightBorderStyle")
+    full_width: bool = imported(name="fullWidth")
     alpha: float = imported()
     lane_alpha: float = imported(name="laneAlpha")
     judge_line_alpha: float = imported(name="judgeLineAlpha")
+    division_line_alpha: float = imported(name="divisionLineAlpha", default=1)
     ease: EaseType = imported()
     next_ref: EntityRef[StageStyleChange] = imported(name="next")
 

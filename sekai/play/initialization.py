@@ -38,7 +38,7 @@ from sekai.lib.ui import init_ui
 from sekai.play import custom_elements, note
 from sekai.play.common import init_play_common
 from sekai.play.connector import Connector, ConnectorSfxManager
-from sekai.play.dynamic_stage import CameraChange
+from sekai.play.dynamic_stage import CameraChange, StageTransformChange
 from sekai.play.events import Fever, Skill
 from sekai.play.input_manager import InputManager
 from sekai.play.static_stage import StaticStage
@@ -50,6 +50,7 @@ class Initialization(PlayArchetype):
     revision: EngineRevision = imported(name="revision", default=EngineRevision.SONOLUS_1_1_0)
     initial_life: int = imported(name="initialLife", default=1000)
     first_camera_ref: EntityRef[CameraChange] = imported(name="firstCamera")
+    first_stage_transform_ref: EntityRef[StageTransformChange] = imported(name="firstStageTransform")
 
     replay_revision: EngineRevision = exported(name="replayRevision")
 
@@ -74,6 +75,7 @@ class Initialization(PlayArchetype):
         init_play_common()
         init_connector_sfx_times()
         init_event_list(self.first_camera_ref)
+        init_event_list(self.first_stage_transform_ref)
 
         custom_elements.LifeManager.life = self.initial_life
         custom_elements.LifeManager.initial_life = self.initial_life

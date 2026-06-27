@@ -13,6 +13,7 @@ from sekai.watch.dynamic_stage import (
     WatchStageMaskChange,
     WatchStagePivotChange,
     WatchStageStyleChange,
+    WatchStageTransformChange,
 )
 from sekai.watch.events import EVENT_ARCHETYPES
 from sekai.watch.initialization import WatchInitialization
@@ -28,6 +29,7 @@ watch_mode = WatchMode(
     archetypes=[
         WatchInitialization,
         WatchCameraChange,
+        WatchStageTransformChange,
         WatchDynamicStage,
         WatchStageMaskChange,
         WatchStagePivotChange,

@@ -15,7 +15,7 @@ from sekai.lib.ease import EaseType
 from sekai.lib.layout import FlickDirection, ZoomVerticalAlign
 from sekai.lib.level_config import EngineRevision
 from sekai.lib.note import NoteKind
-from sekai.lib.stage import DivisionParity, JudgeLineColor, StageBorderStyle
+from sekai.lib.stage import DivisionParity, JudgeLineColor, JudgeLineStyle, StageBorderStyle
 from sekai.play.bpm_change import BpmChange
 from sekai.play.connector import Connector
 from sekai.play.dynamic_stage import (
@@ -24,6 +24,7 @@ from sekai.play.dynamic_stage import (
     StageMaskChange,
     StagePivotChange,
     StageStyleChange,
+    StageTransformChange,
 )
 from sekai.play.events import FeverChance, FeverStart, Skill
 from sekai.play.initialization import Initialization
@@ -116,6 +117,9 @@ class LevelStageStyleChange:
     alpha: float
     lane_alpha: float
     judge_line_alpha: float
+    judge_line_style: JudgeLineStyle = JudgeLineStyle.DEFAULT
+    full_width: bool = False
+    division_line_alpha: float = 1.0
     ease: EaseType = EaseType.LINEAR
 
 
@@ -139,6 +143,15 @@ class LevelCameraChange:
     zoom_vertical_align: ZoomVerticalAlign = ZoomVerticalAlign.DEFAULT
     rotate: float = 0.0
     stage_tilt: float = 1.0
+    ease: EaseType = EaseType.LINEAR
+
+
+@dataclass
+class LevelStageTransformChange:
+    beat: float
+    rotate: float = 0.0
+    x_lane_translate: float = 0.0
+    y_lane_translate: float = 0.0
     ease: EaseType = EaseType.LINEAR
 
 
@@ -195,6 +208,7 @@ type LevelEntities = (
     | LevelFeverChance
     | LevelFeverStart
     | LevelSkill
+    | LevelStageTransformChange
 )
 
 
@@ -215,6 +229,7 @@ def build_level(
     level_ts_groups: list[LevelTimescaleGroup] = []
     level_stages: list[LevelStage] = []
     level_camera_changes: list[LevelCameraChange] = []
+    level_stage_transforms: list[LevelStageTransformChange] = []
     top_notes: list[LevelNote] = []
     slides: list[LevelSlide] = []
     event_entities: list[PlayArchetype] = []
@@ -228,6 +243,8 @@ def build_level(
             level_stages.append(entity)
         elif isinstance(entity, LevelCameraChange):
             level_camera_changes.append(entity)
+        elif isinstance(entity, LevelStageTransformChange):
+            level_stage_transforms.append(entity)
         elif isinstance(entity, LevelNote):
             top_notes.append(entity)
         elif isinstance(entity, LevelSlide):
@@ -269,6 +286,7 @@ def build_level(
         out_entities.extend(stage_entities)
 
     first_camera = _build_camera_changes(level_camera_changes, out_entities)
+    first_stage_transform = _build_stage_transforms(level_stage_transforms, out_entities)
 
     note_entities: list[BaseNote] = []
     slide_non_attached: dict[int, list[BaseNote]] = {}
@@ -377,6 +395,8 @@ def build_level(
     )
     if first_camera is not None:
         initialization.first_camera_ref = first_camera.ref()
+    if first_stage_transform is not None:
+        initialization.first_stage_transform_ref = first_stage_transform.ref()
     out_entities.insert(0, initialization)
 
     sorted_entities = sorted(
@@ -460,11 +480,14 @@ def _build_stage(level_stage: LevelStage) -> tuple[DynamicStage, list[PlayArchet
             stage_ref=stage.ref(),
             beat=s.beat,
             judge_line_color=s.judge_line_color,
+            judge_line_style=s.judge_line_style,
             left_border_style=s.left_border_style,
             right_border_style=s.right_border_style,
+            full_width=s.full_width,
             alpha=s.alpha,
             lane_alpha=s.lane_alpha,
             judge_line_alpha=s.judge_line_alpha,
+            division_line_alpha=s.division_line_alpha,
             ease=s.ease,
         )
         for s in sorted(level_stage.style_changes, key=lambda c: c.beat)
@@ -500,6 +523,26 @@ def _build_camera_changes(
     _chain_next_refs(camera_entities)
     out_entities.extend(camera_entities)
     return camera_entities[0]
+
+
+def _build_stage_transforms(
+    level_transforms: list[LevelStageTransformChange], out_entities: list[PlayArchetype]
+) -> StageTransformChange | None:
+    if not level_transforms:
+        return None
+    transform_entities = [
+        StageTransformChange(
+            beat=c.beat,
+            rotate=c.rotate,
+            x_lane_translate=c.x_lane_translate,
+            y_lane_translate=c.y_lane_translate,
+            ease=c.ease,
+        )
+        for c in sorted(level_transforms, key=lambda c: c.beat)
+    ]
+    _chain_next_refs(transform_entities)
+    out_entities.extend(transform_entities)
+    return transform_entities[0]
 
 
 def _chain_next_refs(events: list) -> None:

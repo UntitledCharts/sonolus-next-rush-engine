@@ -834,6 +834,7 @@ def play_note_hit_effects(
     pivot_lane: float = 0.0,
     half_offset: bool = False,
     slot_effect_group_id: float = 0.0,
+    single_line: bool = False,
 ):
     # Damage with overridden sfx can play, so this goes before the damage check
     sfx = get_note_effect(effect_kind, judgment)
@@ -881,6 +882,7 @@ def play_note_hit_effects(
             pivot_lane=pivot_lane,
             half_offset=half_offset,
             group_id=slot_effect_group_id,
+            single_line=single_line,
         )
 
 
@@ -1211,6 +1213,7 @@ def schedule_note_slot_effects(
     pivot_lane: float = 0.0,
     half_offset: bool = False,
     group_id: float = 0.0,
+    single_line: bool = False,
 ):
     if is_tutorial():
         return
@@ -1218,7 +1221,7 @@ def schedule_note_slot_effects(
         return
     sprite_set = get_note_sprite_set(kind, direction)
     slot_sprite = sprite_set.slot
-    if slot_sprite.is_available:
+    if slot_sprite.is_available and not single_line:
         for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
             get_archetype_by_name(archetype_names.SLOT_EFFECT).spawn(
                 sprite=slot_sprite, start_time=target_time, lane=slot_lane, y_offset=y_offset, group_id=group_id
@@ -1244,10 +1247,15 @@ def draw_tutorial_note_slot_effects(
     direction: FlickDirection,
     pivot_lane: float = 0.0,
     half_offset: bool = False,
+    single_line: bool = False,
 ):
     sprite_set = get_note_sprite_set(kind, direction)
     slot_sprite = sprite_set.slot
-    if slot_sprite.is_available and time() < start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed:
+    if (
+        slot_sprite.is_available
+        and not single_line
+        and time() < start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed
+    ):
         for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
             draw_slot_effect(
                 sprite=slot_sprite,

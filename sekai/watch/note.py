@@ -43,7 +43,7 @@ from sekai.lib.note import (
     schedule_note_slot_effects,
 )
 from sekai.lib.options import Options
-from sekai.lib.stage import DivisionParity, get_stage_props
+from sekai.lib.stage import DivisionParity, JudgeLineStyle, get_stage_props, resolve_judge_line_style
 from sekai.lib.timescale import (
     CompositeTime,
     group_force_note_speed,
@@ -200,6 +200,7 @@ class WatchBaseNote(WatchArchetype):
                     pivot_lane=self._stage_pivot_lane_at(self.end_time),
                     half_offset=self._stage_half_offset_at(self.end_time),
                     group_id=self.index,
+                    single_line=self._stage_single_line_at(self.end_time),
                 )
             self.result.bucket_value = self.accuracy * 1000
         else:
@@ -216,6 +217,7 @@ class WatchBaseNote(WatchArchetype):
                     pivot_lane=self._stage_pivot_lane_at(self.target_time),
                     half_offset=self._stage_half_offset_at(self.target_time),
                     group_id=self.index,
+                    single_line=self._stage_single_line_at(self.target_time),
                 )
 
         self.result.target_time = self.target_time
@@ -389,6 +391,14 @@ class WatchBaseNote(WatchArchetype):
             return False
         division = get_stage_props(self.stage_ref.get(), t).division.start
         return division.parity == DivisionParity.ODD and division.size % 2 == 1
+
+    def _stage_single_line_at(self, t: float) -> bool:
+        if self.stage_ref.index <= 0:
+            return False
+        return (
+            resolve_judge_line_style(get_stage_props(self.stage_ref.get(), t).judge_line_style)
+            == JudgeLineStyle.SINGLE_LINE
+        )
 
     @property
     def visual_lane(self) -> float:
