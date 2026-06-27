@@ -1,5 +1,5 @@
 from sonolus.script.array import Dim
-from sonolus.script.containers import ArrayMap
+from sonolus.script.containers import ArrayMap, Pair
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import lerp, unlerp_clamped
 from sonolus.script.runtime import time
@@ -19,33 +19,31 @@ SLOT_EFFECT_LIMIT = 6.0
 
 @level_memory
 class SlotEffectHandler:
-    generations: ArrayMap[float, float, Dim[256]]
-    last_group: ArrayMap[float, float, Dim[256]]
+    slots: ArrayMap[float, Pair[float, float], Dim[256]]
 
 
 def clear_slot_effects():
-    SlotEffectHandler.generations.clear()
-    SlotEffectHandler.last_group.clear()
+    SlotEffectHandler.slots.clear()
 
 
 def next_slot_generation(sprite: Sprite, group_id: float) -> float:
     sprite_id = sprite.id
-    if sprite_id in SlotEffectHandler.last_group and SlotEffectHandler.last_group[sprite_id] == group_id:
-        return SlotEffectHandler.generations[sprite_id]
-    if sprite_id in SlotEffectHandler.generations:
-        generation = SlotEffectHandler.generations[sprite_id] + 1
+    if sprite_id in SlotEffectHandler.slots:
+        entry = SlotEffectHandler.slots[sprite_id]
+        if entry.second == group_id:
+            return entry.first
+        generation = entry.first + 1
     else:
         generation = 0.0
-    SlotEffectHandler.generations[sprite_id] = generation
-    SlotEffectHandler.last_group[sprite_id] = group_id
+    SlotEffectHandler.slots[sprite_id] = Pair(generation, group_id)
     return generation
 
 
 def is_slot_generation_visible(sprite: Sprite, generation: float) -> bool:
     sprite_id = sprite.id
-    if sprite_id not in SlotEffectHandler.generations:
+    if sprite_id not in SlotEffectHandler.slots:
         return True
-    return SlotEffectHandler.generations[sprite_id] - generation < SLOT_EFFECT_LIMIT
+    return SlotEffectHandler.slots[sprite_id].first - generation < SLOT_EFFECT_LIMIT
 
 
 def draw_slot_glow_effect(
