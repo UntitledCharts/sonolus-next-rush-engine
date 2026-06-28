@@ -35,6 +35,8 @@ from sekai.lib.layout import (
     layout_skill_judgment_line,
     perspective_rect,
     screen,
+    tilt_depth,
+    tilt_width_factor,
     transform_quad,
 )
 from sekai.lib.level_config import LevelConfig
@@ -140,15 +142,17 @@ def draw_fever_side_bar(draw_time: float):
         point1 = perspective_rect(l=l - 1, r=l, t=fever_text_t - p1_h, b=fever_text_t + p1_h)
         point2 = perspective_rect(l=l - 1, r=l, t=super_fever_text_t - p2_h, b=super_fever_text_t + p2_h)
 
-        fever_l = (r - 0.6) * fever_text_t
-        super_fever_l = (r - 0.7) * super_fever_text_t
+        fever_depth = tilt_depth(fever_text_t, 1.0)
+        super_fever_depth = tilt_depth(super_fever_text_t, 1.0)
+        fever_l = r * tilt_width_factor(fever_depth) - 0.6 * fever_depth
+        super_fever_l = r * tilt_width_factor(super_fever_depth) - 0.7 * super_fever_depth
 
         f_h = 0.07 * zoom
         sf_h = 0.053 * zoom
 
-        fever_text_layout = transform_quad(Rect(l=fever_l, r=fever_l + 4.5, t=fever_text_t - f_h, b=fever_text_t + f_h))
+        fever_text_layout = transform_quad(Rect(l=fever_l, r=fever_l + 4.5, t=fever_depth - f_h, b=fever_depth + f_h))
         super_fever_text_layout = transform_quad(
-            Rect(l=super_fever_l, r=super_fever_l + 2.94, t=super_fever_text_t - sf_h, b=super_fever_text_t + sf_h)
+            Rect(l=super_fever_l, r=super_fever_l + 2.94, t=super_fever_depth - sf_h, b=super_fever_depth + sf_h)
         )
 
         if a_left > 0:

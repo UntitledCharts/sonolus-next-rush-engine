@@ -571,6 +571,8 @@ def draw_note_body(
 
 
 def draw_note_tick(sprite: Sprite, lane: float, travel: float, target_time: float, etc: int = 0):
+    if not sprite.is_available:
+        return
     a = get_alpha(target_time)
     z = get_z(LAYER_NOTE_TICK, time=target_time, lane=lane, etc=etc)
     layout = layout_tick(lane, travel)
@@ -586,6 +588,9 @@ def draw_note_arrow(
     target_time: float,
     direction: FlickDirection,
 ):
+    arrow_sprite = sprites.get_sprite(size, direction)
+    if not arrow_sprite.is_available:
+        return
     match direction:
         case _ if Options.marker_animation:
             period = 0.5
@@ -602,10 +607,10 @@ def draw_note_arrow(
     match sprites.render_type:
         case ArrowRenderType.NORMAL:
             layout = layout_flick_arrow(lane, size, direction, travel, animation_progress)
-            sprites.get_sprite(size, direction).draw(layout, z=z, a=a)
+            arrow_sprite.draw(layout, z=z, a=a)
         case ArrowRenderType.FALLBACK:
             layout = layout_flick_arrow_fallback(lane, size, direction, travel, animation_progress)
-            sprites.get_sprite(size, direction).draw(layout, z=z, a=a)
+            arrow_sprite.draw(layout, z=z, a=a)
 
 
 def get_flick_layer(kind: NoteKind) -> int:

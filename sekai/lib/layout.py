@@ -132,6 +132,8 @@ class DynamicLayout:
     h_scale: float
     x_translate: float
     rotate: float
+    rotate_sin: float
+    rotate_cos: float
     ox: float
     oy: float
     stage_tilt: float
@@ -574,6 +576,8 @@ def refresh_layout():
     DynamicLayout.rotate = folded.rotate
     DynamicLayout.ox = folded.ox
     DynamicLayout.oy = folded.oy
+    DynamicLayout.rotate_sin = sin(DynamicLayout.rotate)
+    DynamicLayout.rotate_cos = cos(DynamicLayout.rotate)
     if test_aspect_active():
         set_background(background().scale(Vec2(TEST_ASPECT_SCALE, TEST_ASPECT_SCALE)))
 
@@ -729,10 +733,11 @@ def tilt_widened_edge(bottom_edge: float, top_edge: float) -> float:
 
 
 def transform_vec(v: Vec2) -> Vec2:
-    return Vec2(
-        v.x * DynamicLayout.w_scale + DynamicLayout.x_translate,
-        v.y * DynamicLayout.h_scale + DynamicLayout.t,
-    ).rotate(-DynamicLayout.rotate) + Vec2(DynamicLayout.ox, DynamicLayout.oy)
+    x = v.x * DynamicLayout.w_scale + DynamicLayout.x_translate
+    y = v.y * DynamicLayout.h_scale + DynamicLayout.t
+    c = DynamicLayout.rotate_cos
+    s = DynamicLayout.rotate_sin
+    return Vec2(x * c + y * s, y * c - x * s) + Vec2(DynamicLayout.ox, DynamicLayout.oy)
 
 
 def transform_static_vec(v: Vec2) -> Vec2:

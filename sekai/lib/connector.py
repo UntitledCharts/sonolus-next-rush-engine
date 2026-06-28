@@ -486,7 +486,8 @@ def draw_connector_default(
     start_pos_y = pre_rotation_vec_at(start_lane, start_travel).y
     end_pos_y = pre_rotation_vec_at(end_lane, end_travel).y
 
-    delta_alpha = abs(start_alpha - end_alpha) * get_connector_alpha_option(kind)
+    alpha_option = get_connector_alpha_option(kind)
+    delta_alpha = abs(start_alpha - end_alpha) * alpha_option
     scale = max(delta_alpha**0.8 * 3, delta_alpha**0.5 * abs(start_pos_y - end_pos_y) * 3) if delta_alpha else 0.0
     match ease_type:
         case EaseType.NONE:
@@ -554,7 +555,7 @@ def draw_connector_default(
             get_alpha((last_target_time + next_target_time) / 2)
             * (last_alpha + next_alpha)
             / 2
-            * get_connector_alpha_option(kind),
+            * alpha_option,
             0,
             1,
         )
