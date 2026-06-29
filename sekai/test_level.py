@@ -10,10 +10,12 @@ from sekai.level_utils import (
     LevelStageMaskChange,
     LevelStagePivotChange,
     LevelStageStyleChange,
+    LevelStageTransformChange,
     build_level,
 )
 from sekai.lib.connector import ConnectorKind, ConnectorLayer, SegmentPresentation
 from sekai.lib.ease import EaseType
+from sekai.lib.layout import StageTransformAnchor
 from sekai.lib.note import NoteKind
 from sekai.lib.stage import DivisionParity, JudgeLineColor, JudgeLineStyle, StageBorderStyle
 
@@ -129,6 +131,18 @@ stage_b = LevelStage(
             division_line_alpha=0.25,
             ease=EaseType.IN_OUT_QUAD,
         ),
+    ],
+    transform_changes=[
+        LevelStageTransformChange(beat=0.0, ease=EaseType.IN_OUT_QUAD),
+        LevelStageTransformChange(
+            beat=8.0,
+            rotate=12.0,
+            x_lane_translate=0.4,
+            y_lane_translate=0.7,
+            anchor=StageTransformAnchor.CENTER,
+            ease=EaseType.IN_OUT_QUAD,
+        ),
+        LevelStageTransformChange(beat=16.0, ease=EaseType.IN_OUT_QUAD),
     ],
 )
 

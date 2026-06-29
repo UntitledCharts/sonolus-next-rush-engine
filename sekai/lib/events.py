@@ -14,8 +14,10 @@ from sekai.lib.layer import (
     get_z_alt,
 )
 from sekai.lib.layout import (
+    IDENTITY_AFFINE_TRANSFORM,
     LANE_B,
     LANE_T,
+    AffineTransform2d,
     DynamicLayout,
     Layout,
     aspect_ratio,
@@ -59,6 +61,8 @@ class Fever:
     y_offset: float
     alpha_l: float
     alpha_r: float
+    left_transform: AffineTransform2d
+    right_transform: AffineTransform2d
 
 
 def draw_fever_side_cover(draw_time: float):
@@ -78,8 +82,14 @@ def draw_fever_side_cover(draw_time: float):
         l = -6.5
         r = 6.5
 
-    layout1 = layout_fever_cover(l, 0)
-    layout2 = layout_fever_cover(0, r)
+    layout1 = +Quad
+    layout2 = +Quad
+    if LevelConfig.dynamic_stages:
+        layout1 @= Fever.left_transform.transform_quad(layout_fever_cover(l, 0))
+        layout2 @= Fever.right_transform.transform_quad(layout_fever_cover(0, r))
+    else:
+        layout1 @= layout_fever_cover(l, 0)
+        layout2 @= layout_fever_cover(0, r)
     a = unlerp_clamped(0, 0.25, draw_time) * 0.75
     ActiveSkin.background.draw(layout1, LAYER_BACKGROUND_SIDE, a=a)
     ActiveSkin.background.draw(layout2, LAYER_BACKGROUND_SIDE, a=a)
@@ -128,8 +138,8 @@ def draw_fever_side_bar(draw_time: float):
         if is_tablet:
             t_top = -0.05
 
-        layout1 = perspective_rect(l=l - thickness, r=l, t=t_top, b=get_perspective_y(-1))
-        layout2 = perspective_rect(l=r, r=r + thickness, t=t_top, b=get_perspective_y(-1))
+        layout1 = +Quad
+        layout2 = +Quad
 
         fever_text_t = lerp(LANE_B, LANE_T, 0.78)
         super_fever_text_t = lerp(LANE_B, LANE_T, 0.90)
@@ -139,8 +149,8 @@ def draw_fever_side_bar(draw_time: float):
         p1_h = 0.002 * zoom
         p2_h = 0.001 * zoom
 
-        point1 = perspective_rect(l=l - 1, r=l, t=fever_text_t - p1_h, b=fever_text_t + p1_h)
-        point2 = perspective_rect(l=l - 1, r=l, t=super_fever_text_t - p2_h, b=super_fever_text_t + p2_h)
+        point1 = +Quad
+        point2 = +Quad
 
         fever_depth = tilt_depth(fever_text_t, 1.0)
         super_fever_depth = tilt_depth(super_fever_text_t, 1.0)
@@ -150,10 +160,46 @@ def draw_fever_side_bar(draw_time: float):
         f_h = 0.07 * zoom
         sf_h = 0.053 * zoom
 
-        fever_text_layout = transform_quad(Rect(l=fever_l, r=fever_l + 4.5, t=fever_depth - f_h, b=fever_depth + f_h))
-        super_fever_text_layout = transform_quad(
-            Rect(l=super_fever_l, r=super_fever_l + 2.94, t=super_fever_depth - sf_h, b=super_fever_depth + sf_h)
-        )
+        fever_text_layout = +Quad
+        super_fever_text_layout = +Quad
+
+        if LevelConfig.dynamic_stages:
+            layout1 @= Fever.left_transform.transform_quad(
+                perspective_rect(l=l - thickness, r=l, t=t_top, b=get_perspective_y(-1))
+            )
+            layout2 @= Fever.right_transform.transform_quad(
+                perspective_rect(l=r, r=r + thickness, t=t_top, b=get_perspective_y(-1))
+            )
+            point1 @= Fever.left_transform.transform_quad(
+                perspective_rect(l=l - 1, r=l, t=fever_text_t - p1_h, b=fever_text_t + p1_h)
+            )
+            point2 @= Fever.left_transform.transform_quad(
+                perspective_rect(l=l - 1, r=l, t=super_fever_text_t - p2_h, b=super_fever_text_t + p2_h)
+            )
+            fever_text_layout @= Fever.right_transform.transform_quad(
+                transform_quad(Rect(l=fever_l, r=fever_l + 4.5, t=fever_depth - f_h, b=fever_depth + f_h))
+            )
+            super_fever_text_layout @= Fever.right_transform.transform_quad(
+                transform_quad(
+                    Rect(
+                        l=super_fever_l,
+                        r=super_fever_l + 2.94,
+                        t=super_fever_depth - sf_h,
+                        b=super_fever_depth + sf_h,
+                    )
+                )
+            )
+        else:
+            layout1 @= perspective_rect(l=l - thickness, r=l, t=t_top, b=get_perspective_y(-1))
+            layout2 @= perspective_rect(l=r, r=r + thickness, t=t_top, b=get_perspective_y(-1))
+            point1 @= perspective_rect(l=l - 1, r=l, t=fever_text_t - p1_h, b=fever_text_t + p1_h)
+            point2 @= perspective_rect(l=l - 1, r=l, t=super_fever_text_t - p2_h, b=super_fever_text_t + p2_h)
+            fever_text_layout @= transform_quad(
+                Rect(l=fever_l, r=fever_l + 4.5, t=fever_depth - f_h, b=fever_depth + f_h)
+            )
+            super_fever_text_layout @= transform_quad(
+                Rect(l=super_fever_l, r=super_fever_l + 2.94, t=super_fever_depth - sf_h, b=super_fever_depth + sf_h)
+            )
 
         if a_left > 0:
             side_sprite.draw(layout1, get_z_alt(LAYER_STAGE), a=a_left)
@@ -185,6 +231,10 @@ def draw_fever_gauge(percentage: float):
     if Options.fever_effect == 2:
         return
 
+    layout1 = +Quad
+    layout2 = +Quad
+    a_left = 0.6
+    a_right = 0.6
     if LevelConfig.dynamic_stages:
         if not Fever.has_active:
             return
@@ -197,19 +247,17 @@ def draw_fever_gauge(percentage: float):
 
         thickness = 0.5
 
-        layout1 = layout_dynamic_fever_side(l - thickness, l, percentage)
-        layout2 = layout_dynamic_fever_side(r, r + thickness, percentage)
-
-        if a_left > 0:
-            ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, get_z_alt(LAYER_GAUGE), a=a_left)
-        if a_right > 0:
-            ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, get_z_alt(LAYER_GAUGE), a=a_right)
+        layout1 @= Fever.left_transform.transform_quad(layout_dynamic_fever_side(l - thickness, l, percentage))
+        layout2 @= Fever.right_transform.transform_quad(layout_dynamic_fever_side(r, r + thickness, percentage))
     else:
         t = lerp(LANE_B, LANE_T, percentage)
-        layout1 = layout_fever_gauge_left(t)
-        layout2 = layout_fever_gauge_right(t)
-        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, get_z_alt(LAYER_GAUGE), a=0.6)
-        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, get_z_alt(LAYER_GAUGE), a=0.6)
+        layout1 @= layout_fever_gauge_left(t)
+        layout2 @= layout_fever_gauge_right(t)
+
+    if a_left > 0:
+        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, get_z_alt(LAYER_GAUGE), a=a_left)
+    if a_right > 0:
+        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, get_z_alt(LAYER_GAUGE), a=a_right)
 
 
 def spawn_fever_start_particle(percentage: float):
@@ -228,21 +276,34 @@ def spawn_fever_start_particle(percentage: float):
     else:
         l = -6
         r = 6
+    layout_text = layout_fever_text()
+    layout_lane1 = +Quad
+    layout_lane2 = +Quad
+    if LevelConfig.dynamic_stages:
+        layout_lane1 @= Fever.left_transform.transform_quad(layout_lane_fever(l, 1))
+        layout_lane2 @= Fever.right_transform.transform_quad(layout_lane_fever(r, 1))
+    else:
+        layout_lane1 @= layout_lane_fever(l, 1)
+        layout_lane2 @= layout_lane_fever(r, 1)
     if percentage < 0.9:
-        layout_text = layout_fever_text()
-        layout_lane1 = layout_lane_fever(l, 1)
-        layout_lane2 = layout_lane_fever(r, 1)
         ActiveParticles.fever_start_text.spawn(layout_text, 1, False)
         if Options.fever_effect == 0:
             ActiveParticles.fever_start_lane.spawn(layout_lane1, 1, False)
             ActiveParticles.fever_start_lane.spawn(layout_lane2, 1, False)
     else:
-        layout_text = layout_fever_text()
-        layout_lane1 = layout_lane_fever(l, 1)
-        layout_lane2 = layout_lane_fever(r, 1)
         mid = (get_perspective_y(1) + get_perspective_y(-1)) / 2
-        layout_effect1 = perspective_rect(l=l - 0.5, r=l + 0.5, t=mid - 0.050075, b=mid + 0.050075)
-        layout_effect2 = perspective_rect(l=r - 0.5, r=r + 0.5, t=mid - 0.050075, b=mid + 0.050075)
+        layout_effect1 = +Quad
+        layout_effect2 = +Quad
+        if LevelConfig.dynamic_stages:
+            layout_effect1 @= Fever.left_transform.transform_quad(
+                perspective_rect(l=l - 0.5, r=l + 0.5, t=mid - 0.050075, b=mid + 0.050075)
+            )
+            layout_effect2 @= Fever.right_transform.transform_quad(
+                perspective_rect(l=r - 0.5, r=r + 0.5, t=mid - 0.050075, b=mid + 0.050075)
+            )
+        else:
+            layout_effect1 @= perspective_rect(l=l - 0.5, r=l + 0.5, t=mid - 0.050075, b=mid + 0.050075)
+            layout_effect2 @= perspective_rect(l=r - 0.5, r=r + 0.5, t=mid - 0.050075, b=mid + 0.050075)
         ActiveParticles.super_fever_start_text.spawn(layout_text, 1, False)
         if Options.fever_effect == 0:
             ActiveParticles.super_fever_start_lane.spawn(layout_lane1, 1, False)
@@ -268,8 +329,14 @@ def spawn_fever_chance_particle():
         l = -6.5
         r = 6.5
     layout_text = layout_fever_text()
-    layout_lane1 = layout_lane_fever(l, 0.5)
-    layout_lane2 = layout_lane_fever(r, 0.5)
+    layout_lane1 = +Quad
+    layout_lane2 = +Quad
+    if LevelConfig.dynamic_stages:
+        layout_lane1 @= Fever.left_transform.transform_quad(layout_lane_fever(l, 0.5))
+        layout_lane2 @= Fever.right_transform.transform_quad(layout_lane_fever(r, 0.5))
+    else:
+        layout_lane1 @= layout_lane_fever(l, 0.5)
+        layout_lane2 @= layout_lane_fever(r, 0.5)
     ActiveParticles.fever_chance_text.spawn(layout_text, 1, False)
     if Options.fever_effect == 0:
         ActiveParticles.fever_chance_lane.spawn(layout_lane1, 1, False)
@@ -376,13 +443,19 @@ def draw_skill_bar(draw_time: float, num: int, effect: SkillMode, level: int):
 
 
 def draw_judgment_effect(
-    draw_time: float, l: float = -6, r: float = 6, stage_alpha: float = 1.0, y_offset: float = 0.0
+    draw_time: float,
+    l: float = -6,
+    r: float = 6,
+    stage_alpha: float = 1.0,
+    y_offset: float = 0.0,
+    *,
+    transform: AffineTransform2d = IDENTITY_AFFINE_TRANSFORM,
 ):
     enter_progress = unlerp_clamped(0, 0.25, draw_time)
     exit_progress = unlerp_clamped(5.75, 6, draw_time)
 
     anim = enter_progress - exit_progress
-    layout = layout_skill_judgment_line(l, r, y_offset)
+    layout = transform.transform_quad(layout_skill_judgment_line(l, r, y_offset))
     z = get_z_alt(LAYER_JUDGMENT_SKILL)
     ActiveSkin.skill_judgment_line.draw(layout, z=z, a=anim * stage_alpha)
 
@@ -394,3 +467,5 @@ def reset_fever_bounds():
     Fever.y_offset = 0.0
     Fever.alpha_l = 0.0
     Fever.alpha_r = 0.0
+    Fever.left_transform = IDENTITY_AFFINE_TRANSFORM
+    Fever.right_transform = IDENTITY_AFFINE_TRANSFORM

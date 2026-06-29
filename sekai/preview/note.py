@@ -88,8 +88,9 @@ class PreviewBaseNote(PreviewArchetype):
         self.target_time = beat_to_time(self.beat)
 
         if self.stage_ref.index > 0:
+            props = get_stage_props(self.stage_ref.get(), self.target_time)
             self.rel_lane = self.lane
-            self.lane += get_stage_props(self.stage_ref.get(), self.target_time).pivot_lane
+            self.lane += props.pivot_lane + props.x_lane_translate
 
         if self.next_ref.index > 0:
             self.next_ref.get().prev_ref = self.ref()
@@ -159,7 +160,8 @@ class PreviewBaseNote(PreviewArchetype):
     def _basic_visual_lane_at(self, t: float) -> float:
         if self.stage_ref.index <= 0:
             return self.lane
-        return get_stage_props(self.stage_ref.get(), t).pivot_lane + self.rel_lane
+        props = get_stage_props(self.stage_ref.get(), t)
+        return props.pivot_lane + self.rel_lane + props.x_lane_translate
 
     def visual_lane_at(self, t: float) -> float:
         if self.is_attached:

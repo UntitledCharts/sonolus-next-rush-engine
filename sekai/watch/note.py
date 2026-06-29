@@ -20,7 +20,17 @@ from sekai.debug import DISABLE_NOTES
 from sekai.lib.buckets import SekaiWindow
 from sekai.lib.connector import ActiveConnectorInfo, ConnectorKind, ConnectorLayer, SegmentPresentation
 from sekai.lib.ease import EaseType, ease
-from sekai.lib.layout import FlickDirection, Hitbox, compute_hitbox_at_time, progress_to
+from sekai.lib.layout import (
+    FlickDirection,
+    Hitbox,
+    StageTransform,
+    blend_stage_transform,
+    camera_layout_transform_at_time,
+    compute_hitbox_at_time,
+    compute_stage_transform,
+    identity_stage_transform,
+    progress_to,
+)
 from sekai.lib.note import (
     NoteEffectKind,
     NoteKind,
@@ -93,6 +103,7 @@ class WatchBaseNote(WatchArchetype):
     active_connector_info: ActiveConnectorInfo = shared_memory()
 
     hitbox: Hitbox = entity_memory()
+    attach_eased_frac: float = shared_memory()
 
     end_time: float = imported()
     played_hit_effects: bool = imported()
@@ -151,6 +162,9 @@ class WatchBaseNote(WatchArchetype):
             # attach_head.init_data()
             # attach_tail.init_data()
             self.connector_ease = attach_head.connector_ease
+            self.attach_eased_frac = ease(
+                self.connector_ease, unlerp_clamped(attach_head.target_time, attach_tail.target_time, self.target_time)
+            )
             lane, size = get_attach_params(
                 ease_type=attach_head.connector_ease,
                 head_lane=attach_head._basic_visual_lane_at(self.target_time),
@@ -180,6 +194,7 @@ class WatchBaseNote(WatchArchetype):
                 get_leniency(self.kind),
                 self.target_time,
                 self.target_y_offset,
+                stage_transform=self.stage_transform_at(self.target_time, left_limit=True).transform(),
                 left_limit=True,
             )
 
@@ -189,36 +204,13 @@ class WatchBaseNote(WatchArchetype):
                     schedule_note_auto_sfx(self.effect_kind, self.target_time)
                 else:
                     schedule_note_sfx(self.effect_kind, self.judgment, self.end_time)
-                schedule_note_slot_effects(
-                    self.kind,
-                    self.visual_lane_at(self.end_time),
-                    self.size,
-                    self.end_time,
-                    self.direction,
-                    self.judgment,
-                    y_offset=self._basic_y_offset_at(self.end_time),
-                    pivot_lane=self._stage_pivot_lane_at(self.end_time),
-                    half_offset=self._stage_half_offset_at(self.end_time),
-                    group_id=self.index,
-                    single_line=self._stage_single_line_at(self.end_time),
-                )
+                self.schedule_slot_effects_at(self.end_time)
             self.result.bucket_value = self.accuracy * 1000
         else:
             self.judgment = Judgment.PERFECT
             if self.is_scored:
                 schedule_note_sfx(self.effect_kind, Judgment.PERFECT, self.target_time)
-                schedule_note_slot_effects(
-                    self.kind,
-                    self.visual_lane_at(self.target_time),
-                    self.size,
-                    self.target_time,
-                    self.direction,
-                    y_offset=self._basic_y_offset_at(self.target_time),
-                    pivot_lane=self._stage_pivot_lane_at(self.target_time),
-                    half_offset=self._stage_half_offset_at(self.target_time),
-                    group_id=self.index,
-                    single_line=self._stage_single_line_at(self.target_time),
-                )
+                self.schedule_slot_effects_at(self.target_time)
 
         self.result.target_time = self.target_time
 
@@ -264,6 +256,50 @@ class WatchBaseNote(WatchArchetype):
             pivot_lane=self._stage_pivot_lane_at(t),
             half_offset=self._stage_half_offset_at(t),
             group_id=self.index,
+            transform=self.stage_transform_at(t).transform(),
+        )
+
+    def schedule_slot_effects_at(self, t: float):
+        transform = +StageTransform
+        if self.stage_ref.index > 0:
+            props = get_stage_props(self.stage_ref.get(), t)
+            pivot_lane = props.pivot_lane
+            y_offset = props.y_offset
+            half_offset = props.division.start.parity == DivisionParity.ODD and props.division.start.size % 2 == 1
+            single_line = resolve_judge_line_style(props.judge_line_style) == JudgeLineStyle.SINGLE_LINE
+            if self.is_attached:
+                visual_lane = self.visual_lane_at(t)
+                transform @= self.stage_transform_at(t)
+            else:
+                visual_lane = props.pivot_lane + self.rel_lane
+                transform @= compute_stage_transform(
+                    camera_layout_transform_at_time(t),
+                    props.rotate,
+                    props.x_lane_translate,
+                    props.y_lane_translate,
+                    props.lane,
+                    props.center_weight,
+                )
+        else:
+            pivot_lane = 0.0
+            y_offset = 0.0
+            half_offset = False
+            single_line = False
+            visual_lane = self.visual_lane_at(t)
+            transform @= self.stage_transform_at(t)
+        schedule_note_slot_effects(
+            self.kind,
+            visual_lane,
+            self.size,
+            t,
+            self.direction,
+            self.judgment,
+            y_offset=y_offset,
+            pivot_lane=pivot_lane,
+            half_offset=half_offset,
+            group_id=self.index,
+            single_line=single_line,
+            transform=transform.transform(),
         )
 
     def spawn_time(self) -> float:
@@ -302,6 +338,11 @@ class WatchBaseNote(WatchArchetype):
             return
         if self.not_render:
             return
+        stage_transform = +StageTransform
+        if self.has_stage_transform():
+            stage_transform @= self.visual_stage_transform()
+        else:
+            stage_transform @= identity_stage_transform()
         draw_note(
             self.kind,
             self.visual_lane,
@@ -309,6 +350,7 @@ class WatchBaseNote(WatchArchetype):
             self.visual_progress,
             self.direction,
             self.target_time,
+            transform=stage_transform.transform(),
         )
         if Options.show_hitboxes and self.is_scored:
             input_interval = get_note_window(self.kind, self.active_head_ref.index > 0).bad + self.target_time
@@ -336,6 +378,8 @@ class WatchBaseNote(WatchArchetype):
                 y_offset=self.visual_y_offset,
                 pivot_lane=self.visual_pivot_lane,
                 half_offset=self.visual_half_offset,
+                lane_particles=self._stage_lane_particles_at(time()),
+                transform=self.visual_stage_transform().transform(),
             )
 
     def _basic_visual_lane_at(self, t: float) -> float:
@@ -347,20 +391,7 @@ class WatchBaseNote(WatchArchetype):
         if self.is_attached:
             head = self.attach_head_ref.get()
             tail = self.attach_tail_ref.get()
-            note_ease_frac = unlerp_clamped(head.target_time, tail.target_time, self.target_time)
-            current_tail_lane = tail._basic_visual_lane_at(t)
-            if t >= head.target_time:
-                now_ease_frac = unlerp_clamped(head.target_time, tail.target_time, t)
-                eased_now_ease_frac = ease(self.connector_ease, now_ease_frac)
-                eased_note_ease_frac = ease(self.connector_ease, note_ease_frac)
-                current_head_lane = lerp(
-                    head._basic_visual_lane_at(t), tail._basic_visual_lane_at(t), eased_now_ease_frac
-                )
-                note_interp_frac = unlerp_clamped(eased_now_ease_frac, 1.0, eased_note_ease_frac)
-                return lerp(current_head_lane, current_tail_lane, note_interp_frac)
-            else:
-                current_head_lane = head._basic_visual_lane_at(t)
-                return lerp(current_head_lane, current_tail_lane, ease(self.connector_ease, note_ease_frac))
+            return lerp(head._basic_visual_lane_at(t), tail._basic_visual_lane_at(t), self.attach_eased_frac)
         return self._basic_visual_lane_at(t)
 
     def _basic_y_offset_at(self, t: float, left_limit: bool = False) -> float:
@@ -381,6 +412,69 @@ class WatchBaseNote(WatchArchetype):
             )
         return self._basic_y_offset_at(t)
 
+    def _basic_visual_stage_transform(self) -> StageTransform:
+        result = +StageTransform
+        if self.stage_ref.index > 0:
+            result @= self.stage_ref.get().props.stage_transform()
+        else:
+            result @= identity_stage_transform()
+        return result
+
+    def visual_stage_transform(self) -> StageTransform:
+        result = +StageTransform
+        if self.is_attached:
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            result @= blend_stage_transform(
+                head._basic_visual_stage_transform(),
+                tail._basic_visual_stage_transform(),
+                self.attach_eased_frac,
+            )
+        else:
+            result @= self._basic_visual_stage_transform()
+        return result
+
+    def _basic_has_stage_transform(self) -> bool:
+        return self.stage_ref.index > 0 and self.stage_ref.get().props.has_transform()
+
+    def has_stage_transform(self) -> bool:
+        if self.is_attached:
+            return (
+                self.attach_head_ref.get()._basic_has_stage_transform()
+                or self.attach_tail_ref.get()._basic_has_stage_transform()
+            )
+        return self._basic_has_stage_transform()
+
+    def _basic_stage_transform_at(self, t: float, left_limit: bool = False) -> StageTransform:
+        result = +StageTransform
+        if self.stage_ref.index > 0:
+            props = get_stage_props(self.stage_ref.get(), t, left_limit=left_limit)
+            result @= compute_stage_transform(
+                camera_layout_transform_at_time(t, left_limit=left_limit),
+                props.rotate,
+                props.x_lane_translate,
+                props.y_lane_translate,
+                props.lane,
+                props.center_weight,
+            )
+        else:
+            result @= identity_stage_transform()
+        return result
+
+    def stage_transform_at(self, t: float, left_limit: bool = False) -> StageTransform:
+        result = +StageTransform
+        if self.is_attached:
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            result @= blend_stage_transform(
+                head._basic_stage_transform_at(t, left_limit=left_limit),
+                tail._basic_stage_transform_at(t, left_limit=left_limit),
+                remap_clamped(head.target_time, tail.target_time, 0.0, 1.0, self.target_time),
+            )
+        else:
+            result @= self._basic_stage_transform_at(t, left_limit=left_limit)
+        return result
+
     def _stage_pivot_lane_at(self, t: float) -> float:
         if self.stage_ref.index <= 0:
             return 0.0
@@ -399,6 +493,11 @@ class WatchBaseNote(WatchArchetype):
             resolve_judge_line_style(get_stage_props(self.stage_ref.get(), t).judge_line_style)
             == JudgeLineStyle.SINGLE_LINE
         )
+
+    def _stage_lane_particles_at(self, t: float) -> bool:
+        if self.stage_ref.index <= 0:
+            return True
+        return get_stage_props(self.stage_ref.get(), t).full_width <= 0.0
 
     @property
     def visual_lane(self) -> float:

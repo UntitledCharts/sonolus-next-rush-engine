@@ -15,7 +15,7 @@ from sekai.lib.particle import init_particles
 from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.ui import init_ui
 from sekai.preview import note
-from sekai.preview.dynamic_stage import PreviewCameraChange, PreviewStageTransformChange
+from sekai.preview.dynamic_stage import PreviewCameraChange
 from sekai.preview.events import PreviewSkill
 from sekai.preview.layout import (
     PREVIEW_CAMERA_MARKER_ALPHA,
@@ -40,7 +40,6 @@ class PreviewInitialization(PreviewArchetype):
 
     revision: EngineRevision = imported(name="revision", default=EngineRevision.LATEST)
     first_camera_ref: EntityRef[PreviewCameraChange] = imported(name="firstCamera")
-    first_stage_transform_ref: EntityRef[PreviewStageTransformChange] = imported(name="firstStageTransform")
 
     @callback(order=-1)
     def preprocess(self):
@@ -56,7 +55,6 @@ class PreviewInitialization(PreviewArchetype):
         init_preview_layout()
         init_event_list(self.first_camera_ref)
         init_skill()
-        init_event_list(self.first_stage_transform_ref)
 
     def render(self):
         if not LevelConfig.dynamic_stages:

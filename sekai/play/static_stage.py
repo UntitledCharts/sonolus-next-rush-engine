@@ -10,6 +10,7 @@ from sekai.lib.custom_elements import LifeManager, ScoreIndicator
 from sekai.lib.events import reset_fever_bounds
 from sekai.lib.initialization import LastNote
 from sekai.lib.layout import (
+    IDENTITY_AFFINE_TRANSFORM,
     StaticStageData,
     layout_lane_area,
     refresh_layout,
@@ -61,17 +62,25 @@ class StaticStage(PlayArchetype):
                 continue
             if not input_manager.is_allowed_empty(touch):
                 continue
-            lane = touch_to_lane(touch.position)
+            lane = touch_to_lane(touch.position, IDENTITY_AFFINE_TRANSFORM)
             rounded_lane = clamp(round(lane - 0.5) + 0.5, -5.5, 5.5)
             if touch.started:
-                play_lane_hit_effects(rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6)
+                play_lane_hit_effects(
+                    rounded_lane,
+                    sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6,
+                    transform=IDENTITY_AFFINE_TRANSFORM,
+                )
                 if not empty_lanes.is_full():
                     empty_lanes.append(rounded_lane)
             else:
-                prev_lane = touch_to_lane(touch.prev_position)
+                prev_lane = touch_to_lane(touch.prev_position, IDENTITY_AFFINE_TRANSFORM)
                 prev_rounded_lane = clamp(round(prev_lane - 0.5) + 0.5, -5.5, 5.5)
                 if rounded_lane != prev_rounded_lane:
-                    play_lane_hit_effects(rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6)
+                    play_lane_hit_effects(
+                        rounded_lane,
+                        sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6,
+                        transform=IDENTITY_AFFINE_TRANSFORM,
+                    )
                     if not empty_lanes.is_full():
                         empty_lanes.append(rounded_lane)
         if len(empty_lanes) > 0:

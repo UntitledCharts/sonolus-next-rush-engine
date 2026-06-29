@@ -8,7 +8,7 @@ from sonolus.script import runtime
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
 from sonolus.script.array import Array, Dim
 from sonolus.script.interval import clamp, interp, lerp, unlerp_clamped
-from sonolus.script.quad import Quad, Rect
+from sonolus.script.quad import Quad, QuadLike, Rect
 from sonolus.script.record import Record
 from sonolus.script.runtime import is_multiplayer, is_play, is_replay, is_watch, time
 from sonolus.script.sprite import Sprite, ZIndex
@@ -37,13 +37,20 @@ from sekai.lib.layer import (
     get_z_alt,
 )
 from sekai.lib.layout import (
+    IDENTITY_AFFINE_TRANSFORM,
     TEST_ASPECT_SCALE,
+    AffineTransform2d,
     DynamicLayout,
     Layout,
     ScoreGaugeType,
     StaticUiLayout,
+    StageTransform,
+    StageTransformAnchor,
     approach,
+    compute_stage_transform,
+    current_layout_transform,
     current_stage_tilt,
+    identity_stage_transform,
     layout_full_width_stage_cover,
     layout_hidden_cover,
     layout_life_gauge,
@@ -54,6 +61,7 @@ from sekai.lib.layout import (
     layout_stage_cover_and_line,
     layout_stage_lane_by_edges,
     perspective_rect,
+    stage_aspect_ratio_locked,
     tilt_depth,
     tilt_widened_edge,
     tilt_width_factor,
@@ -149,11 +157,38 @@ class StageProps(Record):
     judge_line_style: Transition[JudgeLineStyle]
     full_width: float
     division_line_alpha: float
+    rotate: float
+    x_lane_translate: float
+    y_lane_translate: float
+    center_weight: float
+
+    def stage_transform(self) -> StageTransform:
+        return compute_stage_transform(
+            current_layout_transform(),
+            self.rotate,
+            self.x_lane_translate,
+            self.y_lane_translate,
+            self.lane,
+            self.center_weight,
+        )
+
+    def has_transform(self) -> bool:
+        return (
+            self.rotate != 0.0
+            or self.x_lane_translate != 0.0
+            or self.y_lane_translate != 0.0
+            or self.center_weight != 0.0
+        )
 
     def draw(self):
         ui_alpha = 1.0
         if Options.ui_intro and time() < -1.0:
             ui_alpha = unlerp_clamped(-2.0, -1.0, time())
+        transform = +StageTransform
+        if self.has_transform():
+            transform @= self.stage_transform()
+        else:
+            transform @= identity_stage_transform()
         draw_dynamic_stage(
             lane=self.lane,
             width=self.width,
@@ -171,6 +206,7 @@ class StageProps(Record):
             alpha=ui_alpha,
             full_width=self.full_width,
             division_line_alpha=self.division_line_alpha,
+            transform=transform.transform(),
         )
 
 
@@ -228,12 +264,30 @@ class StageStyleChangeLike(Protocol):
     def index(self) -> int: ...
 
 
+class StageTransformChangeLike(Protocol):
+    time: float
+    rotate: float
+    x_lane_translate: float
+    y_lane_translate: float
+    anchor: StageTransformAnchor
+    ease: EaseType
+    next_ref: EntityRef
+    prev_ref: EntityRef
+
+    @classmethod
+    def at(cls, index: int) -> StageTransformChangeLike: ...
+
+    @property
+    def index(self) -> int: ...
+
+
 class DynamicStageLike(Protocol):
     from_start: bool
     until_end: bool
     first_mask_change_ref: EntityRef
     first_pivot_change_ref: EntityRef
     first_style_change_ref: EntityRef
+    first_transform_change_ref: EntityRef
 
     @property
     def index(self) -> int: ...
@@ -251,6 +305,14 @@ def _stage_style_change_archetype() -> type[StageStyleChangeLike]:
     return cast(type[StageStyleChangeLike], get_archetype_by_name(archetype_names.STAGE_STYLE_CHANGE))
 
 
+def _stage_transform_change_archetype() -> type[StageTransformChangeLike]:
+    return cast(type[StageTransformChangeLike], get_archetype_by_name(archetype_names.STAGE_TRANSFORM_CHANGE))
+
+
+def center_anchor_weight(anchor: StageTransformAnchor) -> float:
+    return 1.0 if anchor == StageTransformAnchor.CENTER else 0.0
+
+
 def get_start_time(stage: DynamicStageLike) -> float:
     if stage.from_start:
         return -1e8
@@ -261,6 +323,8 @@ def get_start_time(stage: DynamicStageLike) -> float:
         result = min(result, get_event_as(stage.first_pivot_change_ref, _stage_pivot_change_archetype()).time)
     if stage.first_style_change_ref.index > 0:
         result = min(result, get_event_as(stage.first_style_change_ref, _stage_style_change_archetype()).time)
+    if stage.first_transform_change_ref.index > 0:
+        result = min(result, get_event_as(stage.first_transform_change_ref, _stage_transform_change_archetype()).time)
     return result
 
 
@@ -277,6 +341,9 @@ def get_end_time(stage: DynamicStageLike) -> float:
     if stage.first_style_change_ref.index > 0:
         last_ref, _ = query_event_list(stage.first_style_change_ref, 1e8, lambda e: e.time)
         result = max(result, get_event_as(last_ref, _stage_style_change_archetype()).time)
+    if stage.first_transform_change_ref.index > 0:
+        last_ref, _ = query_event_list(stage.first_transform_change_ref, 1e8, lambda e: e.time)
+        result = max(result, get_event_as(last_ref, _stage_transform_change_archetype()).time)
     return result
 
 
@@ -311,6 +378,10 @@ def get_next_event_time(stage: DynamicStageLike, t: float) -> float:
         _, b_ref = query_event_list(stage.first_style_change_ref, t, lambda e: e.time)
         if b_ref.index > 0:
             result = min(result, get_event_as(b_ref, _stage_style_change_archetype()).time)
+    if stage.first_transform_change_ref.index > 0:
+        _, b_ref = query_event_list(stage.first_transform_change_ref, t, lambda e: e.time)
+        if b_ref.index > 0:
+            result = min(result, get_event_as(b_ref, _stage_transform_change_archetype()).time)
     return result
 
 
@@ -322,6 +393,7 @@ def get_stage_props(stage: DynamicStageLike, target_time: float | None = None, l
     first_mask_change_ref = stage.first_mask_change_ref
     first_pivot_change_ref = stage.first_pivot_change_ref
     first_style_change_ref = stage.first_style_change_ref
+    first_transform_change_ref = stage.first_transform_change_ref
 
     # Query mask changes
     mask_a_ref, mask_b_ref = query_event_list(first_mask_change_ref, t, lambda e: e.time)
@@ -458,6 +530,46 @@ def get_stage_props(stage: DynamicStageLike, target_time: float | None = None, l
         result.full_width = full_width_factor(style_b.full_width)
         result.division_line_alpha = style_b.division_line_alpha
 
+    # Query transform changes
+    transform_a_ref, transform_b_ref = query_event_list(first_transform_change_ref, t, lambda e: e.time)
+    if left_limit and transform_a_ref.index > 0:
+        transform_curr = get_event_as(transform_a_ref, _stage_transform_change_archetype())
+        if transform_curr.time == t:
+            transform_probe_ref = +transform_curr.prev_ref
+            while transform_probe_ref.index > 0:
+                if get_event_as(transform_probe_ref, _stage_transform_change_archetype()).time != t:
+                    break
+                transform_a_ref.index = transform_probe_ref.index
+                transform_probe_ref.index = get_event_as(
+                    transform_probe_ref, _stage_transform_change_archetype()
+                ).prev_ref.index
+            transform_b_ref.index = transform_a_ref.index
+            transform_a_ref.index = transform_probe_ref.index
+    if transform_a_ref.index > 0:
+        transform_a = get_event_as(transform_a_ref, _stage_transform_change_archetype())
+        result.rotate = transform_a.rotate
+        result.x_lane_translate = transform_a.x_lane_translate
+        result.y_lane_translate = transform_a.y_lane_translate
+        result.center_weight = center_anchor_weight(transform_a.anchor)
+        if transform_b_ref.index > 0:
+            transform_b = get_event_as(transform_b_ref, _stage_transform_change_archetype())
+            t_a = transform_a.time
+            t_b = transform_b.time
+            if t_b > t_a:
+                p = ease(transform_a.ease, (t - t_a) / (t_b - t_a))
+                result.rotate = lerp(transform_a.rotate, transform_b.rotate, p)
+                result.x_lane_translate = lerp(transform_a.x_lane_translate, transform_b.x_lane_translate, p)
+                result.y_lane_translate = lerp(transform_a.y_lane_translate, transform_b.y_lane_translate, p)
+                result.center_weight = lerp(
+                    center_anchor_weight(transform_a.anchor), center_anchor_weight(transform_b.anchor), p
+                )
+    elif transform_b_ref.index > 0:
+        transform_b = get_event_as(transform_b_ref, _stage_transform_change_archetype())
+        result.rotate = transform_b.rotate
+        result.x_lane_translate = transform_b.x_lane_translate
+        result.y_lane_translate = transform_b.y_lane_translate
+        result.center_weight = center_anchor_weight(transform_b.anchor)
+
     return result
 
 
@@ -465,7 +577,7 @@ TEST_ASPECT_BOX_EDGE = 0.004
 
 
 def draw_aspect_box(sprite: Sprite, ratio: float, sub: int):
-    if not Options.lock_stage_aspect_ratio:
+    if not stage_aspect_ratio_locked():
         return
     hf = TEST_ASPECT_SCALE * Layout.field_h / 2
     wf = TEST_ASPECT_SCALE * Layout.field_w / 2
@@ -565,6 +677,7 @@ def draw_basic_stage(alpha=1.0, layout=Quad.zero()):  # noqa: B008
             right_border_style=StageBorderStyle.DEFAULT,
             order=0,
             a=alpha,
+            transform=IDENTITY_AFFINE_TRANSFORM,
         )
 
 
@@ -625,12 +738,17 @@ def draw_dynamic_stage(
     judge_line_style: Transition[JudgeLineStyle] | JudgeLineStyle = JudgeLineStyle.DEFAULT,
     full_width: float = 0,
     division_line_alpha: float = 1,
+    *,
+    transform: AffineTransform2d,
 ):
     division = normalize_transition(division)
     judge_line_color = normalize_transition(judge_line_color)
     judge_line_style = normalize_transition(judge_line_style)
     left_border_style = normalize_transition(left_border_style)
     right_border_style = normalize_transition(right_border_style)
+
+    def place(q: QuadLike) -> QuadLike:
+        return transform.transform_quad(q)
 
     sprites_same = judge_line_color.start == judge_line_color.end
     sprites_a = get_judgment_sprites(judge_line_color.start)
@@ -648,6 +766,7 @@ def draw_dynamic_stage(
             division.end.size,
             division.end.parity,
             pivot_lane,
+            order,
             a,
             lane_alpha,
             judge_line_alpha,
@@ -655,6 +774,7 @@ def draw_dynamic_stage(
             alpha,
             judge_line_style,
             fw,
+            transform=transform,
         )
         return
 
@@ -694,7 +814,7 @@ def draw_dynamic_stage(
                 )  # Artificially thicken the top so it renders better
                 layout_t = layout_stage_lane_by_edges(tilt_widened_edge(l - 0.08 * scale, l - 0.64 * scale), l)
                 ActiveSkin.stage_border.draw(
-                    Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br), z=z, a=a
+                    place(Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br)), z=z, a=a
                 )
             case StageBorderStyle.LIGHT:
                 layout_b = layout_stage_lane_by_edges(l - 0.0125, l + 0.0125)
@@ -702,7 +822,7 @@ def draw_dynamic_stage(
                     tilt_widened_edge(l - 0.0125, l - 0.1), tilt_widened_edge(l + 0.0125, l + 0.1)
                 )
                 ActiveSkin.lane_divider.draw(
-                    Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br), z=z, a=a
+                    place(Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br)), z=z, a=a
                 )
             case StageBorderStyle.DISABLED:
                 pass
@@ -716,7 +836,7 @@ def draw_dynamic_stage(
                 layout_b = layout_stage_lane_by_edges(r + 0.08 * scale, r)  # Flip horizontally
                 layout_t = layout_stage_lane_by_edges(tilt_widened_edge(r + 0.08 * scale, r + 0.64 * scale), r)
                 ActiveSkin.stage_border.draw(
-                    Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br), z=z, a=a
+                    place(Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br)), z=z, a=a
                 )
             case StageBorderStyle.LIGHT:
                 layout_b = layout_stage_lane_by_edges(r - 0.0125, r + 0.0125)
@@ -724,7 +844,7 @@ def draw_dynamic_stage(
                     tilt_widened_edge(r - 0.0125, r - 0.1), tilt_widened_edge(r + 0.0125, r + 0.1)
                 )
                 ActiveSkin.lane_divider.draw(
-                    Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br), z=z, a=a
+                    place(Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br)), z=z, a=a
                 )
             case StageBorderStyle.DISABLED:
                 pass
@@ -749,7 +869,7 @@ def draw_dynamic_stage(
                 tilt_widened_edge(pos - 0.0125, pos - 0.1), tilt_widened_edge(pos + 0.0125, pos + 0.1)
             )
             ActiveSkin.lane_divider.draw(
-                Quad(bl=div_layout_b.bl, tl=div_layout_t.tl, tr=div_layout_t.tr, br=div_layout_b.br), z=z, a=a
+                place(Quad(bl=div_layout_b.bl, tl=div_layout_t.tl, tr=div_layout_t.tr, br=div_layout_b.br)), z=z, a=a
             )
 
     thickness_scale = lerp(1.0, clamp(1 / travel, 1, 4) if travel > 0 else 4, current_stage_tilt())
@@ -779,7 +899,7 @@ def draw_dynamic_stage(
 
         for k in range(k_start, k_end + 1):
             pos = shifted_pivot + k
-            div_layout = layout_judgment_divider(pos)
+            div_layout = place(layout_judgment_divider(pos))
             edge_weight = abs(pos - lane) / width if width > 0 else 0
             sprites.judgment_center.draw(div_layout, z=z_lo, a=a)
             sprites.judgment_edge.draw(div_layout, z=z_hi, a=a * edge_weight)
@@ -789,16 +909,18 @@ def draw_dynamic_stage(
             case StageBorderStyle.DEFAULT | StageBorderStyle.MEDIUM:
                 if width <= 0:
                     return
-                layout = perspective_rect(
-                    l,
-                    min(l + 1 / f / 2, lane),
-                    1 - nh + nh / f,
-                    1 + nh - nh / f,
-                    travel,
+                layout = place(
+                    perspective_rect(
+                        l,
+                        min(l + 1 / f / 2, lane),
+                        1 - nh + nh / f,
+                        1 + nh - nh / f,
+                        travel,
+                    )
                 )
                 sprites.judgment_edge_left.draw(layout, z=z, a=a)
             case StageBorderStyle.LIGHT:
-                layout = layout_judgment_divider(l)
+                layout = place(layout_judgment_divider(l))
                 sprites.judgment_edge.draw(layout, z=z, a=a)
             case StageBorderStyle.DISABLED:
                 pass
@@ -810,16 +932,18 @@ def draw_dynamic_stage(
             case StageBorderStyle.DEFAULT | StageBorderStyle.MEDIUM:
                 if width <= 0:
                     return
-                layout = perspective_rect(
-                    r,
-                    max(r - 1 / f / 2, lane),
-                    1 - nh + nh / f,
-                    1 + nh - nh / f,
-                    travel,
+                layout = place(
+                    perspective_rect(
+                        r,
+                        max(r - 1 / f / 2, lane),
+                        1 - nh + nh / f,
+                        1 + nh - nh / f,
+                        travel,
+                    )
                 )
                 sprites.judgment_edge_left.draw(layout, z=z, a=a)
             case StageBorderStyle.LIGHT:
-                layout = layout_judgment_divider(r)
+                layout = place(layout_judgment_divider(r))
                 sprites.judgment_edge.draw(layout, z=z, a=a)
             case StageBorderStyle.DISABLED:
                 pass
@@ -827,23 +951,31 @@ def draw_dynamic_stage(
                 assert_never(style)
 
     def draw_gradient(sprites: JudgmentSpriteSet, z: float, a: float):
-        layout = perspective_rect(l, lane, 1 + nh, 1 + nh - nh / f, travel)
-        sprites.judgment_gradient.draw(layout, z=z, a=a)
-        layout = perspective_rect(r, lane, 1 + nh, 1 + nh - nh / f, travel)
-        sprites.judgment_gradient.draw(layout, z=z, a=a)
-        layout = perspective_rect(l, lane, 1 - nh, 1 - nh + nh / f, travel)
-        sprites.judgment_gradient.draw(layout, z=z, a=a)
-        layout = perspective_rect(r, lane, 1 - nh, 1 - nh + nh / f, travel)
-        sprites.judgment_gradient.draw(layout, z=z, a=a)
+        bottom_l = place(perspective_rect(l_jl, lane, 1 + nh, 1 + nh - nh / f, travel))
+        bottom_r = place(perspective_rect(r_jl, lane, 1 + nh, 1 + nh - nh / f, travel))
+        top_l = place(perspective_rect(l_jl, lane, 1 - nh, 1 - nh + nh / f, travel))
+        top_r = place(perspective_rect(r_jl, lane, 1 - nh, 1 - nh + nh / f, travel))
+        grad_a = a * (1 - fw)
+        edge_a = a * fw
+        if grad_a > 0:
+            sprites.judgment_gradient.draw(bottom_l, z=z, a=grad_a)
+            sprites.judgment_gradient.draw(bottom_r, z=z, a=grad_a)
+            sprites.judgment_gradient.draw(top_l, z=z, a=grad_a)
+            sprites.judgment_gradient.draw(top_r, z=z, a=grad_a)
+        if edge_a > 0:
+            sprites.judgment_edge.draw(bottom_l, z=z, a=edge_a)
+            sprites.judgment_edge.draw(bottom_r, z=z, a=edge_a)
+            sprites.judgment_edge.draw(top_l, z=z, a=edge_a)
+            sprites.judgment_edge.draw(top_r, z=z, a=edge_a)
 
     def draw_single_line(sprites: JudgmentSpriteSet, z: float, a: float):
         half_thick = nh / f / 2
-        layout = perspective_rect(l_jl, r_jl, 1 - half_thick, 1 + half_thick, travel)
+        layout = place(perspective_rect(l_jl, r_jl, 1 - half_thick, 1 + half_thick, travel))
         sprites.judgment_edge.draw(layout, z=z, a=a)
 
-    if lane_alpha > 0:
-        la = a * lane_alpha
-        ActiveSkin.lane_background.draw(layout_stage_lane_by_edges(l, r), z=z_bg0, a=la)
+    la = a * lane_alpha * (1 - fw)
+    if la > 0:
+        ActiveSkin.lane_background.draw(place(layout_stage_lane_by_edges(l, r)), z=z_bg0, a=la)
 
         p_left = left_border_style.progress
         if left_border_style.start == left_border_style.end:
@@ -876,7 +1008,7 @@ def draw_dynamic_stage(
     ja_single = ja * w_single_line
 
     if ja_bar > 0:
-        bg_layout = perspective_rect(l_jl, r_jl, 1 - nh, 1 + nh, travel)
+        bg_layout = place(perspective_rect(l_jl, r_jl, 1 - nh, 1 + nh, travel))
         if sprites_same:
             sprites_a.judgment_background.draw(bg_layout, z=z_bg1_a, a=ja_bar)
         else:
@@ -961,7 +1093,7 @@ def draw_dynamic_stage(
             draw_single_line(sprites_a, z_single_a, ja_single * (1 - p_sprites))
             draw_single_line(sprites_b, z_single_b, ja_single * p_sprites)
 
-    draw_per_stage_cover(l, r, a, lane_alpha, alpha)
+    draw_per_stage_cover(l, r, a, lane_alpha, alpha, order, transform)
 
 
 def draw_fallback_stage(
@@ -970,6 +1102,7 @@ def draw_fallback_stage(
     division_size: int,
     parity: DivisionParity,
     pivot: float,
+    order: int,
     a: float,
     lane_alpha: float = 1,
     judge_line_alpha: float = 1,
@@ -977,7 +1110,12 @@ def draw_fallback_stage(
     alpha: float = 1,
     judge_line_style: Transition[JudgeLineStyle] | JudgeLineStyle = JudgeLineStyle.DEFAULT,
     full_width: float = 0,
+    *,
+    transform: AffineTransform2d,
 ):
+    def place(q: QuadLike) -> QuadLike:
+        return transform.transform_quad(q)
+
     judge_line_style = normalize_transition(judge_line_style)
     w_default = judge_line_style_weight(judge_line_style, JudgeLineStyle.DEFAULT)
     w_single_line = judge_line_style_weight(judge_line_style, JudgeLineStyle.SINGLE_LINE)
@@ -993,19 +1131,19 @@ def draw_fallback_stage(
     z_mid = get_z_alt(LAYER_STAGE, 1)
     z_hi = get_z_alt(LAYER_STAGE, 2)
     z_single = get_z_alt(LAYER_STAGE, 3)
-    la = a * lane_alpha
+    la = a * lane_alpha * (1 - fw)
     ja = a * judge_line_alpha
     if la > 0:
         # Artificially thicken the top so it renders better
         layout_b = layout_stage_lane_by_edges(l - 0.25, l)
         layout_t = layout_stage_lane_by_edges(tilt_widened_edge(l - 0.25, l - 1), l)
         ActiveSkin.stage_left_border.draw(
-            Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br), z=z_mid, a=la
+            place(Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br)), z=z_mid, a=la
         )
         layout_b = layout_stage_lane_by_edges(r, r + 0.25)
         layout_t = layout_stage_lane_by_edges(r, tilt_widened_edge(r + 0.25, r + 1))
         ActiveSkin.stage_right_border.draw(
-            Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br), z=z_mid, a=la
+            place(Quad(bl=layout_b.bl, tl=layout_t.tl, tr=layout_t.tr, br=layout_b.br)), z=z_mid, a=la
         )
 
         eps = 0.001
@@ -1017,27 +1155,39 @@ def draw_fallback_stage(
             k_end = ceil((r - shifted_pivot - eps) / division_size) - 1
             for k in range(k_start, k_end + 1):
                 pos = shifted_pivot + k * division_size
-                ActiveSkin.lane.draw(layout_stage_lane_by_edges(prev, pos), a=la, z=z_lo)
+                ActiveSkin.lane.draw(place(layout_stage_lane_by_edges(prev, pos)), a=la, z=z_lo)
                 prev = pos
-        ActiveSkin.lane.draw(layout_stage_lane_by_edges(prev, r), a=la, z=z_lo)
+        ActiveSkin.lane.draw(place(layout_stage_lane_by_edges(prev, r)), a=la, z=z_lo)
 
     if ja * w_default > 0:
-        layout = perspective_rect(l_jl, r_jl, t=1 - nh, b=1 + nh, travel=travel)
+        layout = place(perspective_rect(l_jl, r_jl, t=1 - nh, b=1 + nh, travel=travel))
         ActiveSkin.judgment_line.draw(layout, z=z_hi, a=ja * w_default)
     if ja * w_single_line > 0:
         half_thick = nh / JUDGE_LINE_BORDER_FACTOR / 2
-        layout = perspective_rect(l_jl, r_jl, t=1 - half_thick, b=1 + half_thick, travel=travel)
+        layout = place(perspective_rect(l_jl, r_jl, t=1 - half_thick, b=1 + half_thick, travel=travel))
         ActiveSkin.judgment_line.draw(layout, z=z_single, a=ja * w_single_line)
 
-    draw_per_stage_cover(l, r, a, lane_alpha, alpha)
+    draw_per_stage_cover(l, r, a, lane_alpha, alpha, order, transform)
 
 
-def draw_per_stage_cover(l: float, r: float, a: float, lane_alpha: float, alpha: float):
+def draw_per_stage_cover(
+    l: float,
+    r: float,
+    a: float,
+    lane_alpha: float,
+    alpha: float,
+    order: int,
+    transform: AffineTransform2d,
+):
     if not LevelConfig.dynamic_stages:
         return
     ca = a * lane_alpha
     if ca <= 0:
         return
+
+    def place(q: QuadLike) -> QuadLike:
+        return transform.transform_quad(q)
+
     z_cover = get_z_alt(LAYER_COVER)
     z_line = get_z_alt(LAYER_COVER, 1)
     z_hidden = get_z_alt(LAYER_COVER, 2)
@@ -1045,18 +1195,18 @@ def draw_per_stage_cover(l: float, r: float, a: float, lane_alpha: float, alpha:
         match Options.stage_cover_mode:
             case StageCoverMode.STAGE:
                 layout = layout_stage_cover(l, r)
-                ActiveSkin.cover.draw(layout, z=z_cover, a=Options.stage_cover_alpha * ca * alpha)
+                ActiveSkin.cover.draw(place(layout), z=z_cover, a=Options.stage_cover_alpha * ca * alpha)
             case StageCoverMode.STAGE_AND_LINE:
                 cover_layout, line_layout = layout_stage_cover_and_line(l, r)
-                ActiveSkin.cover.draw(cover_layout, z=z_cover, a=Options.stage_cover_alpha * ca * alpha)
-                ActiveSkin.guide_neutral.draw(line_layout, z=z_line, a=0.75 * ca * alpha)
+                ActiveSkin.cover.draw(place(cover_layout), z=z_cover, a=Options.stage_cover_alpha * ca * alpha)
+                ActiveSkin.guide_neutral.draw(place(line_layout), z=z_line, a=0.75 * ca * alpha)
             case StageCoverMode.FULL_WIDTH:
                 pass
             case _:
                 assert_never(Options.stage_cover_mode)
     if Options.hidden > 0:
         layout = layout_hidden_cover(l, r)
-        ActiveSkin.cover.draw(layout, z=z_hidden, a=ca)
+        ActiveSkin.cover.draw(place(layout), z=z_hidden, a=ca * alpha)
 
 
 def draw_stage_cover(alpha):
@@ -1206,10 +1356,10 @@ def get_score_rank(score):
         return ScoreRankType.D
 
 
-def play_lane_hit_effects(lane: float, sfx: bool = True):
+def play_lane_hit_effects(lane: float, sfx: bool = True, *, transform: AffineTransform2d):
     if sfx or not Options.prevent_empty_lane_sfx:
         play_lane_sfx(lane)
-    play_lane_particle(lane)
+    play_lane_particle(lane, transform)
 
 
 def play_lane_sfx(lane: float):
@@ -1222,7 +1372,7 @@ def schedule_lane_sfx(lane: float, target_time: float):
         Effects.stage.schedule(target_time, SFX_DISTANCE)
 
 
-def play_lane_particle(lane: float):
+def play_lane_particle(lane: float, transform: AffineTransform2d):
     if Options.lane_effect_enabled:
-        layout = layout_particle_lane(lane, 0.5)
+        layout = transform.transform_quad(layout_particle_lane(lane, 0.5))
         ActiveParticles.lane.spawn(layout, duration=0.3 / Options.effect_animation_speed)

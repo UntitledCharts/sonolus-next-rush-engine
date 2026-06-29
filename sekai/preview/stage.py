@@ -36,6 +36,10 @@ from sekai.preview.layout import (
 )
 
 
+def preview_stage_x_shift(props: StageProps) -> float:
+    return props.x_lane_translate
+
+
 def draw_preview_stage():
     for col in range(PreviewLayout.column_count):
         left_border_layout = layout_preview_lane_by_edges(-6.5, -6, col)
@@ -128,10 +132,12 @@ def draw_dynamic_stage_lane_bg_slice(
         return
 
     bound = PreviewLayout.lane_bound
-    mask_l_a = max(props_a.lane - props_a.width, -bound)
-    mask_r_a = min(props_a.lane + props_a.width, bound)
-    mask_l_b = max(props_b.lane - props_b.width, -bound)
-    mask_r_b = min(props_b.lane + props_b.width, bound)
+    shift_a = preview_stage_x_shift(props_a)
+    shift_b = preview_stage_x_shift(props_b)
+    mask_l_a = max(props_a.lane - props_a.width + shift_a, -bound)
+    mask_r_a = min(props_a.lane + props_a.width + shift_a, bound)
+    mask_l_b = max(props_b.lane - props_b.width + shift_b, -bound)
+    mask_r_b = min(props_b.lane + props_b.width + shift_b, bound)
     if mask_l_a >= mask_r_a and mask_l_b >= mask_r_b:
         return
 
@@ -153,14 +159,16 @@ def draw_dynamic_stage_border_slice(
     if alpha <= 0:
         return
 
+    shift_a = preview_stage_x_shift(props_a)
+    shift_b = preview_stage_x_shift(props_b)
     if is_left:
-        edge_a = props_a.lane - props_a.width
-        edge_b = props_b.lane - props_b.width
+        edge_a = props_a.lane - props_a.width + shift_a
+        edge_b = props_b.lane - props_b.width + shift_b
         style_a = props_a.left_border_style
         style_b = props_b.left_border_style
     else:
-        edge_a = props_a.lane + props_a.width
-        edge_b = props_b.lane + props_b.width
+        edge_a = props_a.lane + props_a.width + shift_a
+        edge_b = props_b.lane + props_b.width + shift_b
         style_a = props_a.right_border_style
         style_b = props_b.right_border_style
 
@@ -339,13 +347,15 @@ def draw_dynamic_stage_division_set(
     divider_w = PREVIEW_DYNAMIC_STAGE_DIVIDER_W
     bound = PreviewLayout.lane_bound
 
-    mask_l_a = max(props_a.lane - props_a.width, -bound)
-    mask_r_a = min(props_a.lane + props_a.width, bound)
-    mask_l_b = max(props_b.lane - props_b.width, -bound)
-    mask_r_b = min(props_b.lane + props_b.width, bound)
+    shift_a = preview_stage_x_shift(props_a)
+    shift_b = preview_stage_x_shift(props_b)
+    mask_l_a = max(props_a.lane - props_a.width + shift_a, -bound)
+    mask_r_a = min(props_a.lane + props_a.width + shift_a, bound)
+    mask_l_b = max(props_b.lane - props_b.width + shift_b, -bound)
+    mask_r_b = min(props_b.lane + props_b.width + shift_b, bound)
 
-    shifted_pivot_a = props_a.pivot_lane + parity_offset
-    shifted_pivot_b = props_b.pivot_lane + parity_offset
+    shifted_pivot_a = props_a.pivot_lane + parity_offset + shift_a
+    shifted_pivot_b = props_b.pivot_lane + parity_offset + shift_b
 
     # k range: union of indices that could be visible at either endpoint.
     k_lo = min(floor((mask_l_a - shifted_pivot_a + eps) / size), floor((mask_l_b - shifted_pivot_b + eps) / size)) + 1
@@ -362,12 +372,14 @@ def draw_dynamic_stage_division_set(
         elif in_mask_b:
             t_entry = bsearch_divider_mask_edge(stage, k, size, parity_offset, t_a, t_b, target_in_mask=True)
             if t_entry < t_b:
-                pos_entry = get_stage_props(stage, t_entry).pivot_lane + parity_offset + k * size
+                props_entry = get_stage_props(stage, t_entry)
+                pos_entry = props_entry.pivot_lane + parity_offset + k * size + preview_stage_x_shift(props_entry)
                 draw_divider_strip(pos_entry, pos_b, t_entry, t_b, divider_w, col, alpha, z)
         elif in_mask_a:
             t_exit = bsearch_divider_mask_edge(stage, k, size, parity_offset, t_a, t_b, target_in_mask=False)
             if t_exit > t_a:
-                pos_exit = get_stage_props(stage, t_exit).pivot_lane + parity_offset + k * size
+                props_exit = get_stage_props(stage, t_exit)
+                pos_exit = props_exit.pivot_lane + parity_offset + k * size + preview_stage_x_shift(props_exit)
                 draw_divider_strip(pos_a, pos_exit, t_a, t_exit, divider_w, col, alpha, z)
 
 
@@ -401,9 +413,10 @@ def bsearch_divider_mask_edge(
     for _ in range(PREVIEW_DYNAMIC_STAGE_BSEARCH_ITERS):
         t_mid = (bisect_lo + bisect_hi) / 2
         props = get_stage_props(stage, t_mid)
-        divider_pos = props.pivot_lane + parity_offset + k * size
-        mask_l = max(props.lane - props.width, -bound)
-        mask_r = min(props.lane + props.width, bound)
+        shift = preview_stage_x_shift(props)
+        divider_pos = props.pivot_lane + parity_offset + k * size + shift
+        mask_l = max(props.lane - props.width + shift, -bound)
+        mask_r = min(props.lane + props.width + shift, bound)
         in_mask = mask_l + eps < divider_pos < mask_r - eps
         if in_mask == target_in_mask:
             bisect_hi = t_mid

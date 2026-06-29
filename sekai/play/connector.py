@@ -37,7 +37,7 @@ from sekai.lib.connector import (
     update_linear_connector_particle,
 )
 from sekai.lib.ease import EaseType, ease
-from sekai.lib.layout import compute_hitbox, current_layout_transform
+from sekai.lib.layout import StageTransform, blend_stage_transform, compute_hitbox, current_layout_transform
 from sekai.lib.note import draw_hitbox_bounds_overlay, draw_slide_note_head, get_attach_params
 from sekai.lib.options import Options
 from sekai.lib.stage import get_stage_props
@@ -167,6 +167,11 @@ class Connector(PlayArchetype):
                     tail.y_offset_at(oat),
                     oat,
                 )
+                input_transform = blend_stage_transform(
+                    head._basic_visual_stage_transform(),
+                    tail._basic_visual_stage_transform(),
+                    unlerp_clamped(head.target_time, tail.target_time, oat),
+                )
                 # We could offset adjust this, but it doesn't really matter since this is just for the visual
                 # active state of the connector.
                 self.active_connector_info.input_bounds @= compute_hitbox(
@@ -175,6 +180,7 @@ class Connector(PlayArchetype):
                     input_size,
                     CONNECTOR_LENIENCY,
                     input_y_offset,
+                    stage_transform=input_transform.transform(),
                 ).bounds
                 bounds = self.active_connector_info.input_bounds
                 for touch in touches():
@@ -259,6 +265,9 @@ class Connector(PlayArchetype):
             if self.active_tail_ref.index > 0 and self.active_tail.is_despawned:
                 self.despawn = True
                 return
+            head_transform = +StageTransform
+            tail_transform = +StageTransform
+            tail_transform @= tail.visual_stage_transform()
             if current_time >= head.target_time and not segment_head.segment_through_judge_line:
                 head_visual_progress = 1.0 - remap_clamped(
                     head.target_time, tail.target_time, head.visual_y_offset, tail.visual_y_offset, time()
@@ -268,6 +277,7 @@ class Connector(PlayArchetype):
                     head_lane = head.visual_lane
                     head_size = head.size
                     head_ease_frac = head.head_ease_frac
+                    head_transform @= head.visual_stage_transform()
                 else:
                     head_ease_frac = remap_clamped(
                         head.target_time, tail.target_time, head.head_ease_frac, tail.tail_ease_frac, current_time
@@ -279,12 +289,17 @@ class Connector(PlayArchetype):
                     )
                     head_lane = lerp(head.visual_lane, tail.visual_lane, head_interp_frac)
                     head_size = lerp(head.size, tail.size, head_interp_frac)
+                    # Head has crossed the judge line, so its transform is the connector's blend at that point.
+                    head_transform @= blend_stage_transform(
+                        head.visual_stage_transform(), tail.visual_stage_transform(), head_interp_frac
+                    )
             else:
                 head_lane = head.visual_lane
                 head_size = head.size
                 head_visual_progress = head.visual_progress
                 head_target_time = head.target_time
                 head_ease_frac = head.head_ease_frac
+                head_transform @= head.visual_stage_transform()
             draw_connector(
                 kind=self.kind,
                 visual_state=visual_state,
@@ -307,6 +322,8 @@ class Connector(PlayArchetype):
                 layer=segment_head.segment_layer,
                 presentation=segment_head.segment_presentation,
                 bypass_tail_target_time_check=segment_head.segment_through_judge_line,
+                head_transform=head_transform,
+                tail_transform=tail_transform,
             )
         if Options.show_hitboxes and self.active_head_ref.index > 0 and time() in self.input_active_interval:
             draw_hitbox_bounds_overlay(self.active_connector_info.input_bounds, 0.6)
@@ -430,6 +447,7 @@ class SlideManager(PlayArchetype):
         if current_time < self.active_head.target_time:
             return
         info = self.active_head.active_connector_info
+        head_transform = self.active_segment_transform().transform()
         match info.connector_kind:
             case (
                 ConnectorKind.ACTIVE_NORMAL
@@ -452,6 +470,7 @@ class SlideManager(PlayArchetype):
                         info.visual_lane,
                         replace,
                         info.visual_y_offset,
+                        transform=head_transform,
                     )
                     update_linear_connector_particle(
                         self.linear_particle,
@@ -459,6 +478,7 @@ class SlideManager(PlayArchetype):
                         info.visual_lane,
                         replace,
                         info.visual_y_offset,
+                        transform=head_transform,
                     )
                     if self.last_effect_kind != info.connector_kind:
                         connector_effect_kind_stream[adj_time] = info.connector_kind
@@ -470,7 +490,7 @@ class SlideManager(PlayArchetype):
                             current_time + trail_period / 2,
                         )
                         spawn_linear_connector_trail_particle(
-                            info.connector_kind, info.visual_lane, info.visual_y_offset
+                            info.connector_kind, info.visual_lane, info.visual_y_offset, transform=head_transform
                         )
                     slot_period = CONNECTOR_SLOT_SPAWN_PERIOD / Options.effect_animation_speed
                     if current_time >= self.next_slot_spawn_time:
@@ -479,7 +499,11 @@ class SlideManager(PlayArchetype):
                             current_time + slot_period / 2,
                         )
                         spawn_connector_slot_particles(
-                            info.connector_kind, info.visual_lane, info.visual_size, info.visual_y_offset
+                            info.connector_kind,
+                            info.visual_lane,
+                            info.visual_size,
+                            info.visual_y_offset,
+                            transform=head_transform,
                         )
                     draw_connector_slot_glow_effect(
                         info.connector_kind,
@@ -487,6 +511,7 @@ class SlideManager(PlayArchetype):
                         info.visual_lane,
                         info.visual_size,
                         info.visual_y_offset,
+                        transform=head_transform,
                     )
             case _:
                 destroy_looped_particle(self.circular_particle)
@@ -508,6 +533,7 @@ class SlideManager(PlayArchetype):
                     info.visual_size,
                     self.active_head.target_time,
                     1.0 - info.visual_y_offset,
+                    transform=head_transform,
                 )
             case _:
                 pass
@@ -589,6 +615,26 @@ class SlideManager(PlayArchetype):
                 Streams.connector_critical_sfx_times[0][event_time] = times
             case _:
                 pass
+
+    def active_segment_transform(self) -> StageTransform:
+        result = +StageTransform
+        head_ref = +self.active_head_ref
+        next_ref = +head_ref.get().next_ref
+        while next_ref.index > 0 and time() >= next_ref.get().target_time:
+            head_ref.index = next_ref.index
+            next_ref.index = head_ref.get().next_ref.index
+        seg_head = head_ref.get()
+        if next_ref.index > 0:
+            seg_tail = next_ref.get()
+            frac = remap_clamped(seg_head.target_time, seg_tail.target_time, 0.0, 1.0, time())
+            result @= blend_stage_transform(
+                seg_head.visual_stage_transform(),
+                seg_tail.visual_stage_transform(),
+                ease(seg_head.connector_ease, frac),
+            )
+        else:
+            result @= seg_head.visual_stage_transform()
+        return result
 
     @property
     def active_head(self) -> note.BaseNote:

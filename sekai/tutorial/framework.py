@@ -33,7 +33,7 @@ from sekai.lib.connector import (
     update_linear_connector_particle,
 )
 from sekai.lib.ease import EaseType, ease
-from sekai.lib.layout import FlickDirection, transformed_vec_at
+from sekai.lib.layout import IDENTITY_AFFINE_TRANSFORM, FlickDirection, transformed_vec_at
 from sekai.lib.note import (
     NoteKind,
     draw_note,
@@ -265,6 +265,7 @@ class QueuedTutorialNoteDraw(Record):
             visual_progress=self.progress + self.note.offset,
             direction=self.note.direction,
             target_time=time() + 1 - self.progress - self.note.offset,
+            transform=IDENTITY_AFFINE_TRANSFORM,
         )
 
 
@@ -279,6 +280,7 @@ class QueuedTutorialNotePlayHitEffects(Record):
             size=self.note.size,
             direction=self.note.direction,
             judgment=Judgment.PERFECT,
+            transform=IDENTITY_AFFINE_TRANSFORM,
         )
 
 
@@ -346,37 +348,40 @@ class QueuedTutorialNoteDrawConnectorTo(Record):
                 kind,
                 lane,
                 replace=False,
+                transform=IDENTITY_AFFINE_TRANSFORM,
             )
             update_linear_connector_particle(
                 handles.linear,
                 kind,
                 lane,
                 replace=False,
+                transform=IDENTITY_AFFINE_TRANSFORM,
             )
             if time() >= handles.next_trail_spawn_time:
                 handles.next_trail_spawn_time = max(
                     handles.next_trail_spawn_time + CONNECTOR_TRAIL_SPAWN_PERIOD,
                     time() + CONNECTOR_TRAIL_SPAWN_PERIOD / 2,
                 )
-                spawn_linear_connector_trail_particle(kind, lane)
+                spawn_linear_connector_trail_particle(kind, lane, transform=IDENTITY_AFFINE_TRANSFORM)
             if time() >= handles.next_slot_spawn_time:
                 handles.next_slot_spawn_time = max(
                     handles.next_slot_spawn_time + CONNECTOR_SLOT_SPAWN_PERIOD,
                     time() + CONNECTOR_SLOT_SPAWN_PERIOD / 2,
                 )
-                spawn_connector_slot_particles(kind, lane, size)
+                spawn_connector_slot_particles(kind, lane, size, transform=IDENTITY_AFFINE_TRANSFORM)
             update_connector_sfx(
                 handles.sfx,
                 kind,
                 replace=False,
             )
-            draw_connector_slot_glow_effect(kind, head_target_time, lane, size)
+            draw_connector_slot_glow_effect(kind, head_target_time, lane, size, transform=IDENTITY_AFFINE_TRANSFORM)
             draw_slide_note_head(
                 self.active_head_kind,
                 kind,
                 lane,
                 size,
                 head_target_time,
+                transform=IDENTITY_AFFINE_TRANSFORM,
             )
             if self.show_touch:
                 paint_hold_motion(transformed_vec_at(lane))

@@ -6,6 +6,7 @@ from sekai.lib.custom_elements import LifeManager, ScoreIndicator
 from sekai.lib.events import reset_fever_bounds
 from sekai.lib.initialization import LastNote
 from sekai.lib.layout import (
+    IDENTITY_AFFINE_TRANSFORM,
     StaticStageData,
     refresh_layout,
 )
@@ -74,4 +75,4 @@ class WatchScheduledLaneEffect(WatchArchetype):
     def initialize(self):
         if is_skip():
             return
-        play_lane_particle(self.lane)
+        play_lane_particle(self.lane, IDENTITY_AFFINE_TRANSFORM)

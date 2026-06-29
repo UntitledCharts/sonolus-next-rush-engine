@@ -19,7 +19,13 @@ from sekai.lib import archetype_names
 from sekai.lib.baseevent import BaseEvent, init_event_list
 from sekai.lib.ease import EaseType
 from sekai.lib.events import Fever, draw_judgment_effect
-from sekai.lib.layout import ZoomVerticalAlign, preempt_time
+from sekai.lib.layout import (
+    StageTransform,
+    StageTransformAnchor,
+    ZoomVerticalAlign,
+    identity_stage_transform,
+    preempt_time,
+)
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options
 from sekai.lib.stage import (
@@ -70,10 +76,12 @@ class WatchCameraChange(WatchArchetype, BaseEvent):
 class WatchStageTransformChange(WatchArchetype, BaseEvent):
     name = archetype_names.STAGE_TRANSFORM_CHANGE
 
+    stage_ref: EntityRef[WatchDynamicStage] = imported(name="stage")
     beat: StandardImport.BEAT
     rotate: float = imported()
     x_lane_translate: float = imported(name="xLaneTranslate")
     y_lane_translate: float = imported(name="yLaneTranslate")
+    anchor: StageTransformAnchor = imported(name="anchor")
     ease: EaseType = imported()
     next_ref: EntityRef[WatchStageTransformChange] = imported(name="next")
 
@@ -82,6 +90,7 @@ class WatchStageTransformChange(WatchArchetype, BaseEvent):
     @callback(order=-2)
     def preprocess(self):
         LevelConfig.dynamic_stages = True
+        LevelConfig.has_stage_transforms = True
         self.time = beat_to_time(self.beat)
         self.rotate = self.rotate * pi / 180
         if Options.mirror:
@@ -97,6 +106,7 @@ class WatchDynamicStage(WatchArchetype):
     first_mask_change_ref: EntityRef[WatchStageMaskChange] = imported(name="firstMaskChange")
     first_pivot_change_ref: EntityRef[WatchStagePivotChange] = imported(name="firstPivotChange")
     first_style_change_ref: EntityRef[WatchStageStyleChange] = imported(name="firstStyleChange")
+    first_transform_change_ref: EntityRef[WatchStageTransformChange] = imported(name="firstTransformChange")
 
     start_time: float = entity_data()
     end_time: float = entity_data()
@@ -112,6 +122,7 @@ class WatchDynamicStage(WatchArchetype):
         init_event_list(self.first_mask_change_ref)
         init_event_list(self.first_pivot_change_ref)
         init_event_list(self.first_style_change_ref)
+        init_event_list(self.first_transform_change_ref)
         self.start_time = get_start_time(self)
         self.end_time = get_end_time(self)
         self.draw_start_time = get_draw_start_time(self)
@@ -132,18 +143,28 @@ class WatchDynamicStage(WatchArchetype):
         if self.props.a > 0:
             l = self.props.lane - self.props.width
             r = self.props.lane + self.props.width
+            stage_transform = +StageTransform
+            if self.props.has_transform():
+                stage_transform @= self.props.stage_transform()
+            else:
+                stage_transform @= identity_stage_transform()
+            transform = stage_transform.transform()
 
             if l < Fever.min_l:
                 Fever.min_l = l
                 Fever.alpha_l = self.props.a
+                Fever.left_transform = transform
             elif l == Fever.min_l and self.props.a > Fever.alpha_l:
                 Fever.alpha_l = self.props.a
+                Fever.left_transform = transform
 
             if r > Fever.max_r:
                 Fever.max_r = r
                 Fever.alpha_r = self.props.a
+                Fever.right_transform = transform
             elif r == Fever.max_r and self.props.a > Fever.alpha_r:
                 Fever.alpha_r = self.props.a
+                Fever.right_transform = transform
 
             Fever.has_active = True
             Fever.y_offset = self.props.y_offset
@@ -159,7 +180,19 @@ class WatchDynamicStage(WatchArchetype):
             if elapsed < 6:
                 l = self.props.lane - self.props.width
                 r = self.props.lane + self.props.width
-                draw_judgment_effect(elapsed, l, r, self.props.a, self.props.y_offset)
+                stage_transform = +StageTransform
+                if self.props.has_transform():
+                    stage_transform @= self.props.stage_transform()
+                else:
+                    stage_transform @= identity_stage_transform()
+                draw_judgment_effect(
+                    elapsed,
+                    l,
+                    r,
+                    self.props.a,
+                    self.props.y_offset,
+                    transform=stage_transform.transform(),
+                )
 
 
 class WatchStageMaskChange(WatchArchetype, BaseEvent):
@@ -176,6 +209,7 @@ class WatchStageMaskChange(WatchArchetype, BaseEvent):
 
     @callback(order=-3)
     def preprocess(self):
+        LevelConfig.dynamic_stages = True
         self.time = beat_to_time(self.beat)
         if Options.mirror:
             self.lane *= -1
@@ -199,6 +233,7 @@ class WatchStagePivotChange(WatchArchetype, BaseEvent):
 
     @callback(order=-3)
     def preprocess(self):
+        LevelConfig.dynamic_stages = True
         self.time = beat_to_time(self.beat)
         self.y_offset = self.abs_y_offset + self.y_beat_offset * 60 / beat_to_bpm(self.beat) / preempt_time()
         if Options.mirror:
@@ -226,6 +261,7 @@ class WatchStageStyleChange(WatchArchetype, BaseEvent):
 
     @callback(order=-3)
     def preprocess(self):
+        LevelConfig.dynamic_stages = True
         self.time = beat_to_time(self.beat)
         if Options.mirror:
             self.left_border_style, self.right_border_style = self.right_border_style, self.left_border_style

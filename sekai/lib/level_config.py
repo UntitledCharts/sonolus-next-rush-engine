@@ -17,6 +17,7 @@ class LevelConfig:
     revision: EngineRevision
     score_mode: ScoreMode
     dynamic_stages: bool
+    has_stage_transforms: bool
     skip_default_stage: bool
     ui_version: Version
     particle_version: Version

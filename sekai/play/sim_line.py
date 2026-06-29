@@ -49,6 +49,8 @@ class SimLine(PlayArchetype):
             right_lane=self.right.visual_lane,
             right_visual_progress=self.right.visual_progress,
             right_target_time=self.right.target_time,
+            left_transform=self.left._basic_visual_stage_transform().transform(),
+            right_transform=self.right._basic_visual_stage_transform().transform(),
         )
 
     @property

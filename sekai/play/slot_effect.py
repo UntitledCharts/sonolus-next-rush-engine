@@ -3,6 +3,7 @@ from sonolus.script.runtime import time
 from sonolus.script.sprite import Sprite
 
 from sekai.lib import archetype_names
+from sekai.lib.layout import AffineTransform2d
 from sekai.lib.options import Options
 from sekai.lib.slot_effect import (
     SLOT_EFFECT_DURATION,
@@ -22,6 +23,7 @@ class SlotGlowEffect(PlayArchetype):
     lane: float = entity_memory()
     size: float = entity_memory()
     y_offset: float = entity_memory()
+    transform: AffineTransform2d = entity_memory()
     end_time: float = entity_memory()
     group_id: float = entity_memory()
     generation: float = entity_memory()
@@ -47,6 +49,7 @@ class SlotGlowEffect(PlayArchetype):
             self.lane,
             0.5,
             y_offset=self.y_offset,
+            transform=self.transform,
         )
 
 
@@ -57,6 +60,7 @@ class SlotEffect(PlayArchetype):
     start_time: float = entity_memory()
     lane: float = entity_memory()
     y_offset: float = entity_memory()
+    transform: AffineTransform2d = entity_memory()
     end_time: float = entity_memory()
     group_id: float = entity_memory()
     generation: float = entity_memory()
@@ -81,6 +85,7 @@ class SlotEffect(PlayArchetype):
             self.end_time,
             self.lane,
             y_offset=self.y_offset,
+            transform=self.transform,
         )
 
 

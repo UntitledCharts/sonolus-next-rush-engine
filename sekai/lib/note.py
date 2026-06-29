@@ -49,6 +49,8 @@ from sekai.lib.layer import (
     get_z_alt,
 )
 from sekai.lib.layout import (
+    IDENTITY_AFFINE_TRANSFORM,
+    AffineTransform2d,
     DynamicLayout,
     FlickDirection,
     Hitbox,
@@ -338,14 +340,15 @@ def draw_note(
     visual_progress: float,
     direction: FlickDirection,
     target_time: float,
+    transform: AffineTransform2d,
 ):
     if not DynamicLayout.progress_start <= visual_progress <= DynamicLayout.progress_cutoff:
         return
     travel = approach(visual_progress)
     sprite_set = get_note_sprite_set(kind, direction)
-    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time)
-    draw_note_arrow(sprite_set.arrow, kind, lane, size, travel, target_time, direction)
-    draw_note_tick(sprite_set.tick, lane, travel, target_time)
+    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform)
+    draw_note_arrow(sprite_set.arrow, kind, lane, size, travel, target_time, direction, transform)
+    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform)
 
 
 def draw_slide_note_head(
@@ -355,6 +358,8 @@ def draw_slide_note_head(
     size: float,
     target_time: float,
     visual_progress: float = 1.0,
+    *,
+    transform: AffineTransform2d,
 ):
     if Options.hidden > 0:
         return
@@ -368,8 +373,8 @@ def draw_slide_note_head(
     travel = approach(visual_progress)
     sprite_set = get_note_sprite_set(kind, FlickDirection.UP_OMNI)
     etc = get_active_connector_z_offset(connector_kind, False)
-    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, etc)
-    draw_note_tick(sprite_set.tick, lane, travel, target_time, etc)
+    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, etc=etc)
+    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, etc=etc)
 
 
 def note_kind_as_normal(kind: NoteKind) -> NoteKind:
@@ -546,36 +551,47 @@ def draw_note_body(
     size: float,
     travel: float,
     target_time: float,
+    transform: AffineTransform2d,
     etc: int = 0,
 ):
     layer = get_note_body_layer(kind)
     a = get_alpha(target_time)
     z = get_z(layer, time=target_time, lane=lane, etc=etc)
+
+    def place(q):
+        return transform.transform_quad(q)
     match sprites.render_type:
         case BodyRenderType.NORMAL:
             left_layout, middle_layout, right_layout = layout_regular_note_body(lane, size, travel)
-            sprites.left.draw(left_layout, z=z, a=a)
-            sprites.middle.draw(middle_layout, z=z, a=a)
-            sprites.right.draw(right_layout, z=z, a=a)
+            sprites.left.draw(place(left_layout), z=z, a=a)
+            sprites.middle.draw(place(middle_layout), z=z, a=a)
+            sprites.right.draw(place(right_layout), z=z, a=a)
         case BodyRenderType.SLIM:
             left_layout, middle_layout, right_layout = layout_slim_note_body(lane, size, travel)
-            sprites.left.draw(left_layout, z=z, a=a)
-            sprites.middle.draw(middle_layout, z=z, a=a)
-            sprites.right.draw(right_layout, z=z, a=a)
+            sprites.left.draw(place(left_layout), z=z, a=a)
+            sprites.middle.draw(place(middle_layout), z=z, a=a)
+            sprites.right.draw(place(right_layout), z=z, a=a)
         case BodyRenderType.NORMAL_FALLBACK:
             layout = layout_regular_note_body_fallback(lane, size, travel)
-            sprites.middle.draw(layout, z=z, a=a)
+            sprites.middle.draw(place(layout), z=z, a=a)
         case BodyRenderType.SLIM_FALLBACK:
             layout = layout_slim_note_body_fallback(lane, size, travel)
-            sprites.middle.draw(layout, z=z, a=a)
+            sprites.middle.draw(place(layout), z=z, a=a)
 
 
-def draw_note_tick(sprite: Sprite, lane: float, travel: float, target_time: float, etc: int = 0):
+def draw_note_tick(
+    sprite: Sprite,
+    lane: float,
+    travel: float,
+    target_time: float,
+    transform: AffineTransform2d,
+    etc: int = 0,
+):
     if not sprite.is_available:
         return
     a = get_alpha(target_time)
     z = get_z(LAYER_NOTE_TICK, time=target_time, lane=lane, etc=etc)
-    layout = layout_tick(lane, travel)
+    layout = transform.transform_quad(layout_tick(lane, travel))
     sprite.draw(layout, z=z, a=a)
 
 
@@ -587,6 +603,7 @@ def draw_note_arrow(
     travel: float,
     target_time: float,
     direction: FlickDirection,
+    transform: AffineTransform2d,
 ):
     arrow_sprite = sprites.get_sprite(size, direction)
     if not arrow_sprite.is_available:
@@ -606,10 +623,10 @@ def draw_note_arrow(
     z = get_z(get_flick_layer(kind), time=target_time, lane=lane)
     match sprites.render_type:
         case ArrowRenderType.NORMAL:
-            layout = layout_flick_arrow(lane, size, direction, travel, animation_progress)
+            layout = transform.transform_quad(layout_flick_arrow(lane, size, direction, travel, animation_progress))
             arrow_sprite.draw(layout, z=z, a=a)
         case ArrowRenderType.FALLBACK:
-            layout = layout_flick_arrow_fallback(lane, size, direction, travel, animation_progress)
+            layout = transform.transform_quad(layout_flick_arrow_fallback(lane, size, direction, travel, animation_progress))
             arrow_sprite.draw(layout, z=z, a=a)
 
 
@@ -840,6 +857,9 @@ def play_note_hit_effects(
     half_offset: bool = False,
     slot_effect_group_id: float = 0.0,
     single_line: bool = False,
+    lane_particles: bool = True,
+    *,
+    transform: AffineTransform2d,
 ):
     # Damage with overridden sfx can play, so this goes before the damage check
     sfx = get_note_effect(effect_kind, judgment)
@@ -860,6 +880,7 @@ def play_note_hit_effects(
                 pivot_lane=pivot_lane,
                 half_offset=half_offset,
                 managed=False,
+                transform=transform,
             )
         elif not is_watch():
             schedule_note_particles(
@@ -874,6 +895,7 @@ def play_note_hit_effects(
                 pivot_lane=pivot_lane,
                 half_offset=half_offset,
                 group_id=slot_effect_group_id,
+                transform=transform,
             )
     if Options.slot_effect_enabled and not is_watch():
         schedule_note_slot_effects(
@@ -888,6 +910,7 @@ def play_note_hit_effects(
             half_offset=half_offset,
             group_id=slot_effect_group_id,
             single_line=single_line,
+            transform=transform,
         )
 
 
@@ -903,6 +926,8 @@ def schedule_note_particles(
     pivot_lane: float = 0.0,
     half_offset: bool = False,
     group_id: float = 0.0,
+    *,
+    transform: AffineTransform2d,
 ):
     if is_tutorial():
         return
@@ -920,6 +945,7 @@ def schedule_note_particles(
         half_offset=half_offset,
         target_time=target_time,
         group_id=group_id,
+        transform=transform,
     )
 
 
@@ -935,7 +961,11 @@ def handle_note_particles(
     half_offset: bool = False,
     managed: bool = True,
     group_id: float = 0.0,
+    transform: AffineTransform2d = IDENTITY_AFFINE_TRANSFORM,
 ):
+    def place(q):
+        return transform.transform_quad(q)
+
     if kind == NoteKind.DAMAGE and judgment == Judgment.PERFECT:
         # An avoided damage note (perfect) plays no particles.
         return
@@ -949,7 +979,7 @@ def handle_note_particles(
                 for slot_lane in _iter_bundled_slot_lanes(lane, size):
                     emit_particle(
                         linear_particle,
-                        layout_linear_effect(slot_lane, shear=0),
+                        place(layout_linear_effect(slot_lane, shear=0)),
                         0.5 / speed,
                         ParticleManageKind.MULTI,
                         slot_lane,
@@ -960,7 +990,7 @@ def handle_note_particles(
                 chunk = begin_particle_chunk(linear_particle, group_id, ParticleManageKind.REST) if managed else 0.0
                 emit_particle(
                     linear_particle,
-                    layout_linear_effect(lane, shear=0, y_offset=y_offset),
+                    place(layout_linear_effect(lane, shear=0, y_offset=y_offset)),
                     0.5 / speed,
                     ParticleManageKind.REST,
                     0.0,
@@ -974,7 +1004,7 @@ def handle_note_particles(
                 for slot_lane in _iter_bundled_slot_lanes(lane, size):
                     emit_particle(
                         circular_particle,
-                        layout_circular_effect(slot_lane, w=1.75, h=1.05),
+                        place(layout_circular_effect(slot_lane, w=1.75, h=1.05)),
                         0.6 / speed,
                         ParticleManageKind.MULTI,
                         slot_lane,
@@ -985,7 +1015,7 @@ def handle_note_particles(
                 chunk = begin_particle_chunk(circular_particle, group_id, ParticleManageKind.REST) if managed else 0.0
                 emit_particle(
                     circular_particle,
-                    layout_circular_effect(lane, w=1.75, h=1.05, y_offset=y_offset),
+                    place(layout_circular_effect(lane, w=1.75, h=1.05, y_offset=y_offset)),
                     0.6 / speed,
                     ParticleManageKind.REST,
                     0.0,
@@ -1018,7 +1048,7 @@ def handle_note_particles(
                     assert_never(direction)
             emit_particle(
                 particles.directional,
-                layout_rotated2_linear_effect(lane, degree=shear, y_offset=y_offset),
+                place(layout_rotated2_linear_effect(lane, degree=shear, y_offset=y_offset)),
                 0.32 / speed,
                 ParticleManageKind.REST,
                 0.0,
@@ -1029,7 +1059,7 @@ def handle_note_particles(
             chunk = begin_particle_chunk(particles.tick, group_id, ParticleManageKind.REST) if managed else 0.0
             emit_particle(
                 particles.tick,
-                layout_tick_effect(lane, y_offset=y_offset),
+                place(layout_tick_effect(lane, y_offset=y_offset)),
                 0.6 / speed,
                 ParticleManageKind.REST,
                 0.0,
@@ -1042,7 +1072,7 @@ def handle_note_particles(
             for slot_lane in _iter_bundled_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
                 emit_particle(
                     slot_linear_particle,
-                    layout_linear_effect(slot_lane, shear=0, y_offset=y_offset),
+                    place(layout_linear_effect(slot_lane, shear=0, y_offset=y_offset)),
                     0.5 / speed,
                     ParticleManageKind.MULTI,
                     slot_lane,
@@ -1056,12 +1086,12 @@ def handle_note_particles(
         if particles.lane.is_available:
             chunk = begin_particle_chunk(particles.lane, group_id, ParticleManageKind.LANE) if managed else 0.0
             if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
-                _emit_critical_flick_lane(particles.lane, lane, size, lane_y_offset, chunk, managed)
+                _emit_critical_flick_lane(particles.lane, lane, size, lane_y_offset, chunk, managed, transform)
             else:
                 for slot_lane in iter_slot_lanes(lane, size):
                     emit_particle(
                         particles.lane,
-                        layout_particle_lane(slot_lane, 0.5, y_offset=lane_y_offset),
+                        place(layout_particle_lane(slot_lane, 0.5, y_offset=lane_y_offset)),
                         1 / speed,
                         ParticleManageKind.LANE,
                         slot_lane,
@@ -1073,7 +1103,7 @@ def handle_note_particles(
             for slot_lane in iter_slot_lanes(lane, size):
                 emit_particle(
                     particles.lane_basic,
-                    layout_particle_lane(slot_lane, 0.5, y_offset=lane_y_offset),
+                    place(layout_particle_lane(slot_lane, 0.5, y_offset=lane_y_offset)),
                     0.3 / speed,
                     ParticleManageKind.LANE,
                     slot_lane,
@@ -1088,7 +1118,18 @@ def _iter_bundled_slot_lanes(lane: float, size: float, pivot_lane: float = 0.0, 
             yield slot_lane
 
 
-def _emit_critical_flick_lane(particle, center_lane: float, size: float, y_offset: float, chunk: float, managed: bool):
+def _emit_critical_flick_lane(
+    particle,
+    center_lane: float,
+    size: float,
+    y_offset: float,
+    chunk: float,
+    managed: bool,
+    transform: AffineTransform2d,
+):
+    def place(q):
+        return transform.transform_quad(q)
+
     speed = Options.effect_animation_speed
     min_i = floor(center_lane - size)
     max_i = ceil(center_lane + size) - 1
@@ -1099,7 +1140,7 @@ def _emit_critical_flick_lane(particle, center_lane: float, size: float, y_offse
         merged_size = (left_max_i - min_i + 1) / 2
         emit_particle(
             particle,
-            layout_particle_lane(merged_center, merged_size, y_offset=y_offset),
+            place(layout_particle_lane(merged_center, merged_size, y_offset=y_offset)),
             1 / speed,
             ParticleManageKind.LANE,
             -127.0,
@@ -1113,7 +1154,7 @@ def _emit_critical_flick_lane(particle, center_lane: float, size: float, y_offse
         merged_size = (max_i - right_min_i + 1) / 2
         emit_particle(
             particle,
-            layout_particle_lane(merged_center, merged_size, y_offset=y_offset),
+            place(layout_particle_lane(merged_center, merged_size, y_offset=y_offset)),
             1 / speed,
             ParticleManageKind.LANE,
             127.0,
@@ -1127,7 +1168,7 @@ def _emit_critical_flick_lane(particle, center_lane: float, size: float, y_offse
         slot_lane = i + 0.5
         emit_particle(
             particle,
-            layout_particle_lane(slot_lane, 0.5, y_offset=y_offset),
+            place(layout_particle_lane(slot_lane, 0.5, y_offset=y_offset)),
             1 / speed,
             ParticleManageKind.LANE,
             slot_lane,
@@ -1219,6 +1260,8 @@ def schedule_note_slot_effects(
     half_offset: bool = False,
     group_id: float = 0.0,
     single_line: bool = False,
+    *,
+    transform: AffineTransform2d,
 ):
     if is_tutorial():
         return
@@ -1229,7 +1272,12 @@ def schedule_note_slot_effects(
     if slot_sprite.is_available and not single_line:
         for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
             get_archetype_by_name(archetype_names.SLOT_EFFECT).spawn(
-                sprite=slot_sprite, start_time=target_time, lane=slot_lane, y_offset=y_offset, group_id=group_id
+                sprite=slot_sprite,
+                start_time=target_time,
+                lane=slot_lane,
+                y_offset=y_offset,
+                group_id=group_id,
+                transform=transform,
             )
     slot_glow_sprite = sprite_set.slot_glow.get_sprite(judgment)
     if slot_glow_sprite.is_available:
@@ -1241,6 +1289,7 @@ def schedule_note_slot_effects(
                 size=size,
                 y_offset=y_offset,
                 group_id=group_id,
+                transform=transform,
             )
 
 
@@ -1267,6 +1316,7 @@ def draw_tutorial_note_slot_effects(
                 start_time=start_time,
                 end_time=start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed,
                 lane=slot_lane,
+                transform=IDENTITY_AFFINE_TRANSFORM,
             )
     slot_glow_sprite = sprite_set.slot_glow.perfect
     if (
@@ -1279,6 +1329,7 @@ def draw_tutorial_note_slot_effects(
             end_time=start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed,
             lane=lane,
             size=size,
+            transform=IDENTITY_AFFINE_TRANSFORM,
         )
 
 

@@ -42,7 +42,7 @@ NOTE_SLIM_EDGE_W = 0.125
 
 TARGET_ASPECT_RATIO = 16 / 9
 
-TEST_ASPECT_SCALE = 0.4
+TEST_ASPECT_SCALE = 0.5
 
 FIELD_T_FACTOR = 0.5 + 1.15875 * (47 / 1176)
 FIELD_B_FACTOR = 0.5 - 1.15875 * (803 / 1176)
@@ -100,6 +100,11 @@ class ComboType(IntEnum):
     GLOW = 2
 
 
+class StageTransformAnchor(IntEnum):
+    DEFAULT = 0
+    CENTER = 1
+
+
 @level_data
 class UIMargin:
     life_bar_x: float
@@ -134,8 +139,6 @@ class DynamicLayout:
     rotate: float
     rotate_sin: float
     rotate_cos: float
-    ox: float
-    oy: float
     stage_tilt: float
     size_zoom: float
     note_h: float
@@ -160,14 +163,114 @@ class CameraInfo(Record):
     stage_tilt: float
 
 
-class StageTransformInfo(Record):
-    rotate: float
-    x_lane_translate: float
-    y_lane_translate: float
+class AffineTransform2d(Record):
+    a00: float
+    a01: float
+    a02: float
+    a10: float
+    a11: float
+    a12: float
+
+    def apply(self, p: Vec2) -> Vec2:
+        return Vec2(
+            self.a00 * p.x + self.a01 * p.y + self.a02,
+            self.a10 * p.x + self.a11 * p.y + self.a12,
+        )
+
+    def apply_inverse(self, p: Vec2) -> Vec2:
+        det = self.a00 * self.a11 - self.a01 * self.a10
+        dx = p.x - self.a02
+        dy = p.y - self.a12
+        return Vec2(
+            (self.a11 * dx - self.a01 * dy) / det,
+            (self.a00 * dy - self.a10 * dx) / det,
+        )
+
+    def transform_quad(self, q: QuadLike) -> Quad:
+        return Quad(
+            bl=self.apply(q.bl),
+            br=self.apply(q.br),
+            tl=self.apply(q.tl),
+            tr=self.apply(q.tr),
+        )
+
+
+IDENTITY_AFFINE_TRANSFORM = AffineTransform2d(a00=1.0, a01=0.0, a02=0.0, a10=0.0, a11=1.0, a12=0.0)
+
+
+class StageTransform(Record):
+    """A per-stage rigid post-map in camera screen space.
+
+    Rotate by `sr` about pivot `(px, py)` then translate `(tx, ty)`.
+    """
+
+    sr: float
+    px: float
+    py: float
+    tx: float
+    ty: float
+
+    def transform(self) -> AffineTransform2d:
+        cs = cos(self.sr)
+        sn = sin(self.sr)
+        return AffineTransform2d(
+            a00=cs,
+            a01=sn,
+            a02=self.px * (1 - cs) - sn * self.py + self.tx,
+            a10=-sn,
+            a11=cs,
+            a12=self.py * (1 - cs) + sn * self.px + self.ty,
+        )
+
+
+def identity_stage_transform() -> StageTransform:
+    return StageTransform(sr=0.0, px=0.0, py=0.0, tx=0.0, ty=0.0)
+
+
+def stage_transform_is_identity(st: StageTransform) -> bool:
+    return st.sr == 0.0 and st.tx == 0.0 and st.ty == 0.0
+
+
+def compute_stage_transform(
+    camera: LayoutTransform,
+    stage_rotate: float,
+    x_lane_translate: float,
+    y_lane_translate: float,
+    mask_lane: float,
+    center_weight: float = 0.0,
+) -> StageTransform:
+    travel = approach_at_tilt(1.0, camera.stage_tilt)
+    width = width_factor_at_tilt(travel, camera.stage_tilt)
+    pivot = Vec2(
+        mask_lane * width * camera.w_scale + camera.x_translate,
+        travel * camera.h_scale + camera.t,
+    ).rotate(-camera.rotate)
+    base_t = Layout.field_h * FIELD_T_FACTOR
+    base_h = Layout.field_h * FIELD_B_FACTOR - base_t
+    center_judge_y = camera.h_scale * (travel + base_t / base_h)
+    offset = Vec2(
+        x_lane_translate * camera.w_scale,
+        y_lane_translate * camera.w_scale - center_weight * center_judge_y,
+    ).rotate(-camera.rotate)
+    return StageTransform(sr=stage_rotate, px=pivot.x, py=pivot.y, tx=offset.x, ty=offset.y)
+
+
+def blend_stage_transform(a: StageTransform, b: StageTransform, frac: float) -> StageTransform:
+    return StageTransform(
+        sr=lerp(a.sr, b.sr, frac),
+        px=lerp(a.px, b.px, frac),
+        py=lerp(a.py, b.py, frac),
+        tx=lerp(a.tx, b.tx, frac),
+        ty=lerp(a.ty, b.ty, frac),
+    )
+
+
+def stage_aspect_ratio_locked() -> bool:
+    return Options.lock_stage_aspect_ratio or LevelConfig.has_stage_transforms
 
 
 def init_layout():
-    if Options.lock_stage_aspect_ratio:
+    if stage_aspect_ratio_locked():
         if aspect_ratio() > TARGET_ASPECT_RATIO:
             field_w = screen().h * TARGET_ASPECT_RATIO
             field_h = screen().h
@@ -255,25 +358,8 @@ class CameraChangeLike(Protocol):
     def index(self) -> int: ...
 
 
-class StageTransformChangeLike(Protocol):
-    time: float
-    rotate: float
-    x_lane_translate: float
-    y_lane_translate: float
-    ease: EaseType
-    next_ref: EntityRef
-    prev_ref: EntityRef
-
-    @classmethod
-    def at(cls, index: int) -> StageTransformChangeLike: ...
-
-    @property
-    def index(self) -> int: ...
-
-
 class InitializationLike(Protocol):
     first_camera_ref: EntityRef
-    first_stage_transform_ref: EntityRef
 
     @classmethod
     def at(cls, index: int) -> InitializationLike: ...
@@ -281,10 +367,6 @@ class InitializationLike(Protocol):
 
 def _camera_change_archetype() -> type[CameraChangeLike]:
     return cast(type[CameraChangeLike], get_archetype_by_name(archetype_names.CAMERA_CHANGE))
-
-
-def _stage_transform_change_archetype() -> type[StageTransformChangeLike]:
-    return cast(type[StageTransformChangeLike], get_archetype_by_name(archetype_names.STAGE_TRANSFORM_CHANGE))
 
 
 def _initialization_archetype() -> type[InitializationLike]:
@@ -452,56 +534,6 @@ def get_camera_info(target_time: float | None = None, left_limit: bool = False) 
     return result
 
 
-def get_stage_transform_info(target_time: float | None = None, left_limit: bool = False) -> StageTransformInfo:
-    result = +StageTransformInfo
-    first_ref = _initialization_archetype().at(0).first_stage_transform_ref
-    if first_ref.index <= 0:
-        result @= StageTransformInfo(rotate=0.0, x_lane_translate=0.0, y_lane_translate=0.0)
-        return result
-    t = time() if target_time is None else target_time
-    a_ref, b_ref = query_event_list(first_ref, t, lambda e: e.time)
-    archetype = _stage_transform_change_archetype()
-    if left_limit and a_ref.index > 0:
-        curr = get_event_as(a_ref, archetype)
-        if curr.time == t:
-            probe_ref = +curr.prev_ref
-            while probe_ref.index > 0:
-                if get_event_as(probe_ref, archetype).time != t:
-                    break
-                a_ref.index = probe_ref.index
-                probe_ref.index = get_event_as(probe_ref, archetype).prev_ref.index
-            b_ref.index = a_ref.index
-            a_ref.index = probe_ref.index
-    if a_ref.index > 0:
-        a = get_event_as(a_ref, archetype)
-        if b_ref.index > 0:
-            b = get_event_as(b_ref, archetype)
-            if b.time > a.time:
-                p = ease(a.ease, unlerp(a.time, b.time, t))
-                result @= StageTransformInfo(
-                    rotate=lerp(a.rotate, b.rotate, p),
-                    x_lane_translate=lerp(a.x_lane_translate, b.x_lane_translate, p),
-                    y_lane_translate=lerp(a.y_lane_translate, b.y_lane_translate, p),
-                )
-                return result
-        result @= StageTransformInfo(
-            rotate=a.rotate,
-            x_lane_translate=a.x_lane_translate,
-            y_lane_translate=a.y_lane_translate,
-        )
-        return result
-    if b_ref.index > 0:
-        b = get_event_as(b_ref, archetype)
-        result @= StageTransformInfo(
-            rotate=b.rotate,
-            x_lane_translate=b.x_lane_translate,
-            y_lane_translate=b.y_lane_translate,
-        )
-        return result
-    result @= StageTransformInfo(rotate=0.0, x_lane_translate=0.0, y_lane_translate=0.0)
-    return result
-
-
 def get_next_camera_event_time(t: float) -> float:
     result = 1e8
     first_camera_ref = _initialization_archetype().at(0).first_camera_ref
@@ -538,8 +570,6 @@ def refresh_layout():
     DynamicLayout.h_scale = base.h_scale
     DynamicLayout.x_translate = base.x_translate
     DynamicLayout.rotate = base.rotate
-    DynamicLayout.ox = base.ox
-    DynamicLayout.oy = base.oy
     DynamicLayout.stage_tilt = base.stage_tilt
     DynamicLayout.size_zoom = base.size_zoom
     tilt = current_stage_tilt()
@@ -563,23 +593,15 @@ def refresh_layout():
     if is_play() or is_watch():
         apply_camera_zoom(base, camera.zoom, camera.zoom_target, camera.zoom_anchor, camera.rotate)
 
-    stage_transform = +StageTransformInfo
-    if is_play() or is_watch():
-        stage_transform @= get_stage_transform_info()
-    else:
-        stage_transform @= StageTransformInfo(rotate=0.0, x_lane_translate=0.0, y_lane_translate=0.0)
-    folded = fold_stage_transform(current_layout_transform(), stage_transform)
-    DynamicLayout.t = folded.t
-    DynamicLayout.w_scale = folded.w_scale
-    DynamicLayout.h_scale = folded.h_scale
-    DynamicLayout.x_translate = folded.x_translate
-    DynamicLayout.rotate = folded.rotate
-    DynamicLayout.ox = folded.ox
-    DynamicLayout.oy = folded.oy
+    if test_aspect_active():
+        DynamicLayout.t = DynamicLayout.t * TEST_ASPECT_SCALE
+        DynamicLayout.w_scale = DynamicLayout.w_scale * TEST_ASPECT_SCALE
+        DynamicLayout.h_scale = DynamicLayout.h_scale * TEST_ASPECT_SCALE
+        DynamicLayout.x_translate = DynamicLayout.x_translate * TEST_ASPECT_SCALE
+        set_background(background().scale(Vec2(TEST_ASPECT_SCALE, TEST_ASPECT_SCALE)))
+
     DynamicLayout.rotate_sin = sin(DynamicLayout.rotate)
     DynamicLayout.rotate_cos = cos(DynamicLayout.rotate)
-    if test_aspect_active():
-        set_background(background().scale(Vec2(TEST_ASPECT_SCALE, TEST_ASPECT_SCALE)))
 
     DynamicLayout.scaled_note_h = DynamicLayout.note_h * DynamicLayout.h_scale
 
@@ -737,7 +759,7 @@ def transform_vec(v: Vec2) -> Vec2:
     y = v.y * DynamicLayout.h_scale + DynamicLayout.t
     c = DynamicLayout.rotate_cos
     s = DynamicLayout.rotate_sin
-    return Vec2(x * c + y * s, y * c - x * s) + Vec2(DynamicLayout.ox, DynamicLayout.oy)
+    return Vec2(x * c + y * s, y * c - x * s)
 
 
 def transform_static_vec(v: Vec2) -> Vec2:
@@ -792,8 +814,8 @@ def pre_rotation_vec_at(lane: float, travel: float = 1.0) -> Vec2:
     )
 
 
-def touch_to_lane(pos: Vec2) -> float:
-    unrotated = (pos - Vec2(DynamicLayout.ox, DynamicLayout.oy)).rotate(DynamicLayout.rotate)
+def touch_to_lane(pos: Vec2, transform: AffineTransform2d) -> float:
+    unrotated = transform.apply_inverse(pos).rotate(DynamicLayout.rotate)
     y_raw = (unrotated.y - DynamicLayout.t) / DynamicLayout.h_scale
     x_raw = (unrotated.x - DynamicLayout.x_translate) / DynamicLayout.w_scale
     width = tilt_width_factor(y_raw)
@@ -933,12 +955,11 @@ def layout_full_width_stage_cover() -> Quad:
     pre_b = lerp(APPROACH_SCALE, 1.0, Options.stage_cover) * DynamicLayout.h_scale + DynamicLayout.t
     big = 20.0
     rot = -DynamicLayout.rotate
-    o = Vec2(DynamicLayout.ox, DynamicLayout.oy)
     return Quad(
-        bl=Vec2(-big, pre_b).rotate(rot) + o,
-        br=Vec2(big, pre_b).rotate(rot) + o,
-        tl=Vec2(-big, big).rotate(rot) + o,
-        tr=Vec2(big, big).rotate(rot) + o,
+        bl=Vec2(-big, pre_b).rotate(rot),
+        br=Vec2(big, pre_b).rotate(rot),
+        tl=Vec2(-big, big).rotate(rot),
+        tr=Vec2(big, big).rotate(rot),
     )
 
 
@@ -1621,25 +1642,62 @@ def layout_slide_connector_segment(
     )
 
 
+def st_slide_connector_segment(
+    start_lane: float,
+    start_size: float,
+    start_travel: float,
+    end_lane: float,
+    end_size: float,
+    end_travel: float,
+    start_transform: AffineTransform2d,
+    end_transform: AffineTransform2d,
+) -> Quad:
+    result = +Quad
+    if start_travel >= end_travel:
+        result @= Quad(
+            bl=start_transform.apply(perspective_vec(start_lane - start_size, 1, start_travel)),
+            br=start_transform.apply(perspective_vec(start_lane + start_size, 1, start_travel)),
+            tl=end_transform.apply(perspective_vec(end_lane - end_size, 1, end_travel)),
+            tr=end_transform.apply(perspective_vec(end_lane + end_size, 1, end_travel)),
+        )
+    else:
+        result @= Quad(
+            bl=end_transform.apply(perspective_vec(end_lane - end_size, 1, end_travel)),
+            br=end_transform.apply(perspective_vec(end_lane + end_size, 1, end_travel)),
+            tl=start_transform.apply(perspective_vec(start_lane - start_size, 1, start_travel)),
+            tr=start_transform.apply(perspective_vec(start_lane + start_size, 1, start_travel)),
+        )
+    return result
+
+
 def layout_sim_line(
     left_lane: float,
     left_travel: float,
     right_lane: float,
     right_travel: float,
+    left_transform: AffineTransform2d,
+    right_transform: AffineTransform2d,
 ) -> Quad:
-    if left_lane > right_lane:
-        left_lane, right_lane = right_lane, left_lane
-        left_travel, right_travel = right_travel, left_travel
-    ml = perspective_vec(left_lane, 1, left_travel)
-    mr = perspective_vec(right_lane, 1, right_travel)
+    ml = +Vec2
+    mr = +Vec2
+    if left_lane <= right_lane:
+        ml @= left_transform.apply(perspective_vec(left_lane, 1, left_travel))
+        mr @= right_transform.apply(perspective_vec(right_lane, 1, right_travel))
+        ml_travel = left_travel
+        mr_travel = right_travel
+    else:
+        ml @= right_transform.apply(perspective_vec(right_lane, 1, right_travel))
+        mr @= left_transform.apply(perspective_vec(left_lane, 1, left_travel))
+        ml_travel = right_travel
+        mr_travel = left_travel
     ort = (mr - ml).orthogonal().normalize_or_zero()
-    left_h = DynamicLayout.scaled_note_h * tilt_width_factor(left_travel)
-    right_h = DynamicLayout.scaled_note_h * tilt_width_factor(right_travel)
+    ml_h = DynamicLayout.scaled_note_h * tilt_width_factor(ml_travel)
+    mr_h = DynamicLayout.scaled_note_h * tilt_width_factor(mr_travel)
     return Quad(
-        bl=ml + ort * left_h,
-        br=mr + ort * right_h,
-        tl=ml - ort * left_h,
-        tr=mr - ort * right_h,
+        bl=ml + ort * ml_h,
+        br=mr + ort * mr_h,
+        tl=ml - ort * ml_h,
+        tr=mr - ort * mr_h,
     )
 
 
@@ -1784,8 +1842,6 @@ class LayoutTransform(Record):
     h_scale: float
     x_translate: float
     rotate: float
-    ox: float
-    oy: float
     stage_tilt: float
     size_zoom: float
 
@@ -1797,8 +1853,6 @@ def current_layout_transform() -> LayoutTransform:
         h_scale=DynamicLayout.h_scale,
         x_translate=DynamicLayout.x_translate,
         rotate=DynamicLayout.rotate,
-        ox=DynamicLayout.ox,
-        oy=DynamicLayout.oy,
         stage_tilt=DynamicLayout.stage_tilt,
         size_zoom=DynamicLayout.size_zoom,
     )
@@ -1814,8 +1868,6 @@ def base_layout_transform(camera: CameraInfo) -> LayoutTransform:
         h_scale=Layout.field_h * FIELD_B_FACTOR - t,
         x_translate=-camera.lane * w,
         rotate=0.0,
-        ox=0.0,
-        oy=0.0,
         stage_tilt=clamp(camera.stage_tilt, 0.0, 1.0),
         size_zoom=size_zoom,
     )
@@ -1830,39 +1882,26 @@ def zoomed_layout_transform(
         h_scale=zoom * transform.h_scale,
         x_translate=zoom * (transform.x_translate - target.x) + anchor.x,
         rotate=rotate,
-        ox=0.0,
-        oy=0.0,
         stage_tilt=transform.stage_tilt,
         size_zoom=transform.size_zoom,
     )
 
 
-def fold_stage_transform(transform: LayoutTransform, stage: StageTransformInfo) -> LayoutTransform:
-    w = transform.w_scale
-    h = transform.h_scale
-    xt = transform.x_translate
-    tt = transform.t
+def apply_test_aspect(transform: LayoutTransform) -> LayoutTransform:
+    result = +LayoutTransform
     if test_aspect_active():
-        w = w * TEST_ASPECT_SCALE
-        h = h * TEST_ASPECT_SCALE
-        xt = xt * TEST_ASPECT_SCALE
-        tt = tt * TEST_ASPECT_SCALE
-    cr = transform.rotate
-    total = cr + stage.rotate
-    pivot = Vec2(xt, h + tt).rotate(-cr)
-    translate = Vec2(stage.x_lane_translate * w, stage.y_lane_translate * w).rotate(-cr)
-    o = translate + pivot - pivot.rotate(-stage.rotate)
-    return LayoutTransform(
-        t=tt,
-        w_scale=w,
-        h_scale=h,
-        x_translate=xt,
-        rotate=total,
-        ox=o.x,
-        oy=o.y,
-        stage_tilt=transform.stage_tilt,
-        size_zoom=transform.size_zoom,
-    )
+        result @= LayoutTransform(
+            t=transform.t * TEST_ASPECT_SCALE,
+            w_scale=transform.w_scale * TEST_ASPECT_SCALE,
+            h_scale=transform.h_scale * TEST_ASPECT_SCALE,
+            x_translate=transform.x_translate * TEST_ASPECT_SCALE,
+            rotate=transform.rotate,
+            stage_tilt=transform.stage_tilt,
+            size_zoom=transform.size_zoom,
+        )
+    else:
+        result @= transform
+    return result
 
 
 def layout_transform_at_camera(camera: CameraInfo) -> LayoutTransform:
@@ -1876,7 +1915,13 @@ def layout_transform_at_camera(camera: CameraInfo) -> LayoutTransform:
 
 
 def compute_hitbox(
-    transform: LayoutTransform, lane: float, size: float, leniency: float, y_offset: float = 0.0
+    transform: LayoutTransform,
+    lane: float,
+    size: float,
+    leniency: float,
+    y_offset: float = 0.0,
+    *,
+    stage_transform: AffineTransform2d,
 ) -> Hitbox:
     tilt = transform.stage_tilt
     travel = approach_at_tilt(1 - y_offset, tilt)
@@ -1888,7 +1933,7 @@ def compute_hitbox(
     lane_w = transform.w_scale
     # Dividing out size_zoom keeps the vertical extent constant in screen space regardless of camera size
     vertical_lane_w = lane_w / transform.size_zoom
-    vertical_half_lanes = 3.0
+    vertical_half_lanes = 2.5 if LevelConfig.dynamic_stages else 5.0
     if (
         Options.stage_cover_scroll_speed_compensation != StageCoverNoteSpeedCompensation.OFF
         and LevelConfig.dynamic_stages
@@ -1897,7 +1942,6 @@ def compute_hitbox(
         vertical_half_lanes *= clamp((1 - cover_travel) / (1 - APPROACH_SCALE), 0, 1)
     vertical_extent = vertical_half_lanes * vertical_lane_w
     rot = -transform.rotate
-    o = Vec2(transform.ox, transform.oy)
     t_y = note_y + vertical_extent
     bl_x_final, br_x_final = l_x - leniency * lane_w, r_x + leniency * lane_w
     tl_x_final, tr_x_final = bl_x_final, br_x_final
@@ -1922,16 +1966,20 @@ def compute_hitbox(
 
     return Hitbox(
         target=HitboxTarget(
-            l=Vec2(l_x, note_y).rotate(rot) + o,
-            r=Vec2(r_x, note_y).rotate(rot) + o,
+            l=stage_transform.apply(Vec2(l_x, note_y).rotate(rot)),
+            r=stage_transform.apply(Vec2(r_x, note_y).rotate(rot)),
         ),
         bounds=Quad(
-            bl=Vec2(bl_x_final, b_y).rotate(rot) + o,
-            br=Vec2(br_x_final, b_y).rotate(rot) + o,
-            tl=Vec2(tl_x_final, t_y).rotate(rot) + o,
-            tr=Vec2(tr_x_final, t_y).rotate(rot) + o,
+            bl=stage_transform.apply(Vec2(bl_x_final, b_y).rotate(rot)),
+            br=stage_transform.apply(Vec2(br_x_final, b_y).rotate(rot)),
+            tl=stage_transform.apply(Vec2(tl_x_final, t_y).rotate(rot)),
+            tr=stage_transform.apply(Vec2(tr_x_final, t_y).rotate(rot)),
         ),
     )
+
+
+def camera_layout_transform_at_time(target_time: float, left_limit: bool = False) -> LayoutTransform:
+    return apply_test_aspect(layout_transform_at_camera(get_camera_info(target_time, left_limit=left_limit)))
 
 
 def compute_hitbox_at_time(
@@ -1940,17 +1988,17 @@ def compute_hitbox_at_time(
     leniency: float,
     target_time: float,
     y_offset: float = 0.0,
+    *,
+    stage_transform: AffineTransform2d,
     left_limit: bool = False,
 ) -> Hitbox:
     return compute_hitbox(
-        fold_stage_transform(
-            layout_transform_at_camera(get_camera_info(target_time, left_limit=left_limit)),
-            get_stage_transform_info(target_time, left_limit=left_limit),
-        ),
+        camera_layout_transform_at_time(target_time, left_limit=left_limit),
         lane,
         size,
         leniency,
         y_offset,
+        stage_transform=stage_transform,
     )
 
 
