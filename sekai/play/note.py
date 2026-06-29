@@ -99,7 +99,6 @@ class BaseNote(PlayArchetype):
     target_scaled_time: CompositeTime = entity_data()
     target_y_offset: float = entity_data()
 
-    unadjusted_input_interval_data: Interval = entity_data()
     perfect_window_end: float = entity_data()
 
     # The id of the tap that activated this note, for tap notes and flicks or released the note, for release notes.
@@ -141,11 +140,11 @@ class BaseNote(PlayArchetype):
 
     @property
     def unadjusted_input_interval(self) -> Interval:
-        return self.unadjusted_input_interval_data
+        return self.judgment_window.bad + self.target_time
 
     @property
     def input_interval(self) -> Interval:
-        return self.unadjusted_input_interval_data + input_offset()
+        return self.unadjusted_input_interval + input_offset()
 
     def init_data(self):
         if self.data_init_done:
@@ -162,7 +161,6 @@ class BaseNote(PlayArchetype):
 
         self.target_time = beat_to_time(self.beat)
         window = get_note_window(self.kind, self.active_head_ref.index > 0 or self.is_attached)
-        self.unadjusted_input_interval_data = window.bad + self.target_time
         self.perfect_window_end = window.perfect.end
 
         if not self.is_attached:
