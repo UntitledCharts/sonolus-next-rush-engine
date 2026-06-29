@@ -302,9 +302,7 @@ def schedule_auto_connector_sfx_kind(entity_count: int, sfx_kind: ActiveConnecto
     # O(N log N) merge sorts: one list ordered by activation time, one by deactivation time. Both
     # start from the same head; the activation sort only rewrites sfx_act_next, leaving the
     # sfx_deact_next chain (still headed at list_head) intact for the deactivation sort.
-    act_ref = sort_linked_entities(
-        WatchConnector.at(list_head).ref(), get_value=act_time, get_next_ref=act_next
-    ).index
+    act_ref = sort_linked_entities(WatchConnector.at(list_head).ref(), get_value=act_time, get_next_ref=act_next).index
     deact_ref = sort_linked_entities(
         WatchConnector.at(list_head).ref(), get_value=deact_time, get_next_ref=deact_next
     ).index
@@ -322,8 +320,7 @@ def schedule_auto_connector_sfx_kind(entity_count: int, sfx_kind: ActiveConnecto
             next_time = WatchConnector.at(act_ref).active_head.target_time
         if deact_ref > 0:
             deact_event_time = WatchConnector.at(deact_ref).active_tail.target_time
-            if deact_event_time < next_time:
-                next_time = deact_event_time
+            next_time = min(next_time, deact_event_time)
 
         if active_time >= inactive_time and active_connector_index > 0:
             schedule_connector_sfx(
