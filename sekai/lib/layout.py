@@ -55,6 +55,9 @@ APPROACH_SCALE = 1.06**-45
 # such that something like a flick arrow below the judge line isn't obviously suddenly cut off.
 DEFAULT_APPROACH_CUTOFF = 5
 
+# Avoid numerical instability at low tilt in the approach curve
+APPROACH_TILT_LERP_MIN = 0.05
+
 # Stage width at 0 tilt
 STAGE_WIDTH_MID = (APPROACH_SCALE + 1) / 2
 
@@ -666,22 +669,7 @@ def approach_curve_base(x: float) -> float:
     return APPROACH_SCALE ** (1 - x)
 
 
-def approach_at_tilt(progress: float, tilt: float) -> float:
-    x = lerp(Layout.approach_start, 1.0, progress)
-    base = approach_curve_base(x)
-    if tilt >= 1.0:
-        return base
-    linear = lerp(APPROACH_SCALE, 1.0, x)
-    raw = lerp(linear, base, tilt)
-    natural_spawn = lerp(lerp(APPROACH_SCALE, 1.0, Layout.approach_start), Layout.cover_depth, tilt)
-    return remap(natural_spawn, 1.0, min(natural_spawn, Layout.cover_depth), 1.0, raw)
-
-
-def approach(progress: float) -> float:
-    return approach_at_tilt(progress, current_stage_tilt())
-
-
-def inverse_approach_untilted(approach_value: float) -> float:
+def inverse_approach_curve_base(approach_value: float) -> float:
     if Options.alternative_approach_curve:
         d_0 = 1 / APPROACH_SCALE
         d_1 = 2.5
@@ -693,21 +681,64 @@ def inverse_approach_untilted(approach_value: float) -> float:
             raw = 1 + (d - 1 / d_1) / v_1
     else:
         raw = 1 - log(approach_value) / log(APPROACH_SCALE)
-    return unlerp(Layout.approach_start, 1.0, raw)
+    return raw
+
+
+def approach_slice_window(tilt: float, spawn_depth: float) -> tuple[float, float]:
+    w_judge = width_factor_at_tilt(1.0, tilt)
+    spawn_fraction = tilt * (1.0 - spawn_depth) / w_judge
+    slice_spawn = 1.0 - spawn_fraction
+    return inverse_approach_curve_base(slice_spawn), slice_spawn
+
+
+def approach_slice(progress: float, tilt: float, spawn_depth: float) -> float:
+    start, slice_spawn = approach_slice_window(tilt, spawn_depth)
+    travel = approach_curve_base(lerp(start, 1.0, progress))
+    return remap(slice_spawn, 1.0, spawn_depth, 1.0, travel)
+
+
+def inverse_approach_slice(travel: float, tilt: float, spawn_depth: float) -> float:
+    start, slice_spawn = approach_slice_window(tilt, spawn_depth)
+    raw = remap(spawn_depth, 1.0, slice_spawn, 1.0, travel)
+    return unlerp(start, 1.0, inverse_approach_curve_base(raw))
+
+
+def approach_at_tilt(progress: float, tilt: float) -> float:
+    if tilt >= 1.0:
+        return approach_curve_base(lerp(Layout.approach_start, 1.0, progress))
+    spawn_depth = approach_curve_base(Layout.approach_start)
+    if tilt <= 0.0:
+        return lerp(spawn_depth, 1.0, progress)
+    if tilt < APPROACH_TILT_LERP_MIN:
+        linear = lerp(spawn_depth, 1.0, progress)
+        slice_at_floor = approach_slice(progress, APPROACH_TILT_LERP_MIN, spawn_depth)
+        return lerp(linear, slice_at_floor, tilt / APPROACH_TILT_LERP_MIN)
+    return approach_slice(progress, tilt, spawn_depth)
+
+
+def approach(progress: float) -> float:
+    return approach_at_tilt(progress, current_stage_tilt())
+
+
+def inverse_approach_untilted(approach_value: float) -> float:
+    return unlerp(Layout.approach_start, 1.0, inverse_approach_curve_base(approach_value))
 
 
 def inverse_approach_tilt(approach_value: float) -> float:
     tilt = current_stage_tilt()
     if tilt >= 1.0:
         return inverse_approach_untilted(approach_value)
-    lo = -4.0
-    hi = 4.0
-    for _ in range(20):
-        mid = (lo + hi) / 2
-        too_low = approach_at_tilt(mid, tilt) < approach_value
-        lo = mid if too_low else lo
-        hi = hi if too_low else mid
-    return (lo + hi) / 2
+    spawn_depth = approach_curve_base(Layout.approach_start)
+    if tilt < APPROACH_TILT_LERP_MIN:
+        lo = -8.0
+        hi = 8.0
+        for _ in range(20):
+            mid = (lo + hi) / 2
+            too_low = approach_at_tilt(mid, tilt) < approach_value
+            lo = mid if too_low else lo
+            hi = hi if too_low else mid
+        return (lo + hi) / 2
+    return inverse_approach_slice(approach_value, tilt, spawn_depth)
 
 
 def progress_to(
