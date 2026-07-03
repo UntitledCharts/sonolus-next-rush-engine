@@ -1092,7 +1092,7 @@ def layout_life_gauge(life, edge=False) -> Quad:
             margin_offset = 0.118
             y_offset = -0.007
             h = 0.033 * ui.secondary_metric_config.scale * scale_ratio
-            w = h * 15.3
+            w = h * 15.2
         case Version.v1:
             margin_offset = 0.02
             y_offset = 0.01
@@ -1111,27 +1111,28 @@ def layout_life_gauge(life, edge=False) -> Quad:
     screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=center_y)
 
     life = clamp((life / 1000), 0, 1)
+
+    if LevelConfig.ui_version == Version.v3:
+        body_full = w * (289 / 302)
+        cap_w = w * (13 / 302)
+    else:
+        body_full = w * (258 / 281)
+        cap_w = w * (23 / 281)
+
+    body_right = screen_center.x + body_full * life
     if not edge:
         return Quad(
             bl=Vec2(screen_center.x, screen_center.y - h / 2),
-            br=Vec2(screen_center.x + w * life, screen_center.y - h / 2),
+            br=Vec2(body_right, screen_center.y - h / 2),
             tl=Vec2(screen_center.x, screen_center.y + h / 2),
-            tr=Vec2(screen_center.x + w * life, screen_center.y + h / 2),
+            tr=Vec2(body_right, screen_center.y + h / 2),
         )
     else:
-        active_ratio = 0.9625 if LevelConfig.ui_version == Version.v3 else 0.915
-
-        travel_distance = w * active_ratio
-
-        shift_amount = travel_distance * (1 - life)
-
-        base_x = screen_center.x
-
         return Quad(
-            bl=Vec2(base_x - shift_amount, screen_center.y - h / 2),
-            br=Vec2(base_x + w - shift_amount, screen_center.y - h / 2),
-            tl=Vec2(base_x - shift_amount, screen_center.y + h / 2),
-            tr=Vec2(base_x + w - shift_amount, screen_center.y + h / 2),
+            bl=Vec2(body_right, screen_center.y - h / 2),
+            br=Vec2(body_right + cap_w, screen_center.y - h / 2),
+            tl=Vec2(body_right, screen_center.y + h / 2),
+            tr=Vec2(body_right + cap_w, screen_center.y + h / 2),
         )
 
 
