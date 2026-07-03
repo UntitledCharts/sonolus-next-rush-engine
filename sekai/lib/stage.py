@@ -33,7 +33,6 @@ from sekai.lib.layer import (
     LAYER_JUDGMENT,
     LAYER_STAGE,
     LAYER_STAGE_LANE,
-    get_z,
     get_z_alt,
 )
 from sekai.lib.layout import (
@@ -43,9 +42,9 @@ from sekai.lib.layout import (
     DynamicLayout,
     Layout,
     ScoreGaugeType,
-    StaticUiLayout,
     StageTransform,
     StageTransformAnchor,
+    StaticUiLayout,
     approach,
     compute_stage_transform,
     current_layout_transform,
@@ -950,7 +949,7 @@ def draw_dynamic_stage(
             case _:
                 assert_never(style)
 
-    def draw_gradient(sprites: JudgmentSpriteSet, z: float, a: float):
+    def draw_gradient(sprites: JudgmentSpriteSet, z: ZIndex, a: float):
         bottom_l = place(perspective_rect(l_jl, lane, 1 + nh, 1 + nh - nh / f, travel))
         bottom_r = place(perspective_rect(r_jl, lane, 1 + nh, 1 + nh - nh / f, travel))
         top_l = place(perspective_rect(l_jl, lane, 1 - nh, 1 - nh + nh / f, travel))
@@ -968,7 +967,7 @@ def draw_dynamic_stage(
             sprites.judgment_edge.draw(top_l, z=z, a=edge_a)
             sprites.judgment_edge.draw(top_r, z=z, a=edge_a)
 
-    def draw_single_line(sprites: JudgmentSpriteSet, z: float, a: float):
+    def draw_single_line(sprites: JudgmentSpriteSet, z: ZIndex, a: float):
         half_thick = nh / f / 2
         layout = place(perspective_rect(l_jl, r_jl, 1 - half_thick, 1 + half_thick, travel))
         sprites.judgment_edge.draw(layout, z=z, a=a)
