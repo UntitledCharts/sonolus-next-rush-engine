@@ -270,7 +270,7 @@ guide_slide.notes = [
 
 fever_chance = LevelFeverChance(beat=1.0, force=True)
 fever_start = LevelFeverStart(beat=100)
-test_skill = LevelSkill(beat=1.0, effect=2)
+test_skill = LevelSkill(beat=1.0, effect=4)
 
 
 # Test SegmentPresentation.FULL_SCREEN while the camera tilt changes. Between a segment's head and tail
