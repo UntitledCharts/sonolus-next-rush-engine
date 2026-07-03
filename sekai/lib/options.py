@@ -451,7 +451,7 @@ class Options:
         ],
         standard=True,
         advanced=True,
-        default=1,
+        default=2,
     )
     show_hitboxes: bool = toggle_option(
         name="Show Hitboxes",
