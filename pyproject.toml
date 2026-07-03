@@ -23,3 +23,6 @@ ignore = ["E402", "E741", "D1", "COM812", "PLW2901", "PLW3201", "PLR6301", "PLC0
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.uv.sources]
+sonolus-py = { git = "https://github.com/hyeon2006/sonolus.py", rev = "optimize/strength-reduction" }
