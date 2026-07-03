@@ -446,31 +446,6 @@ class Options:
         scope="Rush",
         default=False,
     )
-    skill_mode: SkillMode = select_option(
-        name="Skill Mode",
-        scope="Rush",
-        values=[
-            "Level Default",
-            "Score Up",
-            "Life Up",
-            "Accuracy Up",
-        ],
-        standard=True,
-        default=SkillMode.LEVEL_DEFAULT,
-    )
-    score_mode: ScoreMode = select_option(
-        name="Score Mode",
-        scope="Sekai",
-        values=[
-            "Weighted Flat",
-            "Weighted Combo",
-            "Unweighted Flat",
-            "Unweighted Combo",
-        ],
-        standard=True,
-        advanced=True,
-        default=2,
-    )
     show_hitboxes: bool = toggle_option(
         name="Show Hitboxes",
         advanced=True,
