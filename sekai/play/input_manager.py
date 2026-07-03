@@ -41,6 +41,11 @@ def is_allowed_empty(touch: Touch) -> bool:
     return touch.id not in InputState.disallowed_empty_touches
 
 
+def release_all_empty_disallows():
+    InputState.disallowed_empty_touches.clear()
+    InputState.last_started_touch_disallowed = False
+
+
 def is_allowed_release(touch: Touch, target_time: float) -> bool:
     if touch.id not in InputState.disallowed_release_touches:
         return True

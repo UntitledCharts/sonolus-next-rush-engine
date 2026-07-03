@@ -56,6 +56,7 @@ class StaticStage(PlayArchetype):
                 empty_lanes.clear()
             return
         empty_lanes.clear()
+        empty_triggered = False
         total_hitbox = layout_lane_area(-7, 7)
         for touch in touches():
             if not total_hitbox.contains_point(touch.position):
@@ -70,6 +71,7 @@ class StaticStage(PlayArchetype):
                     sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6,
                     transform=IDENTITY_AFFINE_TRANSFORM,
                 )
+                empty_triggered = True
                 if not empty_lanes.is_full():
                     empty_lanes.append(rounded_lane)
             else:
@@ -81,8 +83,11 @@ class StaticStage(PlayArchetype):
                         sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6,
                         transform=IDENTITY_AFFINE_TRANSFORM,
                     )
+                    empty_triggered = True
                     if not empty_lanes.is_full():
                         empty_lanes.append(rounded_lane)
+        if empty_triggered:
+            input_manager.release_all_empty_disallows()
         if len(empty_lanes) > 0:
             Streams.empty_input_lanes[offset_adjusted_time()] = empty_lanes
 

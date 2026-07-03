@@ -221,6 +221,7 @@ class DynamicStage(PlayArchetype):
         transform_mat = transform.transform()
         total_hitbox = transform_mat.transform_quad(layout_lane_area(leftmost - 1.5, rightmost + 1.5))
         empty_lanes = StageMemory.empty_lanes
+        empty_triggered = False
         for touch in touches():
             if not total_hitbox.contains_point(touch.position):
                 continue
@@ -236,6 +237,7 @@ class DynamicStage(PlayArchetype):
                 play_lane_hit_effects(
                     rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6, transform=transform_mat
                 )
+                empty_triggered = True
                 if not empty_lanes.is_full():
                     empty_lanes.append(rounded_lane)
             else:
@@ -249,8 +251,11 @@ class DynamicStage(PlayArchetype):
                     play_lane_hit_effects(
                         rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6, transform=transform_mat
                     )
+                    empty_triggered = True
                     if not empty_lanes.is_full():
                         empty_lanes.append(rounded_lane)
+        if empty_triggered:
+            input_manager.release_all_empty_disallows()
 
     def update_parallel(self):
         t = time()
