@@ -9,8 +9,14 @@ class EngineRevision(IntEnum):
     BASE = 0
     SONOLUS_1_1_0 = 1
     APPARENT_ELEVATION = 2
+    # Retain voltex replay revision 2 alongside upstream elevation revision 2.
+    GAUGE_REWORK = APPARENT_ELEVATION
 
     LATEST = 2
+
+
+GAUGE_LIFE_UNIT = 10
+GAUGE_MAX_LIFE = 1000 * GAUGE_LIFE_UNIT
 
 
 @level_data
