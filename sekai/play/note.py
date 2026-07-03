@@ -952,7 +952,10 @@ class BaseNote(PlayArchetype):
     def _basic_visual_lane_at(self, t: float) -> float:
         if self.stage_ref.index <= 0:
             return self.lane
-        return get_stage_props(self.stage_ref.get(), t).pivot_lane + self.rel_lane
+        stage = self.stage_ref.get()
+        if t == stage.props_time:
+            return stage.props.pivot_lane + self.rel_lane
+        return get_stage_props(stage, t).pivot_lane + self.rel_lane
 
     def visual_lane_at(self, t: float) -> float:
         if self.is_attached:

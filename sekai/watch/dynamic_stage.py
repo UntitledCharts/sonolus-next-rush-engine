@@ -114,6 +114,7 @@ class WatchDynamicStage(WatchArchetype):
     draw_end_time: float = entity_data()
 
     props: StageProps = shared_memory()
+    props_time: float = shared_memory()
 
     @callback(order=-2)
     def preprocess(self):
@@ -127,6 +128,7 @@ class WatchDynamicStage(WatchArchetype):
         self.end_time = get_end_time(self)
         self.draw_start_time = get_draw_start_time(self)
         self.draw_end_time = get_draw_end_time(self)
+        self.props_time = -1e8
 
     def spawn_time(self) -> float:
         return self.start_time
@@ -137,6 +139,7 @@ class WatchDynamicStage(WatchArchetype):
     @callback(order=-1)
     def update_sequential(self):
         self.props @= get_stage_props(self)
+        self.props_time = time()
         self.fever_boundary()
 
     def fever_boundary(self):

@@ -244,6 +244,13 @@ class WatchBaseNote(WatchArchetype):
         if self.kind == NoteKind.HIDE_TICK:
             return
         t = self.calc_time
+        pivot_lane = 0.0
+        half_offset = False
+        if self.stage_ref.index > 0:
+            props = get_stage_props(self.stage_ref.get(), t)
+            pivot_lane = props.pivot_lane
+            division = props.division.start
+            half_offset = division.parity == DivisionParity.ODD and division.size % 2 == 1
         schedule_note_particles(
             self.kind,
             self.effect_kind,
@@ -253,8 +260,8 @@ class WatchBaseNote(WatchArchetype):
             self.direction,
             self.judgment,
             y_offset=self.y_offset_at(t),
-            pivot_lane=self._stage_pivot_lane_at(t),
-            half_offset=self._stage_half_offset_at(t),
+            pivot_lane=pivot_lane,
+            half_offset=half_offset,
             group_id=self.index,
             transform=self.stage_transform_at(t).transform(),
         )
@@ -385,7 +392,10 @@ class WatchBaseNote(WatchArchetype):
     def _basic_visual_lane_at(self, t: float) -> float:
         if self.stage_ref.index <= 0:
             return self.lane
-        return get_stage_props(self.stage_ref.get(), t).pivot_lane + self.rel_lane
+        stage = self.stage_ref.get()
+        if t == stage.props_time:
+            return stage.props.pivot_lane + self.rel_lane
+        return get_stage_props(stage, t).pivot_lane + self.rel_lane
 
     def visual_lane_at(self, t: float) -> float:
         if self.is_attached:

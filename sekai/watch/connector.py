@@ -244,7 +244,11 @@ class WatchConnector(WatchArchetype):
         head = self.head_ref.get().effective_attach_head
         tail = self.tail_ref.get().effective_attach_tail
         if head.stage_ref.index > 0 and head.stage_ref.index == tail.stage_ref.index:
-            pivot_lane = get_stage_props(head.stage_ref.get(), target_time).pivot_lane
+            stage = head.stage_ref.get()
+            if target_time == stage.props_time:
+                pivot_lane = stage.props.pivot_lane
+            else:
+                pivot_lane = get_stage_props(stage, target_time).pivot_lane
             head_lane = pivot_lane + head.rel_lane
             tail_lane = pivot_lane + tail.rel_lane
         else:

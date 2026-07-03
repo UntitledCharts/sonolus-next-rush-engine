@@ -859,12 +859,17 @@ def perspective_vec(x: float, y: float, travel: float = 1.0) -> Vec2:
     return transform_vec(Vec2(x * tilt_width_factor(y * travel), y * travel))
 
 
-def perspective_rect(l, r, t, b, travel=1.0, p=1.0):
+def perspective_edge_factors(t: float, b: float, travel: float, p: float) -> tuple[float, float, float, float]:
     depth_b = tilt_depth(b, travel)
     depth_t = tilt_depth(t, travel)
     w_ref = tilt_width_factor(travel)
     wb = lerp(w_ref, tilt_width_factor(depth_b), p)
     wt = lerp(w_ref, tilt_width_factor(depth_t), p)
+    return depth_b, depth_t, wb, wt
+
+
+def perspective_rect(l, r, t, b, travel=1.0, p=1.0):
+    depth_b, depth_t, wb, wt = perspective_edge_factors(t, b, travel, p)
     return transform_quad(
         Quad(
             bl=Vec2(l * wb, depth_b),
@@ -1383,11 +1388,21 @@ def layout_note_body_slices_by_edges(
         l = r = m
     ml = min(l + edge_w, m)
     mr = max(r - edge_w, m)
-    return (
-        layout_note_body_by_edges(l=l, r=ml, h=h, travel=travel),
-        layout_note_body_by_edges(l=ml, r=mr, h=h, travel=travel),
-        layout_note_body_by_edges(l=mr, r=r, h=h, travel=travel),
+    depth_b, depth_t, wb, wt = perspective_edge_factors(1 - h, 1 + h, travel, Options.note_perspective)
+    left = Quad(
+        bl=transform_vec(Vec2(l * wb, depth_b)),
+        br=transform_vec(Vec2(ml * wb, depth_b)),
+        tl=transform_vec(Vec2(l * wt, depth_t)),
+        tr=transform_vec(Vec2(ml * wt, depth_t)),
     )
+    right = Quad(
+        bl=transform_vec(Vec2(mr * wb, depth_b)),
+        br=transform_vec(Vec2(r * wb, depth_b)),
+        tl=transform_vec(Vec2(mr * wt, depth_t)),
+        tr=transform_vec(Vec2(r * wt, depth_t)),
+    )
+    middle = Quad(bl=left.br, br=right.bl, tl=left.tr, tr=right.tl)
+    return left, middle, right
 
 
 def layout_regular_note_body(lane: float, size: float, travel: float) -> tuple[Quad, Quad, Quad]:
