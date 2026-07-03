@@ -198,6 +198,9 @@ class LevelSkill:
     beat: float
     effect: int
     level: int = 1
+    value: int = 250
+    scale: float = 1.0
+    duration: float = 6
 
 
 type LevelEntities = (
@@ -252,7 +255,16 @@ def build_level(
         elif isinstance(entity, LevelFeverStart):
             event_entities.append(FeverStart(beat=entity.beat))
         elif isinstance(entity, LevelSkill):
-            event_entities.append(Skill(beat=entity.beat, effect=entity.effect, level=entity.level))
+            event_entities.append(
+                Skill(
+                    beat=entity.beat,
+                    effect=entity.effect,
+                    level=entity.level,
+                    value=entity.value,
+                    scale=entity.scale,
+                    duration=entity.duration,
+                )
+            )
         elif not isinstance(
             entity, (LevelBpmChange, LevelTimescaleGroup, LevelStage, LevelCameraChange, LevelNote, LevelSlide)
         ):

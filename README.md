@@ -136,13 +136,13 @@ Shorthand used in the tables:
 | Combo Numbers     | `Combo Number {0..11}`, `Combo Number Glow {0..11}`                                                                                                                                                                             |
 | Combo Labels      | `Combo Label`, `Combo Label Glow`                                                                                                                                                                                               |
 | AP Combo          | `AP Combo Number {0..11}`, `AP Combo Label`                                                                                                                                                                                     |
-| UI & Life Numbers | `UI Number {0..11}`, `Life Number {0..9}`                                                                                                                                                                                       |
+| UI & Life Numbers | `UI Number {0..17}` (`0`-`9` digits, `10` = alt-color `0`, `11` = `+`, `12` = `-`, `13` = `l`, `14` = `v`, `15` = `.`, `16` = `%`, `17` = seconds suffix), `Life Number {0..9}`                                                     |
 | Accuracy Warnings | `Fast Warning`, `Late Warning`, `Flick Warning`                                                                                                                                                                                 |
 | Gameplay Effects  | `Damage Flash`, `Dead Effect`, `Auto Live`                                                                                                                                                                                      |
 | Life Bar          | `Life Bar Pause`, `Life Bar Skip`, `Life Bar Disable`, `Life Bar Normal Background`, `Life Bar Danger Background`, `Life Bar Gauge Normal`, `Life Bar Gauge Danger`, `Life Bar Gauge Normal Edge`, `Life Bar Gauge Danger Edge` |
 | Score Bar         | `Score Bar`, `Score Bar Panel`, `Score Bar Gauge`, `Score Bar Mask`, `Score Bar Cover`                                                                                                                                          |
 | Score Rank        | `Score Rank {S, A, B, C, D}`, `Score Rank Text {S, A, B, C, D}`                                                                                                                                                                 |
-| Skill System      | `Skill Bar Life`, `Skill Bar Score`, `Skill Bar Judgment`, `Skill Level {1..4}`, `Skill Value Score`, `Skill Value Life`, `Skill Value Judgment`, `Skill Icon {1..5}`, `Skill Judgment Line`                                    |
+| Skill System      | `Skill Bar Life`, `Skill Bar Score`, `Skill Bar Judgment`, `Skill Number {0..17}` (optional; same glyph layout as `UI Number`, used in preference when present, otherwise falls back to `UI Number`), `Skill Icon {1..5}`, `Skill Judgment Line` |
 
 ### Effect Clips
 

@@ -38,30 +38,34 @@ from sekai.lib.streams import Streams
 class SkillActive:
     judgment: bool
     start_time: float
+    duration: float
 
 
 class Skill(WatchArchetype):
     beat: StandardImport.BEAT
     effect: SkillMode = imported(name="effect", default=SkillMode.LEVEL_DEFAULT)
     level: int = imported(name="level", default=1)
+    value: int = imported(name="value", default=250)
+    scale: float = imported(name="scale", default=1.0)
+    duration: float = imported(name="duration", default=6)
     start_time: float = entity_data()
     current_life: float = entity_data()
     name = archetype_names.SKILL
     count: int = shared_memory()
     next_ref: EntityRef[Skill] = entity_data()
     end_time_3: float = entity_memory()
-    end_time_6: float = entity_memory()
+    end_time_effect: float = entity_memory()
 
     @callback(order=-2)
     def preprocess(self):
         self.effect = SkillMode.from_options(Options.skill_mode, self.effect)
         self.start_time = beat_to_time(self.beat)
         self.end_time_3 = self.start_time + 3
-        self.end_time_6 = self.start_time + 6
+        self.end_time_effect = self.start_time + self.duration
         if Options.hide_ui != 3 and Options.skill_effect and ActiveSkin.skill_bar_score.is_available:
             Effects.skill.schedule(self.start_time)
         if self.effect == SkillMode.HEAL:
-            add_life_scheduled(250, self.start_time)
+            add_life_scheduled(self.value, self.start_time)
 
     def spawn_time(self):
         return -1e8 if self.count == 0 else self.start_time
@@ -76,9 +80,9 @@ class Skill(WatchArchetype):
         current_time = time()
         elapsed = current_time - self.start_time
         if 0 <= elapsed < 3:
-            draw_skill_bar(elapsed, self.count, self.effect, self.level)
-        if 0 <= elapsed < 6 and self.effect == SkillMode.JUDGMENT and not LevelConfig.dynamic_stages:
-            draw_judgment_effect(elapsed)
+            draw_skill_bar(elapsed, self.count, self.effect, self.level, self.value, self.scale, self.duration)
+        if 0 <= elapsed < self.duration and self.effect == SkillMode.JUDGMENT and not LevelConfig.dynamic_stages:
+            draw_judgment_effect(elapsed, duration=self.duration)
 
     def update_sequential(self):
         if not is_replay():
@@ -87,9 +91,10 @@ class Skill(WatchArchetype):
             else:
                 LifeManager.life = self.current_life
         t = time()
-        if self.start_time <= t < self.end_time_6 and self.effect == SkillMode.JUDGMENT:
+        if self.start_time <= t < self.end_time_effect and self.effect == SkillMode.JUDGMENT:
             SkillActive.judgment = True
             SkillActive.start_time = self.start_time
+            SkillActive.duration = self.duration
         else:
             SkillActive.judgment = False
 

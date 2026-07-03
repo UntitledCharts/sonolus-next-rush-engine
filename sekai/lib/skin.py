@@ -11,7 +11,7 @@ from sonolus.script.runtime import is_replay, is_watch
 from sonolus.script.sprite import RenderMode, Sprite, SpriteGroup, StandardSprite, skin, sprite, sprite_group
 
 from sekai.lib.layout import AccuracyType, ComboType, FlickDirection, JudgmentType
-from sekai.lib.options import Options, SkillMode, Version
+from sekai.lib.options import Options, Version
 
 if TYPE_CHECKING:
     from sekai.lib.buckets import SekaiWindow
@@ -366,13 +366,10 @@ class BaseSkin:
     skill_bar_life: Sprite = sprite("Skill Bar Life")
     skill_bar_score: Sprite = sprite("Skill Bar Score")
     skill_bar_judgment: Sprite = sprite("Skill Bar Judgment")
-    skill_level: SpriteGroup = sprite_group(f"Skill Level {i}" for i in range(1, 5))
-    skill_value_score: Sprite = sprite("Skill Value Score")
-    skill_value_life: Sprite = sprite("Skill Value Life")
-    skill_value_judgment: Sprite = sprite("Skill Value Judgment")
+    skill_number: SpriteGroup = sprite_group(f"Skill Number {i}" for i in range(18))
     skill_icon: SpriteGroup = sprite_group(f"Skill Icon {i}" for i in range(1, 6))
     skill_judgment_line: Sprite = sprite("Skill Judgment Line")
-    ui_number: SpriteGroup = sprite_group(f"UI Number {i}" for i in range(12))
+    ui_number: SpriteGroup = sprite_group(f"UI Number {i}" for i in range(18))
     life_number: SpriteGroup = sprite_group(f"Life Number {i}" for i in range(10))
     life_bar_pause: Sprite = sprite("Life Bar Pause")
     life_bar_skip: Sprite = sprite("Life Bar Skip")
@@ -771,44 +768,6 @@ class SkillIconSpriteSet(Record):
     @property
     def available(self):
         return self.icon[0].is_available
-
-
-class SkillLevelSpriteSet(Record):
-    skill: SpriteGroup
-
-    def get_sprite(self, level: int):
-        result = +Sprite
-        result = self.skill[level - 1]
-        return result
-
-    @property
-    def available(self):
-        return self.skill[0].is_available
-
-
-class SkillValueSpriteSet(Record):
-    score: Sprite
-    heal: Sprite
-    judgment: Sprite
-
-    def get_sprite(self, effect: SkillMode):
-        result = +Sprite
-        match effect:
-            case SkillMode.SCORE:
-                result @= self.score
-            case SkillMode.HEAL:
-                result @= self.heal
-            case SkillMode.JUDGMENT:
-                result @= self.judgment
-            case SkillMode.LEVEL_DEFAULT:
-                pass
-            case _:
-                assert_never(effect)
-        return result
-
-    @property
-    def available(self):
-        return self.score.is_available
 
 
 class UINumberSpriteSet(Record):
@@ -1397,8 +1356,7 @@ class ActiveSkin:
     skill_bar_life: Sprite
     skill_bar_score: Sprite
     skill_bar_judgment: Sprite
-    skill_level: SkillLevelSpriteSet
-    skill_value: SkillValueSpriteSet
+    skill_number: UINumberSpriteSet
     skill_icon: SkillIconSpriteSet
     skill_judgment_line: Sprite
     ui_number: UINumberSpriteSet
@@ -1962,13 +1920,16 @@ def init_skin():
     ActiveSkin.skill_bar_score = BaseSkin.skill_bar_score
     ActiveSkin.skill_bar_judgment = BaseSkin.skill_bar_judgment
     ActiveSkin.skill_icon = SkillIconSpriteSet(icon=BaseSkin.skill_icon)
-    ActiveSkin.skill_level = SkillLevelSpriteSet(skill=BaseSkin.skill_level)
-    ActiveSkin.skill_value = SkillValueSpriteSet(
-        score=BaseSkin.skill_value_score, heal=BaseSkin.skill_value_life, judgment=BaseSkin.skill_value_judgment
-    )
     ActiveSkin.skill_judgment_line = BaseSkin.skill_judgment_line
+    ActiveSkin.skill_number = UINumberSpriteSet(
+        ui=first_available_sprite_group(BaseSkin.skill_number, BaseSkin.ui_number)
+    )
     ActiveSkin.ui_number = UINumberSpriteSet(ui=BaseSkin.ui_number)
-    ActiveSkin.life = LifeSpriteSet(bar=life_bar, gauge=life_gauge, number=UINumberSpriteSet(ui=BaseSkin.life_number))
+    ActiveSkin.life = LifeSpriteSet(
+        bar=life_bar,
+        gauge=life_gauge,
+        number=UINumberSpriteSet(ui=first_available_sprite_group(BaseSkin.life_number, BaseSkin.ui_number)),
+    )
     ActiveSkin.score = ScoreSpriteSet(
         bar=BaseSkin.score_bar,
         panel=BaseSkin.score_bar_panel,

@@ -256,8 +256,13 @@ def setting_count(head: int, skill: int) -> None:
             if Skill.at(skill_ptr).effect == SkillMode.HEAL:
                 skill_ptr = Skill.at(skill_ptr).next_ref.index
             elif Skill.at(skill_ptr).effect == SkillMode.SCORE or Skill.at(skill_ptr).effect == SkillMode.JUDGMENT:
-                if note.BaseNote.at(ptr).target_time <= Skill.at(skill_ptr).start_time + 6:
-                    note.BaseNote.at(ptr).entity_score_multiplier += (
+                if Skill.at(skill_ptr).effect == SkillMode.SCORE:
+                    boost = Skill.at(skill_ptr).scale
+                else:
+                    boost = 1.0
+                skill_end_time = Skill.at(skill_ptr).start_time + Skill.at(skill_ptr).duration
+                if note.BaseNote.at(ptr).target_time <= skill_end_time:
+                    note.BaseNote.at(ptr).entity_score_multiplier += boost * (
                         note.BaseNote.at(ptr).archetype_score_multiplier + note.BaseNote.at(ptr).entity_score_multiplier
                     )
                 else:

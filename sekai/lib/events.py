@@ -1,6 +1,9 @@
+from math import floor
+
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import lerp, unlerp_clamped
 from sonolus.script.quad import Quad, Rect
+from sonolus.script.record import Record
 from sonolus.script.sprite import Sprite
 from sonolus.script.vec import Vec2
 
@@ -17,6 +20,7 @@ from sekai.lib.layout import (
     IDENTITY_AFFINE_TRANSFORM,
     LANE_B,
     LANE_T,
+    TARGET_ASPECT_RATIO,
     AffineTransform2d,
     DynamicLayout,
     Layout,
@@ -36,6 +40,7 @@ from sekai.lib.layout import (
     layout_skill_bar,
     layout_skill_judgment_line,
     perspective_rect,
+    safe_area,
     screen,
     tilt_depth,
     tilt_width_factor,
@@ -343,7 +348,90 @@ def spawn_fever_chance_particle():
         ActiveParticles.fever_chance_lane.spawn(layout_lane2, 1, False)
 
 
-def draw_skill_bar(draw_time: float, num: int, effect: SkillMode, level: int):
+# Glyph indices into the shared UI Number sprite group (0-9 digits, 10 alt-color 0, 11 +).
+SKILL_GLYPH_MINUS = 12
+SKILL_GLYPH_L = 13
+SKILL_GLYPH_V = 14
+SKILL_GLYPH_DOT = 15
+SKILL_GLYPH_PERCENT = 16
+SKILL_GLYPH_SECOND = 17
+
+SKILL_GLYPH_WIDTH_FACTOR = 6.25
+SKILL_GLYPH_HEIGHT_FACTOR = 1
+SKILL_GLYPH_GAP_FACTOR = -4
+SKILL_DOT_GAP_FACTOR = -6
+SKILL_PERCENT_GAP_FACTOR = -2
+
+
+def skill_glyph_gap_factor(glyph: int) -> float:
+    result = SKILL_GLYPH_GAP_FACTOR
+    if glyph == SKILL_GLYPH_DOT:
+        result = SKILL_DOT_GAP_FACTOR
+    elif glyph == SKILL_GLYPH_PERCENT:
+        result = SKILL_PERCENT_GAP_FACTOR
+    return result
+
+
+def skill_gap_factor(left_glyph: int, right_glyph: int) -> float:
+    result = skill_glyph_gap_factor(left_glyph)
+    right = skill_glyph_gap_factor(right_glyph)
+    if right != SKILL_GLYPH_GAP_FACTOR:
+        result = right
+    return result
+
+
+SKILL_BAR_BASE_X = -6.7
+SKILL_BAR_H = 0.08
+SKILL_BAR_HALF_W = SKILL_BAR_H * 21
+SKILL_NOTCH_PUSH = 1.35777
+SKILL_EDGE_MARGIN = 0.3
+SKILL_REF_TOP_EDGE = 0.05529
+SKILL_REF_Y_RATIO = 0.0
+
+
+class SkillNumberSpec(Record):
+    has_prefix: bool
+    has_minus: bool
+    int_val: int
+    int_digits: int
+    has_mid: bool
+    dec_digit: int
+    has_suffix: bool
+    suffix_glyph: int
+
+    @property
+    def count(self) -> int:
+        prefix_count = 3 if self.has_prefix else 0
+        minus_count = 1 if self.has_minus else 0
+        mid_count = 2 if self.has_mid else 0
+        suffix_count = 1 if self.has_suffix else 0
+        return prefix_count + minus_count + self.int_digits + mid_count + suffix_count
+
+    def glyph_at(self, i: int) -> int:
+        prefix_count = 3 if self.has_prefix else 0
+        minus_count = 1 if self.has_minus else 0
+        int_start = prefix_count + minus_count
+        result = self.suffix_glyph
+        if self.has_prefix and i == 0:
+            result = SKILL_GLYPH_L
+        elif self.has_prefix and i == 1:
+            result = SKILL_GLYPH_V
+        elif self.has_prefix and i == 2:
+            result = SKILL_GLYPH_DOT
+        elif self.has_minus and i == prefix_count:
+            result = SKILL_GLYPH_MINUS
+        elif i < int_start + self.int_digits:
+            result = floor(self.int_val / 10 ** (self.int_digits - 1 - (i - int_start))) % 10
+        elif self.has_mid and i == int_start + self.int_digits:
+            result = SKILL_GLYPH_DOT
+        elif self.has_mid and i == int_start + self.int_digits + 1:
+            result = self.dec_digit
+        return result
+
+
+def draw_skill_bar(
+    draw_time: float, num: int, effect: SkillMode, level: int, value: int, scale: float, duration: float
+):
     if Options.hide_ui >= 3:
         return
     if not Options.skill_effect:
@@ -360,18 +448,20 @@ def draw_skill_bar(draw_time: float, num: int, effect: SkillMode, level: int):
     x_ratio = 0
     y_ratio = 0
     if LevelConfig.ui_version == Version.v3:
-        x_ratio = 0.7 - 0.7 * (aspect_ratio() - 1.3333) ** 3
+        scale_ratio = min(1, aspect_ratio() / TARGET_ASPECT_RATIO)
+        has_side_notch = screen().l != safe_area().l or screen().r != safe_area().r
+        edge_offset = SKILL_NOTCH_PUSH * scale_ratio if has_side_notch else -SKILL_EDGE_MARGIN
+        bar_center_x = screen().l / Layout.fixed_w_scale + SKILL_BAR_HALF_W + edge_offset
+        x_ratio = bar_center_x - SKILL_BAR_BASE_X
+        y_ratio = SKILL_REF_TOP_EDGE - (screen().t - Layout.t) / Layout.fixed_h_scale + SKILL_REF_Y_RATIO
 
-        raw_val = -0.405 * aspect_ratio() + 0.72
-        y_ratio = max(raw_val, 0)
-
-        x = -6.7 + x_ratio
+        x = SKILL_BAR_BASE_X + x_ratio
         y = 0.433 - y_ratio
         start_center = Vec2(x=x - 0.2, y=y)
         target_center = Vec2(x=x, y=y)
         current_center = lerp(start_center, target_center, anim)
-        h = 0.08
-        w = h * 21
+        h = SKILL_BAR_H
+        w = SKILL_BAR_HALF_W
         layout @= layout_skill_bar(current_center, w, h)
     else:
         x = 0
@@ -406,8 +496,13 @@ def draw_skill_bar(draw_time: float, num: int, effect: SkillMode, level: int):
         layout @= layout_skill_bar(icon_current_center, w, h)
     ActiveSkin.skill_icon.get_sprite(num).draw(layout, LAYER_SKILL_ETC, anim)
 
+    if not ActiveSkin.skill_number.available:
+        return
+
+    text_current_center = +Vec2
+
     if LevelConfig.ui_version == Version.v3:
-        x = -5.58 + x_ratio
+        x = -5.53 + x_ratio
         y = 0.474 - y_ratio
         text_start_center = Vec2(x=x - 0.2, y=y)
         text_target_center = Vec2(x=x, y=y)
@@ -424,22 +519,83 @@ def draw_skill_bar(draw_time: float, num: int, effect: SkillMode, level: int):
                 final_anim = enter_progress
             else:
                 final_anim = mid_progress - exit_progress
-        text_current_center = lerp(current_start_pos, text_target_center, final_anim)
-        h = 0.027
+        text_current_center @= lerp(current_start_pos, text_target_center, final_anim)
+        h = 0.024
         w = h * 14
-        layout @= layout_skill_bar(text_current_center, w, h)
     else:
         x = 1.5
         y = 0.655
-        text_current_center = Vec2(x=x, y=y)
-        h = 0.032
+        text_current_center @= Vec2(x=x, y=y)
+        h = 0.028
         w = h * 14
         final_anim = anim
-        layout @= layout_skill_bar(text_current_center, w, h)
-    if draw_time <= 1.5 or LevelConfig.ui_version == Version.v1:
-        ActiveSkin.skill_level.get_sprite(level).draw(layout, LAYER_SKILL_ETC, final_anim)
+
+    spec = +SkillNumberSpec
+    spec.has_prefix = draw_time <= 1.5 or LevelConfig.ui_version == Version.v1
+    spec.has_minus = False
+    spec.int_val = 0
+    spec.has_mid = False
+    spec.dec_digit = 0
+    spec.has_suffix = False
+    spec.suffix_glyph = 0
+    if spec.has_prefix:
+        if level < 0:
+            spec.has_minus = True
+            spec.int_val = -level
+        else:
+            spec.int_val = level
     else:
-        ActiveSkin.skill_value.get_sprite(effect).draw(layout, LAYER_SKILL_ETC, final_anim)
+        match effect:
+            case SkillMode.SCORE:
+                scaled = floor(scale * 1000 + 0.5)
+                spec.int_val = scaled // 10
+                if scaled % 10 > 0:
+                    spec.has_mid = True
+                    spec.dec_digit = scaled % 10
+                spec.has_suffix = True
+                spec.suffix_glyph = SKILL_GLYPH_PERCENT
+            case SkillMode.HEAL:
+                if value < 0:
+                    spec.has_minus = True
+                    spec.int_val = -value
+                else:
+                    spec.int_val = value
+            case SkillMode.JUDGMENT:
+                scaled = floor(duration * 10 + 0.5)
+                spec.int_val = scaled // 10
+                if scaled % 10 > 0:
+                    spec.has_mid = True
+                    spec.dec_digit = scaled % 10
+                spec.has_suffix = True
+                spec.suffix_glyph = SKILL_GLYPH_SECOND
+
+    spec.int_digits = 1
+    temp_n = spec.int_val // 10
+    while temp_n > 0:
+        temp_n //= 10
+        spec.int_digits += 1
+
+    count = spec.count
+
+    glyph_half_w = h * SKILL_GLYPH_WIDTH_FACTOR
+    glyph_half_h = h * SKILL_GLYPH_HEIGHT_FACTOR
+
+    total_width = count * 2 * glyph_half_w
+    for i in range(count - 1):
+        total_width += h * skill_gap_factor(spec.glyph_at(i), spec.glyph_at(i + 1))
+
+    if LevelConfig.ui_version == Version.v3:
+        cursor_x = text_current_center.x + w - total_width
+    else:
+        cursor_x = text_current_center.x - w
+
+    for i in range(count):
+        glyph = spec.glyph_at(i)
+        layout @= layout_skill_bar(Vec2(x=cursor_x + glyph_half_w, y=text_current_center.y), glyph_half_w, glyph_half_h)
+        ActiveSkin.skill_number.get_sprite(glyph).draw(layout, LAYER_SKILL_ETC, final_anim)
+        cursor_x += 2 * glyph_half_w
+        if i < count - 1:
+            cursor_x += h * skill_gap_factor(glyph, spec.glyph_at(i + 1))
 
 
 def draw_judgment_effect(
@@ -449,10 +605,11 @@ def draw_judgment_effect(
     stage_alpha: float = 1.0,
     y_offset: float = 0.0,
     *,
+    duration: float = 6.0,
     transform: AffineTransform2d = IDENTITY_AFFINE_TRANSFORM,
 ):
     enter_progress = unlerp_clamped(0, 0.25, draw_time)
-    exit_progress = unlerp_clamped(5.75, 6, draw_time)
+    exit_progress = unlerp_clamped(duration - 0.25, duration, draw_time)
 
     anim = enter_progress - exit_progress
     layout = transform.transform_quad(layout_skill_judgment_line(l, r, y_offset))

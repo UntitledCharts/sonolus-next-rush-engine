@@ -175,8 +175,13 @@ def setting_combo(head: int, skill: int) -> None:
             if Skill.at(skill_ptr).effect == SkillMode.HEAL:
                 skill_ptr = Skill.at(skill_ptr).next_ref.index
             elif Skill.at(skill_ptr).effect == SkillMode.SCORE or Skill.at(skill_ptr).effect == SkillMode.JUDGMENT:
-                if note.WatchBaseNote.at(ptr).target_time <= Skill.at(skill_ptr).start_time + 6:
-                    note.WatchBaseNote.at(ptr).entity_score_multiplier += (
+                if Skill.at(skill_ptr).effect == SkillMode.SCORE:
+                    boost = Skill.at(skill_ptr).scale
+                else:
+                    boost = 1.0
+                skill_end_time = Skill.at(skill_ptr).start_time + Skill.at(skill_ptr).duration
+                if note.WatchBaseNote.at(ptr).target_time <= skill_end_time:
+                    note.WatchBaseNote.at(ptr).entity_score_multiplier += boost * (
                         note.WatchBaseNote.at(ptr).archetype_score_multiplier
                         + note.WatchBaseNote.at(ptr).entity_score_multiplier
                     )
@@ -496,6 +501,6 @@ def count_skill(head: int) -> None:
         Skill.at(ptr).count = count
         count += 1
         if Skill.at(ptr).effect == SkillMode.HEAL:
-            life = clamp(life + 250, 0, LifeManager.max_life)
+            life = clamp(life + Skill.at(ptr).value, 0, LifeManager.max_life)
         Skill.at(ptr).current_life = life
         ptr = Skill.at(ptr).next_ref.index

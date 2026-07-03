@@ -264,7 +264,7 @@ class DynamicStage(PlayArchetype):
         self.props.draw()
         if SkillActive.judgment:
             elapsed = t - SkillActive.start_time
-            if elapsed < 6:
+            if elapsed < SkillActive.duration:
                 l = self.props.lane - self.props.width
                 r = self.props.lane + self.props.width
                 stage_transform = +StageTransform
@@ -278,6 +278,7 @@ class DynamicStage(PlayArchetype):
                     r,
                     self.props.a,
                     self.props.y_offset,
+                    duration=SkillActive.duration,
                     transform=stage_transform.transform(),
                 )
 

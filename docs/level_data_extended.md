@@ -11,7 +11,10 @@ Represents a skill activation event.
   * SCORE = 0
   * HEAL = 1
   * JUDGMENT = 2
-* **level (int)**: The displayed level of the skill. Must be an integer between 1 and 4. Defaults to 1.
+* **level (int)**: The displayed level of the skill. May be negative (shown with a leading `-`). Defaults to 1.
+* **value (int, optional)**: The amount of life restored by a HEAL skill. May be negative to drain life instead (shown with a leading `-`). Defaults to 250.
+* **scale (float, optional)**: The score boost multiplier of a SCORE skill; displayed as a percentage (1.0 = 100%). Defaults to 1.0.
+* **duration (float, optional)**: The effect duration in seconds for skills that have one (e.g. SCORE's score-boost window and JUDGMENT's perfect-lock window). Defaults to 6.
 
 ## FeverChance
 
