@@ -58,7 +58,7 @@ class Skill(WatchArchetype):
 
     def init_data(self):
         # Initialization resolves these fields before sorting and weighting notes.
-        self.effect = SkillMode.from_options(Options.skill_mode, self.effect)
+        self.effect = SkillMode.from_options(SkillMode.LEVEL_DEFAULT, self.effect)
         self.start_time = beat_to_time(self.beat)
 
     @callback(order=-2)
