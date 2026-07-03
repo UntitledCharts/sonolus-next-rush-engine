@@ -114,6 +114,7 @@ class Options:
     )
     background_alpha: float = slider_option(
         name=StandardText.STAGE_ALPHA,
+        title="Background Brightness",
         scope="Sekai",
         default=1,
         min=0.5,
