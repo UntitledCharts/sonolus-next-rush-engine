@@ -11,7 +11,7 @@ from sekai.tutorial.mode import tutorial_mode
 from sekai.watch.mode import watch_mode
 
 engine = Engine(
-    name="next-rush",
+    name="next-rush-dev",
     title="Next RUSH",
     thumbnail="../js/res/thumbnail.png",
     data=EngineData(
