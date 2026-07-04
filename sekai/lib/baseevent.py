@@ -21,8 +21,7 @@ class BaseEvent(_BaseEventBase):
 
 def get_event_as[T](ref: EntityRef, archetype: type[T]) -> T:
     """Typed wrapper around EntityRef.get_as that preserves the archetype's type (including Protocol types)."""
-    assert ref.index > 0
-    return cast(T, ref.with_archetype(cast(Any, archetype)).get(check=False))
+    return cast(T, ref.with_archetype(cast(Any, archetype)).get())
 
 
 def init_event_list[T: BaseEvent](first_ref: EntityRef[T]):

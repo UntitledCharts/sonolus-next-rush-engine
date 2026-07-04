@@ -234,6 +234,14 @@ def stage_transform_is_identity(st: StageTransform) -> bool:
     return st.sr == 0.0 and st.tx == 0.0 and st.ty == 0.0
 
 
+def stage_rotation_pivot(camera: LayoutTransform, judge_depth: float) -> Vec2:
+    basis_depth = lerp(judge_depth, 0.0, camera.stage_tilt)
+    return Vec2(
+        camera.x_translate,
+        basis_depth * camera.h_scale + camera.t,
+    ).rotate(-camera.rotate)
+
+
 def compute_stage_transform(
     camera: LayoutTransform,
     stage_rotate: float,
@@ -244,7 +252,7 @@ def compute_stage_transform(
 ) -> StageTransform:
     travel = approach_at_tilt(1.0, camera.stage_tilt)
     width = width_factor_at_tilt(travel, camera.stage_tilt)
-    pivot = Vec2(
+    judge_center = Vec2(
         mask_lane * width * camera.w_scale + camera.x_translate,
         travel * camera.h_scale + camera.t,
     ).rotate(-camera.rotate)
@@ -255,7 +263,14 @@ def compute_stage_transform(
         x_lane_translate * camera.w_scale,
         y_lane_translate * camera.w_scale - center_weight * center_judge_y,
     ).rotate(-camera.rotate)
-    return StageTransform(sr=stage_rotate, px=pivot.x, py=pivot.y, tx=offset.x, ty=offset.y)
+    pivot = stage_rotation_pivot(camera, travel)
+    cs = cos(stage_rotate)
+    sn = sin(stage_rotate)
+    dx = judge_center.x - pivot.x
+    dy = judge_center.y - pivot.y
+    tx = offset.x + (1 - cs) * dx - sn * dy
+    ty = offset.y + (1 - cs) * dy + sn * dx
+    return StageTransform(sr=stage_rotate, px=pivot.x, py=pivot.y, tx=tx, ty=ty)
 
 
 def blend_stage_transform(a: StageTransform, b: StageTransform, frac: float) -> StageTransform:

@@ -5,7 +5,7 @@ description = "Next RUSH Sonolus engine"
 readme = "README.md"
 requires-python = ">=3.12.5"
 dependencies = [
-    "sonolus-py~=0.16.0",
+    "sonolus-py~=0.17.0",
 ]
 
 [dependency-groups]
@@ -23,6 +23,3 @@ ignore = ["E402", "E741", "D1", "COM812", "PLW2901", "PLW3201", "PLR6301", "PLC0
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
-
-[tool.uv.sources]
-sonolus-py = { git = "https://github.com/hyeon2006/sonolus.py", rev = "optimize/strength-reduction" }

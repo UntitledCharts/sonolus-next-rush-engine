@@ -17,7 +17,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "sonolus-py", git = "https://github.com/hyeon2006/sonolus.py?rev=optimize%2Fstrength-reduction" }]
+requires-dist = [{ name = "sonolus-py", specifier = "~=0.17.0" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -75,8 +75,32 @@ wheels = [
 
 [[package]]
 name = "sonolus-py"
-version = "0.16.0"
-source = { git = "https://github.com/hyeon2006/sonolus.py?rev=optimize%2Fstrength-reduction#9c5846653f66d9314bdbf19184d622a2f57c6968" }
+version = "0.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/ef/66980732ebee014f5ef160840baf1816abc174cc2024c6e36a037bd34277/sonolus_py-0.17.0.tar.gz", hash = "sha256:b109a74163b404a05edd2cfd7312f599b9356f8815de59269d6ef3ec558d1cad", size = 289665, upload-time = "2026-07-04T07:53:53.891Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cf/e1/a2ab9332d2a9eb3c6cd1332562eb72ffc6ebc410f976d225732ebb811edb/sonolus_py-0.17.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:b32317ec0da8eb1dad263398e4c84fad22a9d0de83420b63b85475d39908b1e3", size = 878565, upload-time = "2026-07-04T07:53:17.544Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/e7/9390c93c862d8a5f08df690ce45f296cb4c30a89f0ff5db6a8ee85943a19/sonolus_py-0.17.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:26e617653b6a4dcda1578dcc5523a27846de05b9111902f41847ffb429e0938f", size = 4780199, upload-time = "2026-07-04T07:53:19.397Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/94/d5c034fac85c2c778c3fad1bd744a700171c224add47e06d123991537f56/sonolus_py-0.17.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8f2a54c4476da6dfdacab2584ec2878c905266cd12458b249ff3642f921b946a", size = 4894283, upload-time = "2026-07-04T07:53:21.902Z" },
+    { url = "https://files.pythonhosted.org/packages/df/e6/4c586a30334c6cd6968089dbefd7d32c48f37b2813ee55434fa8b2592054/sonolus_py-0.17.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:eed907e73faadf4353180dd096270142890cb4687676eb6f3eef39c2479a762d", size = 4745839, upload-time = "2026-07-04T07:53:23.832Z" },
+    { url = "https://files.pythonhosted.org/packages/82/e4/5019519a796861704f90357007690ea2c72f344e719c9babef30e4f7eece/sonolus_py-0.17.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:5b699dc4ef48afed7f09a45ea46c9550938239cab52d4a5fa07018f10c910750", size = 4871295, upload-time = "2026-07-04T07:53:25.65Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/f0/d5b13ed7cdeaf6e57ea0df89c06276792433a819e383d08bbe04f200463c/sonolus_py-0.17.0-cp312-cp312-win_amd64.whl", hash = "sha256:c9bd07eeb67b2b48dec60719a56288b055b4b85212c7481a150ff424d6de62e7", size = 796180, upload-time = "2026-07-04T07:53:27.348Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/0f/81793342fd6553d0d17a2200df105ffa387cc64ef9ead819f9469d404aa1/sonolus_py-0.17.0-cp312-cp312-win_arm64.whl", hash = "sha256:a566840160c5943b3ce5e7824d9a8f91f00c7003de232fe91f531457ad181eef", size = 707702, upload-time = "2026-07-04T07:53:29.083Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/e7/575f1d7adae237b317850a2540a9cb0763887ce7eff5f958543ac20ccb1a/sonolus_py-0.17.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:09642f8d3621671659b19b9f705545a9da5a181828fdc8ec7593d2e68c5c20b2", size = 874357, upload-time = "2026-07-04T07:53:30.516Z" },
+    { url = "https://files.pythonhosted.org/packages/64/a8/4b17dd226326b644f1d729d1d4482d0b3b56a19dc7c6959476d783cb061b/sonolus_py-0.17.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bb9afd6b93ffe88f776aee7776da8620533df4826b53c06f7e5da5891deae961", size = 4722631, upload-time = "2026-07-04T07:53:31.908Z" },
+    { url = "https://files.pythonhosted.org/packages/55/ec/f4a4fa786538cbce0804c14beec92a8139e4ba917152f0f761875479a50d/sonolus_py-0.17.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:6424c7fd4cc940052760bc747d6e710584bf08d71c3e956fa9f005bab210af2c", size = 4837174, upload-time = "2026-07-04T07:53:33.753Z" },
+    { url = "https://files.pythonhosted.org/packages/80/29/44a91aa7b0503cfb94691d55335fd995d46b89d04994da52083598945b4c/sonolus_py-0.17.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:28fbbb86055c58c2e39d33603f1a61642558a8828410b2c7885ded112cac71db", size = 4697977, upload-time = "2026-07-04T07:53:35.39Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/ab/2b06ff469ea59ec2363d2530609b56b92a270c22e5cf2746bc5c01235791/sonolus_py-0.17.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:606d57aa4156224cd8d8513c93a9e716a7fbdb14b4fe17af0cda854b3e4dba5d", size = 4818174, upload-time = "2026-07-04T07:53:37.141Z" },
+    { url = "https://files.pythonhosted.org/packages/42/ae/c4c351a43036ab9703045e5cee3f538fd579620ee5456d51b79c13a6b771/sonolus_py-0.17.0-cp313-cp313-win_amd64.whl", hash = "sha256:64ac281e1349d127d01376c29a182924451c1d57fff34f9df97c322ca2bd829f", size = 791708, upload-time = "2026-07-04T07:53:38.802Z" },
+    { url = "https://files.pythonhosted.org/packages/22/a8/fd11ef2b7b6e1ff822b3405fe1bbf4123bd5a4e92829444228aa724fff1a/sonolus_py-0.17.0-cp313-cp313-win_arm64.whl", hash = "sha256:7d5a44727045b87d5268e8745ea2fab17e2faac2994a8dc3af9f98c808b36cce", size = 704837, upload-time = "2026-07-04T07:53:40.197Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/50/af7fe65e933388003037b6abc5774d246eb48195db2b634d2abf726e1535/sonolus_py-0.17.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:6276d858fb7ec40311c4db43047f8551abdccea973217bad4e8cce0f4feb7fb1", size = 881722, upload-time = "2026-07-04T07:53:41.666Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/51/5296bd9d0ca93f0c921b5abedc987786d47dca817d26771cd3f52c4e05ae/sonolus_py-0.17.0-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:396226059d048009cb72476fd88f744f2989a7a14872678b64f004118925b87e", size = 4724809, upload-time = "2026-07-04T07:53:43.254Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/06/c20a3887e46dfe5de607bd01d9cadfc27abdecbf000326612b1ab009d34a/sonolus_py-0.17.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ebd99e1836b10fc7cef3005a4ab206f7e3a717d3a778be0faeac24bc91c5ba7a", size = 4788975, upload-time = "2026-07-04T07:53:45.04Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/f1/de1fd3f51b422a04c5825572cec46d0a30d18a6c06e321fd9f579e5cd8c9/sonolus_py-0.17.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:59f03b56bedf504820f2eb8ca8ea05affa5555880d7c16a876a935d40c6d2d11", size = 4714832, upload-time = "2026-07-04T07:53:46.759Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/cd/323c77a45db943e35d7f2c77bb008a2eb0cdbcf3ff740579e33a948a6eb2/sonolus_py-0.17.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:56e707570e1edea1f43406b8162f3b2dc57bb51f8a988837460812cb39952328", size = 4782785, upload-time = "2026-07-04T07:53:48.518Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/aa/3c62752fbb48923cdbb3e8dff63532ecda862ca1fa2f77fc9b6b1c301a61/sonolus_py-0.17.0-cp314-cp314-win_amd64.whl", hash = "sha256:9289ff013b3d0ada840adf453d98f67f664e055e24b3cd9c4672f841b6440c0a", size = 808414, upload-time = "2026-07-04T07:53:51.003Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/fd/aba7e051005db952e47250798a27099dbed8209dc1e5076e4fd8db6b0569/sonolus_py-0.17.0-cp314-cp314-win_arm64.whl", hash = "sha256:b06bdb5a18edd714b4f7e0d36b7a0db595d37ab7c332a1b6ce80c7ff45156e0f", size = 726507, upload-time = "2026-07-04T07:53:52.492Z" },
+]
 
 [[package]]
 name = "typing-extensions"
