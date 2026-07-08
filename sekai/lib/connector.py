@@ -41,6 +41,7 @@ from sekai.lib.layout import (
     layout_slide_connector_segment,
     layout_slot_glow_effect,
     pre_rotation_vec_at,
+    quad_touches_screen,
     st_slide_connector_segment,
     stage_transform_is_identity,
 )
@@ -573,10 +574,7 @@ def draw_connector_default(
         next_target_time = lerp(head_target_time, tail_target_time, next_frac)
 
         base_a = clamp(
-            get_alpha((last_target_time + next_target_time) / 2)
-            * (last_alpha + next_alpha)
-            / 2
-            * alpha_option,
+            get_alpha((last_target_time + next_target_time) / 2) * (last_alpha + next_alpha) / 2 * alpha_option,
             0,
             1,
         )
@@ -866,6 +864,8 @@ def spawn_connector_slot_particles(
             assert_never(kind)
     for slot_lane in iter_slot_lanes(lane, size):
         layout = transform.transform_quad(layout_linear_effect(slot_lane, shear=0, y_offset=y_offset))
+        if not quad_touches_screen(layout):
+            continue
         particle.spawn(layout, duration=0.5 / Options.effect_animation_speed)
 
 
@@ -895,6 +895,8 @@ def draw_connector_slot_glow_effect(
     )
     ex = 0.035 * abs(2 * size) + 0.08 if LevelConfig.ui_version == Version.v3 else 0
     layout = transform.transform_quad(layout_slot_glow_effect(lane, size + ex, height, y_offset=y_offset))
+    if not quad_touches_screen(layout):
+        return
     z = get_z(LAYER_SLOT_GLOW_EFFECT, start_time, lane, invert_time=True)
     a = remap_clamped(start_time, start_time + 0.25, 0.0, 0.25, time())
     lightweight = 0.25 if ActiveParticles.lightweight.is_available else 1

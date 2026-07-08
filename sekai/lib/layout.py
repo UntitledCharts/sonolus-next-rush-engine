@@ -870,6 +870,49 @@ def touch_to_lane(pos: Vec2, transform: AffineTransform2d) -> float:
     return x_raw / width
 
 
+def visible_lane_range_at(depth: float, transform: AffineTransform2d) -> tuple[float, float]:
+    """Conservative [min, max] range of lanes that can appear on screen at the given depth.
+
+    Projects the screen corners onto the lane axis of the current camera layout composed with
+    the given stage transform. Lanes outside the range are guaranteed off screen at this depth
+    (the converse is not guaranteed), so the result is safe to use for culling.
+    """
+    origin = transform.apply(transform_vec(Vec2(0.0, depth)))
+    axis = transform.apply(transform_vec(Vec2(tilt_width_factor(depth), depth))) - origin
+    length_sq = axis.dot(axis)
+    lo = -1e8
+    hi = 1e8
+    if length_sq >= 1e-12:
+        scr = screen()
+        bl = (scr.bl - origin).dot(axis) / length_sq
+        br = (scr.br - origin).dot(axis) / length_sq
+        tl = (scr.tl - origin).dot(axis) / length_sq
+        tr = (scr.tr - origin).dot(axis) / length_sq
+        lo = min(bl, br, tl, tr)
+        hi = max(bl, br, tl, tr)
+    return lo, hi
+
+
+def quad_touches_screen(q: QuadLike, margin_factor: float = 1.0) -> bool:
+    """Whether the quad's AABB, expanded by margin_factor times its own extents, touches the screen.
+
+    The margin absorbs particle sprites that animate slightly beyond their spawn quad.
+    """
+    min_x = min(q.bl.x, q.br.x, q.tl.x, q.tr.x)
+    max_x = max(q.bl.x, q.br.x, q.tl.x, q.tr.x)
+    min_y = min(q.bl.y, q.br.y, q.tl.y, q.tr.y)
+    max_y = max(q.bl.y, q.br.y, q.tl.y, q.tr.y)
+    margin_x = (max_x - min_x) * margin_factor
+    margin_y = (max_y - min_y) * margin_factor
+    scr = screen()
+    return (
+        max_x + margin_x >= scr.l
+        and min_x - margin_x <= scr.r
+        and max_y + margin_y >= scr.b
+        and min_y - margin_y <= scr.t
+    )
+
+
 def perspective_vec(x: float, y: float, travel: float = 1.0) -> Vec2:
     return transform_vec(Vec2(x * tilt_width_factor(y * travel), y * travel))
 

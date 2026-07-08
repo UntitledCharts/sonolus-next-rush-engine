@@ -9,8 +9,8 @@ from sekai.lib.slot_effect import (
     SLOT_EFFECT_DURATION,
     SLOT_GLOW_EFFECT_DURATION,
     clear_slot_effects,
-    draw_slot_effect,
-    draw_slot_glow_effect,
+    draw_slot_effects_in_range,
+    draw_slot_glow_effects_in_range,
     is_slot_generation_visible,
     next_slot_generation,
 )
@@ -21,8 +21,8 @@ class WatchSlotGlowEffect(WatchArchetype):
 
     sprite: Sprite = entity_memory()
     start_time: float = entity_memory()
-    lane: float = entity_memory()
-    size: float = entity_memory()
+    left: int = entity_memory()
+    right: int = entity_memory()
     y_offset: float = entity_memory()
     transform: AffineTransform2d = entity_memory()
     end_time: float = entity_memory()
@@ -52,12 +52,12 @@ class WatchSlotGlowEffect(WatchArchetype):
     def update_parallel(self):
         if not is_slot_generation_visible(self.sprite, self.generation):
             return
-        draw_slot_glow_effect(
+        draw_slot_glow_effects_in_range(
             self.sprite,
             self.start_time,
             self.end_time,
-            self.lane,
-            0.5,
+            self.left,
+            self.right,
             y_offset=self.y_offset,
             transform=self.transform,
         )
@@ -71,7 +71,9 @@ class WatchSlotEffect(WatchArchetype):
 
     sprite: Sprite = entity_memory()
     start_time: float = entity_memory()
-    lane: float = entity_memory()
+    left: int = entity_memory()
+    right: int = entity_memory()
+    shift: float = entity_memory()
     y_offset: float = entity_memory()
     transform: AffineTransform2d = entity_memory()
     end_time: float = entity_memory()
@@ -101,11 +103,13 @@ class WatchSlotEffect(WatchArchetype):
     def update_parallel(self):
         if not is_slot_generation_visible(self.sprite, self.generation):
             return
-        draw_slot_effect(
+        draw_slot_effects_in_range(
             self.sprite,
             self.start_time,
             self.end_time,
-            self.lane,
+            self.left,
+            self.right,
+            self.shift,
             y_offset=self.y_offset,
             transform=self.transform,
         )

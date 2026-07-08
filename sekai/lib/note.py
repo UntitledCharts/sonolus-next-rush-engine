@@ -7,7 +7,7 @@ from sonolus.script.archetype import EntityRef, HapticType, PlayArchetype, Watch
 from sonolus.script.bucket import Bucket, Judgment
 from sonolus.script.easing import ease_in_cubic
 from sonolus.script.effect import Effect
-from sonolus.script.interval import lerp, remap_clamped
+from sonolus.script.interval import clamp, lerp, remap_clamped
 from sonolus.script.quad import Quad
 from sonolus.script.runtime import is_tutorial, is_watch, level_life, level_score, time
 from sonolus.script.sprite import Sprite, ZIndex
@@ -56,6 +56,7 @@ from sekai.lib.layout import (
     Hitbox,
     approach,
     get_alpha,
+    get_perspective_y,
     iter_slot_lanes,
     layout_circular_effect,
     layout_flick_arrow,
@@ -71,13 +72,15 @@ from sekai.lib.layout import (
     layout_tick_effect,
     preempt_time,
     progress_to,
+    quad_touches_screen,
+    tilt_depth,
+    visible_lane_range_at,
 )
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, ScoreMode, Version, VibrateMode
 from sekai.lib.particle import (
     EMPTY_NOTE_PARTICLE_SET,
     ActiveParticles,
-    BaseParticles,
     NoteParticleSet,
 )
 from sekai.lib.particle_manager import (
@@ -560,6 +563,7 @@ def draw_note_body(
 
     def place(q):
         return transform.transform_quad(q)
+
     match sprites.render_type:
         case BodyRenderType.NORMAL:
             left_layout, middle_layout, right_layout = layout_regular_note_body(lane, size, travel)
@@ -626,11 +630,13 @@ def draw_note_arrow(
             layout = transform.transform_quad(layout_flick_arrow(lane, size, direction, travel, animation_progress))
             arrow_sprite.draw(layout, z=z, a=a)
         case ArrowRenderType.FALLBACK:
-            layout = transform.transform_quad(layout_flick_arrow_fallback(lane, size, direction, travel, animation_progress))
+            layout = transform.transform_quad(
+                layout_flick_arrow_fallback(lane, size, direction, travel, animation_progress)
+            )
             arrow_sprite.draw(layout, z=z, a=a)
 
 
-def get_flick_layer(kind: NoteKind) -> int:
+def get_flick_layer(kind: NoteKind) -> float:
     match kind:
         case (
             NoteKind.CRIT_FLICK
@@ -977,9 +983,12 @@ def handle_note_particles(
             if linear_particle == particles.linear_good:
                 chunk = begin_particle_chunk(linear_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
                 for slot_lane in _iter_bundled_slot_lanes(lane, size):
+                    layout = place(layout_linear_effect(slot_lane, shear=0))
+                    if not quad_touches_screen(layout):
+                        continue
                     emit_particle(
                         linear_particle,
-                        place(layout_linear_effect(slot_lane, shear=0)),
+                        layout,
                         0.5 / speed,
                         ParticleManageKind.MULTI,
                         slot_lane,
@@ -1002,9 +1011,12 @@ def handle_note_particles(
             if circular_particle == particles.circular_good:
                 chunk = begin_particle_chunk(circular_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
                 for slot_lane in _iter_bundled_slot_lanes(lane, size):
+                    layout = place(layout_circular_effect(slot_lane, w=1.75, h=1.05))
+                    if not quad_touches_screen(layout):
+                        continue
                     emit_particle(
                         circular_particle,
-                        place(layout_circular_effect(slot_lane, w=1.75, h=1.05)),
+                        layout,
                         0.6 / speed,
                         ParticleManageKind.MULTI,
                         slot_lane,
@@ -1070,9 +1082,12 @@ def handle_note_particles(
         if slot_linear_particle.is_available:
             chunk = begin_particle_chunk(slot_linear_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
             for slot_lane in _iter_bundled_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
+                layout = place(layout_linear_effect(slot_lane, shear=0, y_offset=y_offset))
+                if not quad_touches_screen(layout):
+                    continue
                 emit_particle(
                     slot_linear_particle,
-                    place(layout_linear_effect(slot_lane, shear=0, y_offset=y_offset)),
+                    layout,
                     0.5 / speed,
                     ParticleManageKind.MULTI,
                     slot_lane,
@@ -1085,31 +1100,12 @@ def handle_note_particles(
         )
         if particles.lane.is_available:
             chunk = begin_particle_chunk(particles.lane, group_id, ParticleManageKind.LANE) if managed else 0.0
-            if particles.lane.id == BaseParticles.critical_flick_note_lane_linear.id:
-                _emit_critical_flick_lane(particles.lane, lane, size, lane_y_offset, chunk, managed, transform)
-            else:
-                for slot_lane in iter_slot_lanes(lane, size):
-                    emit_particle(
-                        particles.lane,
-                        place(layout_particle_lane(slot_lane, 0.5, y_offset=lane_y_offset)),
-                        1 / speed,
-                        ParticleManageKind.LANE,
-                        slot_lane,
-                        chunk,
-                        managed,
-                    )
+            _emit_lane_particles(particles.lane, lane, size, lane_y_offset, 1 / speed, chunk, managed, transform)
         elif particles.lane_basic.is_available:
             chunk = begin_particle_chunk(particles.lane_basic, group_id, ParticleManageKind.LANE) if managed else 0.0
-            for slot_lane in iter_slot_lanes(lane, size):
-                emit_particle(
-                    particles.lane_basic,
-                    place(layout_particle_lane(slot_lane, 0.5, y_offset=lane_y_offset)),
-                    0.3 / speed,
-                    ParticleManageKind.LANE,
-                    slot_lane,
-                    chunk,
-                    managed,
-                )
+            _emit_lane_particles(
+                particles.lane_basic, lane, size, lane_y_offset, 0.3 / speed, chunk, managed, transform
+            )
 
 
 def _iter_bundled_slot_lanes(lane: float, size: float, pivot_lane: float = 0.0, half_offset: bool = False):
@@ -1118,58 +1114,87 @@ def _iter_bundled_slot_lanes(lane: float, size: float, pivot_lane: float = 0.0, 
             yield slot_lane
 
 
-def _emit_critical_flick_lane(
+def _emit_lane_particles(
     particle,
     center_lane: float,
     size: float,
     y_offset: float,
+    duration: float,
     chunk: float,
     managed: bool,
     transform: AffineTransform2d,
 ):
+    """Emit per-lane particles for visible lanes; off-screen stretches become merged quads.
+
+    Merging keeps the converging sliver near the vanishing point intact while bounding the
+    particle count by the on-screen lane count. Merged emissions use integer slot keys, which
+    never collide with the half-integer keys of individual lanes.
+    """
+
     def place(q):
         return transform.transform_quad(q)
 
-    speed = Options.effect_animation_speed
     min_i = floor(center_lane - size)
     max_i = ceil(center_lane + size) - 1
+    if max_i < min_i:
+        return
 
-    if min_i < -127:
-        left_max_i = min(-128, max_i)
-        merged_center = (min_i + left_max_i + 1) / 2
-        merged_size = (left_max_i - min_i + 1) / 2
+    travel = approach(1 - y_offset)
+    lo, hi = visible_lane_range_at(travel, transform)
+    bottom_depth = tilt_depth(get_perspective_y(-1, travel), travel)
+    lo_b, hi_b = visible_lane_range_at(bottom_depth, transform)
+    lo = min(lo, lo_b) - 1
+    hi = max(hi, hi_b) + 1
+
+    start_i = max(min_i, -127, floor(lo))
+    end_i = min(max_i, 126, ceil(hi))
+
+    if start_i > end_i:
+        merged_center = (min_i + max_i + 1) / 2
+        merged_size = (max_i - min_i + 1) / 2
         emit_particle(
             particle,
             place(layout_particle_lane(merged_center, merged_size, y_offset=y_offset)),
-            1 / speed,
+            duration,
             ParticleManageKind.LANE,
-            -127.0,
+            clamp(floor(merged_center), -127, 127),
+            chunk,
+            managed,
+        )
+        return
+
+    if min_i < start_i:
+        merged_center = (min_i + start_i) / 2
+        merged_size = (start_i - min_i) / 2
+        emit_particle(
+            particle,
+            place(layout_particle_lane(merged_center, merged_size, y_offset=y_offset)),
+            duration,
+            ParticleManageKind.LANE,
+            start_i - 1,
             chunk,
             managed,
         )
 
-    if max_i > 126:
-        right_min_i = max(127, min_i)
-        merged_center = (right_min_i + max_i + 1) / 2
-        merged_size = (max_i - right_min_i + 1) / 2
+    if max_i > end_i:
+        merged_center = (end_i + max_i + 2) / 2
+        merged_size = (max_i - end_i) / 2
         emit_particle(
             particle,
             place(layout_particle_lane(merged_center, merged_size, y_offset=y_offset)),
-            1 / speed,
+            duration,
             ParticleManageKind.LANE,
-            127.0,
+            end_i + 1,
             chunk,
             managed,
         )
 
-    start_i = max(-127, min_i)
-    end_i = min(126, max_i)
     for i in range(start_i, end_i + 1):
         slot_lane = i + 0.5
         emit_particle(
             particle,
             place(layout_particle_lane(slot_lane, 0.5, y_offset=y_offset)),
-            1 / speed,
+            duration,
             ParticleManageKind.LANE,
             slot_lane,
             chunk,
@@ -1268,25 +1293,34 @@ def schedule_note_slot_effects(
     if not Options.slot_effect_enabled:
         return
     sprite_set = get_note_sprite_set(kind, direction)
+    e = 1e-6
     slot_sprite = sprite_set.slot
     if slot_sprite.is_available and not single_line:
-        for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
+        # Same lane assignment as iter_slot_lanes: slots at i + 0.5 + shift for i in [left, right).
+        shift = pivot_lane + (0.0 if half_offset else 0.5) - 0.5
+        left = floor(lane - shift - size + e)
+        right = ceil(lane - shift + size - e)
+        if right > left:
             get_archetype_by_name(archetype_names.SLOT_EFFECT).spawn(
                 sprite=slot_sprite,
                 start_time=target_time,
-                lane=slot_lane,
+                left=left,
+                right=right,
+                shift=shift,
                 y_offset=y_offset,
                 group_id=group_id,
                 transform=transform,
             )
     slot_glow_sprite = sprite_set.slot_glow.get_sprite(judgment)
     if slot_glow_sprite.is_available:
-        for slot_lane in iter_slot_lanes(lane, size):
+        left = floor(lane - size + e)
+        right = ceil(lane + size - e)
+        if right > left:
             get_archetype_by_name(archetype_names.SLOT_GLOW_EFFECT).spawn(
                 sprite=slot_glow_sprite,
                 start_time=target_time,
-                lane=slot_lane,
-                size=size,
+                left=left,
+                right=right,
                 y_offset=y_offset,
                 group_id=group_id,
                 transform=transform,
