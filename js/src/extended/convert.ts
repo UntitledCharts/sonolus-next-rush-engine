@@ -348,14 +348,26 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
     function beatToTime(beat: number) {
         if (bpmChangeInfos.length === 0) return (beat * 60) / 120
 
-        const current = bpmChangeInfos[Math.max(0, lastIndexLeq(bpmChangeInfos, beat, (c) => c.beat))]
+        const current =
+            bpmChangeInfos[
+                Math.max(
+                    0,
+                    lastIndexLeq(bpmChangeInfos, beat, (c) => c.beat),
+                )
+            ]
         return current.time + ((beat - current.beat) * 60) / current.bpm
     }
 
     function timeToBeat(time: number) {
         if (bpmChangeInfos.length === 0) return (time * 120) / 60
 
-        const current = bpmChangeInfos[Math.max(0, lastIndexLeq(bpmChangeInfos, time, (c) => c.time))]
+        const current =
+            bpmChangeInfos[
+                Math.max(
+                    0,
+                    lastIndexLeq(bpmChangeInfos, time, (c) => c.time),
+                )
+            ]
         return current.beat + ((time - current.time) * current.bpm) / 60
     }
 
@@ -443,7 +455,13 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         if (changes.length === 0) return time
         if (time < changes[0].time) return time
 
-        const current = changes[Math.max(0, lastIndexLeq(changes, time, (c) => c.time))]
+        const current =
+            changes[
+                Math.max(
+                    0,
+                    lastIndexLeq(changes, time, (c) => c.time),
+                )
+            ]
         return current.scaledTime + (time - current.time) * current.timeScale
     }
 
@@ -865,7 +883,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         let activeTailBeat = Number.NEGATIVE_INFINITY
 
         for (const { archetype, endRef, tailRef } of getActiveTailCandidates(key)) {
-            const candidateTailRef = endRef ?? getUltimateTailRef(archetype, activeStartRef, tailRef)
+            const candidateTailRef =
+                endRef ?? getUltimateTailRef(archetype, activeStartRef, tailRef)
             const candidateTailBeat = getRefBeat(candidateTailRef)
             if (candidateTailBeat >= activeTailBeat) {
                 activeTailBeat = candidateTailBeat
