@@ -24,6 +24,7 @@ export const chsLikeToUSC = (score: Score): USC => {
     const preventSingles = new Set<string>()
     const dedupeSingles = new Set<string>()
     const dedupeSlides = new Map<string, USCSlideNote | USCGuideNote>()
+    const removedSlides = new Set<USCObject>()
 
     const requests = {
         sideLane: false,
@@ -348,14 +349,16 @@ export const chsLikeToUSC = (score: Score): USC => {
 
         const key = getKey(startNote)
         const dupe = dedupeSlides.get(key)
-        if (dupe) objects.splice(objects.indexOf(dupe), 1)
+        if (dupe) removedSlides.add(dupe)
 
         dedupeSlides.set(key, object)
     }
 
     return {
         offset: score.offset,
-        objects,
+        objects: removedSlides.size
+            ? objects.filter((object) => !removedSlides.has(object))
+            : objects,
     }
 }
 

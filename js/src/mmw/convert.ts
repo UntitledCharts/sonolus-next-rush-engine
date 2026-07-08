@@ -46,6 +46,10 @@ const mmwEaseToSonolusEase = (ease: EaseType): number => {
 const EPSILON = 1e-6
 const TICKS_PER_BEAT = 480
 
+const uscColorByValue = new Map(
+    Object.entries(USCColor).map(([name, value]) => [value, name as USCColor]),
+)
+
 const laneToSonolusLane = (lane: number, width: number): number => {
     return lane - 6 + width / 2
 }
@@ -182,9 +186,7 @@ export const mmwsToUSC = (mmws: Uint8Array): USC => {
             const uscGuide: USCGuideNote = {
                 type: 'guide',
                 fade: hold.fadeType === 0 ? 'out' : hold.fadeType === 1 ? 'none' : 'in',
-                color: Object.entries(USCColor).find(
-                    ([, i]) => i === hold.guideColor,
-                )?.[0] as USCColor,
+                color: uscColorByValue.get(hold.guideColor) as USCColor,
                 midpoints: [hold.start, ...hold.steps, hold.end].map((step) => ({
                     beat: step.tick / TICKS_PER_BEAT,
                     lane: laneToUSCLane(step),

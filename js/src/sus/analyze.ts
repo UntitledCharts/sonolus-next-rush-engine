@@ -116,11 +116,31 @@ export const analyze = (sus: string): Score => {
         return newIndex
     }
 
+    const measureChangesAsc = [...measureChanges].reverse()
+    const timeScaleGroupChangesAsc = [...timeScaleGroupChanges].reverse()
+    let measureChangeCursor = -1
+    let timeScaleGroupChangeCursor = -1
+
     lines.forEach((line, index) => {
         const [header, data] = line
-        const measureOffset = measureChanges.find(([changeIndex]) => changeIndex <= index)?.[1] ?? 0
+        while (
+            measureChangeCursor + 1 < measureChangesAsc.length &&
+            measureChangesAsc[measureChangeCursor + 1][0] <= index
+        ) {
+            measureChangeCursor++
+        }
+        while (
+            timeScaleGroupChangeCursor + 1 < timeScaleGroupChangesAsc.length &&
+            timeScaleGroupChangesAsc[timeScaleGroupChangeCursor + 1][0] <= index
+        ) {
+            timeScaleGroupChangeCursor++
+        }
+        const measureOffset =
+            measureChangeCursor >= 0 ? measureChangesAsc[measureChangeCursor][1] : 0
         const timeScaleGroupName =
-            timeScaleGroupChanges.find(([changeIndex]) => changeIndex <= index)?.[1] ?? '00'
+            timeScaleGroupChangeCursor >= 0
+                ? timeScaleGroupChangesAsc[timeScaleGroupChangeCursor][1]
+                : '00'
         let timeScaleGroup = timeScaleGroups.get(timeScaleGroupName)
         if (timeScaleGroup === undefined) {
             timeScaleGroup = timeScaleGroups.size
@@ -250,15 +270,20 @@ const getTicksPerBeat = (meta: Map<string, string[]>) => {
 const getBarLengths = (lines: Line[], measureChanges: MeasureChange[]) => {
     const barLengths: BarLengthObject[] = []
 
+    const measureChangesAsc = [...measureChanges].reverse()
+    let cursor = -1
+
     lines.forEach((line, index) => {
         const [header, data] = line
+
+        while (cursor + 1 < measureChangesAsc.length && measureChangesAsc[cursor + 1][0] <= index) {
+            cursor++
+        }
 
         if (header.length !== 5) return
         if (!header.endsWith('02')) return
 
-        const measure =
-            +header.substring(0, 3) +
-            (measureChanges.find(([changeIndex]) => changeIndex <= index)?.[1] ?? 0)
+        const measure = +header.substring(0, 3) + (cursor >= 0 ? measureChangesAsc[cursor][1] : 0)
         if (Number.isNaN(measure)) return
 
         barLengths.push({ measure, length: +data })
@@ -279,11 +304,17 @@ const getToTick = (barLengths: BarLengthObject[], ticksPerBeat: number): ToTick 
 
             return { measure, ticksPerMeasure: length * ticksPerBeat, ticks }
         })
-        .reverse()
 
     return (measure, p, q) => {
-        const bar = bars.find((bar) => measure >= bar.measure)
-        if (!bar) throw new Error('Unexpected missing bar')
+        let lo = 0
+        let hi = bars.length
+        while (lo < hi) {
+            const mid = (lo + hi) >> 1
+            if (bars[mid].measure <= measure) lo = mid + 1
+            else hi = mid
+        }
+        if (lo === 0) throw new Error('Unexpected missing bar')
+        const bar = bars[lo - 1]
 
         return (
             bar.ticks +

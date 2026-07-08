@@ -396,6 +396,7 @@ class SlideManager(PlayArchetype):
     last_effect_kind: ConnectorKind = entity_memory()
     sfx_active: bool = entity_memory()
     sfx_kind: ConnectorKind = entity_memory()
+    seg_cursor_ref: EntityRef[note.BaseNote] = entity_memory()
 
     def initialize(self):
         self.next_trail_spawn_time = -1e8
@@ -623,10 +624,13 @@ class SlideManager(PlayArchetype):
     def active_segment_transform(self) -> StageTransform:
         result = +StageTransform
         head_ref = +self.active_head_ref
+        if self.seg_cursor_ref.index > 0 and self.seg_cursor_ref.get().target_time <= time():
+            head_ref.index = self.seg_cursor_ref.index
         next_ref = +head_ref.get().next_ref
         while next_ref.index > 0 and time() >= next_ref.get().target_time:
             head_ref.index = next_ref.index
             next_ref.index = head_ref.get().next_ref.index
+        self.seg_cursor_ref.index = head_ref.index
         seg_head = head_ref.get()
         if next_ref.index > 0:
             seg_tail = next_ref.get()

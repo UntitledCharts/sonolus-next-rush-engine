@@ -87,6 +87,22 @@ const activeSlideStartArchetypes = new Set([
     'CriticalTraceSlideStartNote',
 ])
 
+const slideTickArchetypes = new Set([
+    'IgnoredSlideTickNote',
+    'NormalSlideTickNote',
+    'CriticalSlideTickNote',
+    'HiddenSlideTickNote',
+    'NormalAttachedSlideTickNote',
+    'CriticalAttachedSlideTickNote',
+])
+
+const scoredSlideTickArchetypes = new Set([
+    'NormalSlideTickNote',
+    'CriticalSlideTickNote',
+    'NormalAttachedSlideTickNote',
+    'CriticalAttachedSlideTickNote',
+])
+
 const flickDirectionMapping: Record<number, number> = {
     [-1]: FlickDirection.UP_LEFT,
     0: FlickDirection.UP_OMNI,
@@ -127,6 +143,19 @@ interface BpmChangeInfo {
 interface TimescaleChangeInfo {
     beat: number
     timeScale: number
+    time: number
+    scaledTime: number
+}
+
+function lastIndexLeq<T>(arr: T[], x: number, key: (v: T) => number): number {
+    let lo = 0
+    let hi = arr.length
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1
+        if (key(arr[mid]) <= x) lo = mid + 1
+        else hi = mid
+    }
+    return lo - 1
 }
 
 class ExtData {
@@ -196,12 +225,20 @@ interface ConnectorLink {
     segments: ConnectorSegmentLink[]
 }
 
+const fieldMapCache = new WeakMap<ExtendedEntityData, Map<string, number | string>>()
+
 function getField(e: ExtendedEntityData, name: string): number | string | undefined {
-    const field = e.data.find((x) => x.name === name)
-    if (!field) return undefined
-    if (field.value !== undefined) return field.value
-    if (field.ref !== undefined) return field.ref
-    return undefined
+    let fields = fieldMapCache.get(e)
+    if (!fields) {
+        fields = new Map()
+        for (const field of e.data) {
+            if (fields.has(field.name)) continue
+            if (field.value !== undefined) fields.set(field.name, field.value)
+            else if (field.ref !== undefined) fields.set(field.name, field.ref)
+        }
+        fieldMapCache.set(e, fields)
+    }
+    return fields.get(name)
 }
 
 function getNum(e: ExtendedEntityData, name: string, def = 0): number {
@@ -311,22 +348,14 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
     function beatToTime(beat: number) {
         if (bpmChangeInfos.length === 0) return (beat * 60) / 120
 
-        let current = bpmChangeInfos[0]
-        for (const change of bpmChangeInfos) {
-            if (change.beat > beat) break
-            current = change
-        }
+        const current = bpmChangeInfos[Math.max(0, lastIndexLeq(bpmChangeInfos, beat, (c) => c.beat))]
         return current.time + ((beat - current.beat) * 60) / current.bpm
     }
 
     function timeToBeat(time: number) {
         if (bpmChangeInfos.length === 0) return (time * 120) / 60
 
-        let current = bpmChangeInfos[0]
-        for (const change of bpmChangeInfos) {
-            if (change.time > time) break
-            current = change
-        }
+        const current = bpmChangeInfos[Math.max(0, lastIndexLeq(bpmChangeInfos, time, (c) => c.time))]
         return current.beat + ((time - current.time) * current.bpm) / 60
     }
 
@@ -359,6 +388,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             changeInfos.push({
                 beat: getNum(raw, '#BEAT'),
                 timeScale: getNum(raw, 'timeScale'),
+                time: 0,
+                scaledTime: 0,
             })
 
             const change = new EntityBuilder('#TIMESCALE_CHANGE')
@@ -384,6 +415,14 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         }
         finalEntities.push(...changes)
         changeInfos.sort((a, b) => a.beat - b.beat)
+        for (let i = 0; i < changeInfos.length; i++) {
+            changeInfos[i].time = beatToTime(changeInfos[i].beat)
+            changeInfos[i].scaledTime =
+                i === 0
+                    ? changeInfos[i].time
+                    : changeInfos[i - 1].scaledTime +
+                      (changeInfos[i].time - changeInfos[i - 1].time) * changeInfos[i - 1].timeScale
+        }
         timescaleChangesByIndex.set(idx, changeInfos)
         if (e.name) timescaleChangesByName.set(e.name, changeInfos)
     }
@@ -402,57 +441,36 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
     function timeToScaledTime(time: number, changes: TimescaleChangeInfo[]) {
         if (changes.length === 0) return time
+        if (time < changes[0].time) return time
 
-        const firstTime = beatToTime(changes[0].beat)
-        if (time < firstTime) return time
-
-        let scaledTime = firstTime
-        for (let i = 0; i < changes.length; i++) {
-            const start = changes[i]
-            const startTime = beatToTime(start.beat)
-            const endTime = i === changes.length - 1 ? undefined : beatToTime(changes[i + 1].beat)
-
-            if (endTime === undefined || time < endTime) {
-                return scaledTime + (time - startTime) * start.timeScale
-            }
-
-            scaledTime += (endTime - startTime) * start.timeScale
-        }
-
-        return time
+        const current = changes[Math.max(0, lastIndexLeq(changes, time, (c) => c.time))]
+        return current.scaledTime + (time - current.time) * current.timeScale
     }
 
     function scaledTimeToTime(scaledTime: number, changes: TimescaleChangeInfo[]) {
         if (changes.length === 0) return scaledTime
+        if (scaledTime < changes[0].time) return scaledTime
 
-        const firstTime = beatToTime(changes[0].beat)
-        if (scaledTime < firstTime) return scaledTime
-
-        let currentScaledTime = firstTime
         for (let i = 0; i < changes.length; i++) {
             const start = changes[i]
-            const startTime = beatToTime(start.beat)
-            const endTime = i === changes.length - 1 ? undefined : beatToTime(changes[i + 1].beat)
 
-            if (endTime === undefined) {
+            if (i === changes.length - 1) {
                 if (start.timeScale === 0) return Number.POSITIVE_INFINITY
-                return startTime + (scaledTime - currentScaledTime) / start.timeScale
+                return start.time + (scaledTime - start.scaledTime) / start.timeScale
             }
 
-            const nextScaledTime = currentScaledTime + (endTime - startTime) * start.timeScale
-            const minScaledTime = Math.min(currentScaledTime, nextScaledTime)
-            const maxScaledTime = Math.max(currentScaledTime, nextScaledTime)
+            const next = changes[i + 1]
+            const minScaledTime = Math.min(start.scaledTime, next.scaledTime)
+            const maxScaledTime = Math.max(start.scaledTime, next.scaledTime)
 
             if (minScaledTime <= scaledTime && scaledTime <= maxScaledTime) {
-                if (Math.abs(nextScaledTime - currentScaledTime) < 1e-6) return startTime
+                if (Math.abs(next.scaledTime - start.scaledTime) < 1e-6) return start.time
                 return lerp(
-                    startTime,
-                    endTime,
-                    unlerp(currentScaledTime, nextScaledTime, scaledTime),
+                    start.time,
+                    next.time,
+                    unlerp(start.scaledTime, next.scaledTime, scaledTime),
                 )
             }
-
-            currentScaledTime = nextScaledTime
         }
 
         return scaledTime
@@ -495,8 +513,14 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
     }
 
     function getTimeScaleAt(changes: TimescaleChangeInfo[], beat: number) {
-        const change = [...changes].reverse().find((change) => change.beat < beat - 1e-6)
-        return change?.timeScale ?? 1
+        let lo = 0
+        let hi = changes.length
+        while (lo < hi) {
+            const mid = (lo + hi) >> 1
+            if (changes[mid].beat < beat - 1e-6) lo = mid + 1
+            else hi = mid
+        }
+        return lo > 0 ? changes[lo - 1].timeScale : 1
     }
 
     function shouldUseStartAsHead(
@@ -612,23 +636,11 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
     }
 
     function isSlideTickRef(ref: number | string | undefined) {
-        return [
-            'IgnoredSlideTickNote',
-            'NormalSlideTickNote',
-            'CriticalSlideTickNote',
-            'HiddenSlideTickNote',
-            'NormalAttachedSlideTickNote',
-            'CriticalAttachedSlideTickNote',
-        ].includes(resolveOriginal(ext, ref)?.archetype ?? '')
+        return slideTickArchetypes.has(resolveOriginal(ext, ref)?.archetype ?? '')
     }
 
     function isScoredSlideTickRef(ref: number | string | undefined) {
-        return [
-            'NormalSlideTickNote',
-            'CriticalSlideTickNote',
-            'NormalAttachedSlideTickNote',
-            'CriticalAttachedSlideTickNote',
-        ].includes(resolveOriginal(ext, ref)?.archetype ?? '')
+        return scoredSlideTickArchetypes.has(resolveOriginal(ext, ref)?.archetype ?? '')
     }
 
     function getUltimateTailRef(
@@ -803,6 +815,48 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
 
     const activeTailRefsByStart = new Map<string, number | string | undefined>()
 
+    let activeTailCandidatesByStart:
+        | Map<
+              string,
+              {
+                  archetype: string
+                  endRef: number | string | undefined
+                  tailRef: number | string | undefined
+              }[]
+          >
+        | undefined
+
+    function getActiveTailCandidates(key: string) {
+        if (!activeTailCandidatesByStart) {
+            activeTailCandidatesByStart = new Map()
+            for (const { e } of ext.connectors) {
+                const startRef = getField(e, 'start')
+                const headRef = getField(e, 'head')
+                if (isIgnoredSlideTickRef(headRef)) continue
+
+                const endRef = getField(e, 'end')
+                const connectorActiveStartRef = getConnectorActiveStartRef(
+                    e.archetype,
+                    startRef,
+                    headRef,
+                    endRef,
+                )
+                const { tailRef } = resolveConnectorTailRef(
+                    e.archetype,
+                    startRef,
+                    getField(e, 'tail'),
+                )
+
+                const connectorKey = refKey(connectorActiveStartRef)
+                const candidate = { archetype: e.archetype, endRef, tailRef }
+                const list = activeTailCandidatesByStart.get(connectorKey)
+                if (list) list.push(candidate)
+                else activeTailCandidatesByStart.set(connectorKey, [candidate])
+            }
+        }
+        return activeTailCandidatesByStart.get(key) ?? []
+    }
+
     function getActiveTailRef(activeStartRef: number | string | undefined) {
         const key = refKey(activeStartRef)
         if (activeTailRefsByStart.has(key)) return activeTailRefsByStart.get(key)
@@ -810,23 +864,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         let activeTailRef: number | string | undefined
         let activeTailBeat = Number.NEGATIVE_INFINITY
 
-        for (const { e } of ext.connectors) {
-            const startRef = getField(e, 'start')
-            const headRef = getField(e, 'head')
-            if (isIgnoredSlideTickRef(headRef)) continue
-
-            const endRef = getField(e, 'end')
-            const connectorActiveStartRef = getConnectorActiveStartRef(
-                e.archetype,
-                startRef,
-                headRef,
-                endRef,
-            )
-            if (refKey(connectorActiveStartRef) !== key) continue
-
-            const { tailRef } = resolveConnectorTailRef(e.archetype, startRef, getField(e, 'tail'))
-            const candidateTailRef =
-                endRef ?? getUltimateTailRef(e.archetype, activeStartRef, tailRef)
+        for (const { archetype, endRef, tailRef } of getActiveTailCandidates(key)) {
+            const candidateTailRef = endRef ?? getUltimateTailRef(archetype, activeStartRef, tailRef)
             const candidateTailBeat = getRefBeat(candidateTailRef)
             if (candidateTailBeat >= activeTailBeat) {
                 activeTailBeat = candidateTailBeat
