@@ -38,13 +38,13 @@ from sekai.lib.connector import ActiveConnectorKind, ConnectorKind, get_active_c
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.effect import EMPTY_EFFECT, SFX_DISTANCE, Effects, first_available_effect
 from sekai.lib.layer import (
-    LAYER_GUIDE_CONNECTOR_OVER,
     LAYER_NOTE_ARROW,
     LAYER_NOTE_ARROW_CRITICAL,
     LAYER_NOTE_BODY,
     LAYER_NOTE_FLICK_BODY,
     LAYER_NOTE_SLIM_BODY,
     LAYER_NOTE_TICK,
+    LAYER_OVERLAY,
     get_z,
     get_z_alt,
 )
@@ -1615,7 +1615,7 @@ def draw_hitbox_marker(
 def draw_hitbox_bounds_overlay(bounds: Quad, alpha: float = 1.0):
     t = HITBOX_DEBUG_BORDER_THICKNESS
     a = alpha
-    z_bounds = get_z_alt(LAYER_GUIDE_CONNECTOR_OVER, 0)
+    z_bounds = get_z_alt(LAYER_OVERLAY, 0)
     draw_hitbox_line(ActiveSkin.guide_blue, bounds.tl, bounds.tr, t, z_bounds, a)
     draw_hitbox_line(ActiveSkin.guide_blue, bounds.bl, bounds.br, t, z_bounds, a)
     draw_hitbox_line(ActiveSkin.guide_blue, bounds.tl, bounds.bl, t, z_bounds, a)
@@ -1627,10 +1627,10 @@ def draw_hitbox_bounds_overlay(bounds: Quad, alpha: float = 1.0):
 def draw_hitbox_overlay(hitbox: Hitbox, draw_target: bool, alpha: float = 1.0):
     t = HITBOX_DEBUG_BORDER_THICKNESS
     a = alpha
-    z_triangle = get_z_alt(LAYER_GUIDE_CONNECTOR_OVER, 1)
-    z_apex = get_z_alt(LAYER_GUIDE_CONNECTOR_OVER, 2)
-    z_target = get_z_alt(LAYER_GUIDE_CONNECTOR_OVER, 3)
-    z_target_dot = get_z_alt(LAYER_GUIDE_CONNECTOR_OVER, 4)
+    z_triangle = get_z_alt(LAYER_OVERLAY, 1)
+    z_apex = get_z_alt(LAYER_OVERLAY, 2)
+    z_target = get_z_alt(LAYER_OVERLAY, 3)
+    z_target_dot = get_z_alt(LAYER_OVERLAY, 4)
 
     draw_hitbox_bounds_overlay(hitbox.bounds, alpha)
 

@@ -29,8 +29,8 @@ from sekai.lib.layer import (
     LAYER_BACKGROUND_COVER,
     LAYER_COVER,
     LAYER_COVER_LINE,
-    LAYER_GUIDE_CONNECTOR_OVER,
     LAYER_JUDGMENT,
+    LAYER_OVERLAY,
     LAYER_STAGE,
     LAYER_STAGE_LANE,
     get_z_alt,
@@ -591,10 +591,10 @@ def draw_aspect_box(sprite: Sprite, ratio: float, sub: int):
     bottom = Rect(l=-hw - e, r=hw + e, t=-hh + e, b=-hh - e)
     left = Rect(l=-hw - e, r=-hw + e, t=hh, b=-hh)
     right = Rect(l=hw - e, r=hw + e, t=hh, b=-hh)
-    sprite.draw(top.as_quad(), z=get_z_alt(LAYER_GUIDE_CONNECTOR_OVER, 1000 + 4 * sub), a=1.0)
-    sprite.draw(bottom.as_quad(), z=get_z_alt(LAYER_GUIDE_CONNECTOR_OVER, 1000 + 4 * sub + 1), a=1.0)
-    sprite.draw(left.as_quad(), z=get_z_alt(LAYER_GUIDE_CONNECTOR_OVER, 1000 + 4 * sub + 2), a=1.0)
-    sprite.draw(right.as_quad(), z=get_z_alt(LAYER_GUIDE_CONNECTOR_OVER, 1000 + 4 * sub + 3), a=1.0)
+    sprite.draw(top.as_quad(), z=get_z_alt(LAYER_OVERLAY, 1000 + 4 * sub), a=1.0)
+    sprite.draw(bottom.as_quad(), z=get_z_alt(LAYER_OVERLAY, 1000 + 4 * sub + 1), a=1.0)
+    sprite.draw(left.as_quad(), z=get_z_alt(LAYER_OVERLAY, 1000 + 4 * sub + 2), a=1.0)
+    sprite.draw(right.as_quad(), z=get_z_alt(LAYER_OVERLAY, 1000 + 4 * sub + 3), a=1.0)
 
 
 def draw_test_aspect_overlay():
