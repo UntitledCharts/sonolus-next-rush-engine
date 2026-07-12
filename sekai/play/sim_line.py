@@ -21,6 +21,9 @@ class SimLine(PlayArchetype):
         if DISABLE_NOTES:
             return
         self.spawn_time = min(self.left.start_time, self.right.start_time)
+        end_time = max(self.left.target_time, self.right.target_time) + 1.0
+        self.left.extend_stage_windows(self.spawn_time - 1.0, end_time)
+        self.right.extend_stage_windows(self.spawn_time - 1.0, end_time)
 
     def spawn_order(self) -> float:
         if DISABLE_NOTES:
@@ -51,6 +54,8 @@ class SimLine(PlayArchetype):
             right_target_time=self.right.target_time,
             left_transform=self.left._basic_visual_stage_transform().transform(),
             right_transform=self.right._basic_visual_stage_transform().transform(),
+            left_note_alpha=self.left.visual_note_alpha,
+            right_note_alpha=self.right.visual_note_alpha,
         )
 
     @property

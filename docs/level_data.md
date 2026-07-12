@@ -107,10 +107,10 @@ An event that controls the visual style of a stage.
   * DISABLED = 2
   * MEDIUM = 3
 * **fullWidth (bool)**: When true, the lane (background, dividers, and borders) is hidden and the judge line is drawn to a high width. Defaults to false.
-* **alpha (float)**: Combined lane and judge line alpha.
 * **laneAlpha (float)**
 * **judgeLineAlpha (float)**
 * **divisionLineAlpha (float)**: Multiplies the alpha of the lane dividers (on top of `laneAlpha`), letting the dividers fade independently of the lane background, judge line, and borders. Defaults to 1.
+* **noteAlpha (float)**: Multiplies the alpha of the notes currently on the stage, including connectors. Defaults to 1.
 * **ease (EaseType)**
 * **next (ref?[StageStyleChange])**: A reference to the next **StageStyleChange** event.
 

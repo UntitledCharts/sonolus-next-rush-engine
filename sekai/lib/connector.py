@@ -130,6 +130,14 @@ class ConnectorSfxState:
     critical_inactive_time: float
 
 
+def is_fake_active_connector(kind: ConnectorKind) -> bool:
+    return kind in {ConnectorKind.ACTIVE_FAKE_NORMAL, ConnectorKind.ACTIVE_FAKE_CRITICAL}
+
+
+def has_connector_input(kind: ConnectorKind) -> bool:
+    return kind in {ConnectorKind.ACTIVE_NORMAL, ConnectorKind.ACTIVE_CRITICAL}
+
+
 def get_active_connector_sprites(kind: ActiveConnectorKind) -> ActiveConnectorSpriteSet:
     result = +ActiveConnectorSpriteSet
     match kind:
@@ -308,10 +316,12 @@ def draw_connector(
     segment_tail_target_time: float,
     segment_tail_alpha: float,
     layer: ConnectorLayer,
-    presentation: SegmentPresentation = SegmentPresentation.DEFAULT,
-    bypass_tail_target_time_check: bool = False,
-    head_transform: StageTransform | None = None,
-    tail_transform: StageTransform | None = None,
+    presentation: SegmentPresentation,
+    bypass_tail_target_time_check: bool,
+    head_transform: StageTransform | None,
+    tail_transform: StageTransform | None,
+    head_note_alpha: float,
+    tail_note_alpha: float,
 ):
     match presentation:
         case SegmentPresentation.DEFAULT:
@@ -335,10 +345,10 @@ def draw_connector(
         case _:
             assert_never(presentation)
 
-    if Options.disable_fake_notes and kind in {
-        ConnectorKind.ACTIVE_FAKE_NORMAL,
-        ConnectorKind.ACTIVE_FAKE_CRITICAL,
-    }:
+    if Options.disable_fake_notes and is_fake_active_connector(kind):
+        return
+
+    if head_note_alpha <= 0 and tail_note_alpha <= 0:
         return
 
     if ease_type == EaseType.NONE:
@@ -397,11 +407,17 @@ def draw_connector(
         case _:
             assert_never(kind)
 
-    head_alpha = remap_clamped(
-        segment_head_target_time, segment_tail_target_time, segment_head_alpha, segment_tail_alpha, head_target_time
+    head_alpha = (
+        remap_clamped(
+            segment_head_target_time, segment_tail_target_time, segment_head_alpha, segment_tail_alpha, head_target_time
+        )
+        * head_note_alpha
     )
-    tail_alpha = remap_clamped(
-        segment_head_target_time, segment_tail_target_time, segment_head_alpha, segment_tail_alpha, tail_target_time
+    tail_alpha = (
+        remap_clamped(
+            segment_head_target_time, segment_tail_target_time, segment_head_alpha, segment_tail_alpha, tail_target_time
+        )
+        * tail_note_alpha
     )
 
     if time() >= tail_target_time and not bypass_tail_target_time_check:
@@ -499,7 +515,7 @@ def draw_connector_default(
     end_pos_y = pre_rotation_vec_at(end_lane, end_travel).y
 
     alpha_option = get_connector_alpha_option(kind)
-    delta_alpha = abs(start_alpha - end_alpha) * alpha_option
+    delta_alpha = min(abs(start_alpha - end_alpha) * alpha_option, 1.0)
     scale = max(delta_alpha**0.8 * 3, delta_alpha**0.5 * abs(start_pos_y - end_pos_y) * 3) if delta_alpha else 0.0
     match ease_type:
         case EaseType.NONE:

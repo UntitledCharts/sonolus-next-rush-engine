@@ -26,6 +26,8 @@ class WatchSimLine(WatchArchetype):
             self.end_time = min(self.left.end_time, self.right.end_time, self.left.target_time)
         else:
             self.end_time = min(self.left.target_time, self.right.target_time)
+        self.left.extend_stage_windows(self.start_time - 1.0, self.end_time + 1.0)
+        self.right.extend_stage_windows(self.start_time - 1.0, self.end_time + 1.0)
 
     def spawn_time(self) -> float:
         if DISABLE_NOTES:
@@ -51,6 +53,8 @@ class WatchSimLine(WatchArchetype):
             right_target_time=self.right.target_time,
             left_transform=self.left._basic_visual_stage_transform().transform(),
             right_transform=self.right._basic_visual_stage_transform().transform(),
+            left_note_alpha=self.left.visual_note_alpha,
+            right_note_alpha=self.right.visual_note_alpha,
         )
 
     @property

@@ -15,7 +15,7 @@ else:
 class BaseEvent(_BaseEventBase):
     next_ref: EntityRef[Any] = entity_data()
     prev_ref: EntityRef[Any] = entity_data()
-    skip_refs: Array[EntityRef[Any], Dim[16]] = entity_data()
+    skip_refs: Array[EntityRef[Any], Dim[15]] = entity_data()
     skip_levels: int = entity_data()
 
 
@@ -28,7 +28,7 @@ def init_event_list[T: BaseEvent](first_ref: EntityRef[T]):
     if first_ref.index <= 0:
         return
 
-    last_refs = +Array[EntityRef[Any], Dim[16]]
+    last_refs = +Array[EntityRef[Any], Dim[15]]
     for i in range(len(last_refs)):
         last_refs[i] = first_ref
 

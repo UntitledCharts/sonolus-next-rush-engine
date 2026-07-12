@@ -22,6 +22,7 @@ from sekai.lib.connector import (
     ConnectorKind,
     ConnectorLayer,
     ConnectorVisualState,
+    SegmentPresentation,
     destroy_looped_particle,
     destroy_looped_sfx,
     draw_connector,
@@ -266,6 +267,7 @@ class QueuedTutorialNoteDraw(Record):
             direction=self.note.direction,
             target_time=time() + 1 - self.progress - self.note.offset,
             transform=IDENTITY_AFFINE_TRANSFORM,
+            note_alpha=1.0,
         )
 
 
@@ -336,6 +338,12 @@ class QueuedTutorialNoteDrawConnectorTo(Record):
             segment_tail_target_time=tail_target_time,
             segment_tail_alpha=1,
             layer=ConnectorLayer.TOP,
+            presentation=SegmentPresentation.DEFAULT,
+            bypass_tail_target_time_check=False,
+            head_transform=None,
+            tail_transform=None,
+            head_note_alpha=1.0,
+            tail_note_alpha=1.0,
         )
         if self.effect_index >= 0 and tail_progress < 1 < head_progress and self.active:
             frac = unlerp(head_progress, tail_progress, 1)
@@ -382,6 +390,7 @@ class QueuedTutorialNoteDrawConnectorTo(Record):
                 size,
                 head_target_time,
                 transform=IDENTITY_AFFINE_TRANSFORM,
+                note_alpha=1.0,
             )
             if self.show_touch:
                 paint_hold_motion(transformed_vec_at(lane))

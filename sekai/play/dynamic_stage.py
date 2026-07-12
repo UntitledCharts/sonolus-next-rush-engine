@@ -164,7 +164,7 @@ class DynamicStage(PlayArchetype):
         self.fever_boundary()
 
     def fever_boundary(self):
-        if self.props.a > 0:
+        if self.props.lane_alpha > 0:
             l = self.props.lane - self.props.width
             r = self.props.lane + self.props.width
             stage_transform = +StageTransform
@@ -176,18 +176,18 @@ class DynamicStage(PlayArchetype):
 
             if l < Fever.min_l:
                 Fever.min_l = l
-                Fever.alpha_l = self.props.a
+                Fever.alpha_l = self.props.lane_alpha
                 Fever.left_transform = transform
-            elif l == Fever.min_l and self.props.a > Fever.alpha_l:
-                Fever.alpha_l = self.props.a
+            elif l == Fever.min_l and self.props.lane_alpha > Fever.alpha_l:
+                Fever.alpha_l = self.props.lane_alpha
                 Fever.left_transform = transform
 
             if r > Fever.max_r:
                 Fever.max_r = r
-                Fever.alpha_r = self.props.a
+                Fever.alpha_r = self.props.lane_alpha
                 Fever.right_transform = transform
-            elif r == Fever.max_r and self.props.a > Fever.alpha_r:
-                Fever.alpha_r = self.props.a
+            elif r == Fever.max_r and self.props.lane_alpha > Fever.alpha_r:
+                Fever.alpha_r = self.props.lane_alpha
                 Fever.right_transform = transform
 
             Fever.has_active = True
@@ -199,7 +199,7 @@ class DynamicStage(PlayArchetype):
         if t < self.draw_start_time or t > self.draw_end_time:
             return
         p = self.props
-        if p.a < 1 or p.lane_alpha * (1 - p.full_width) < 1:
+        if p.lane_alpha * (1 - p.full_width) < 1:
             return
         half_offset = p.division.start.parity == DivisionParity.ODD and p.division.start.size % 2 == 1
         lo = p.lane - p.width + 0.5
@@ -276,7 +276,7 @@ class DynamicStage(PlayArchetype):
                     elapsed,
                     l,
                     r,
-                    self.props.a,
+                    self.props.judge_line_alpha,
                     self.props.y_offset,
                     duration=SkillActive.duration,
                     transform=stage_transform.transform(),
@@ -350,10 +350,11 @@ class StageStyleChange(PlayArchetype, BaseEvent):
     left_border_style: StageBorderStyle = imported(name="leftBorderStyle")
     right_border_style: StageBorderStyle = imported(name="rightBorderStyle")
     full_width: bool = imported(name="fullWidth")
-    alpha: float = imported()
+    alpha: float = imported(default=1)  # Deprecated
     lane_alpha: float = imported(name="laneAlpha")
     judge_line_alpha: float = imported(name="judgeLineAlpha")
     division_line_alpha: float = imported(name="divisionLineAlpha", default=1)
+    note_alpha: float = imported(name="noteAlpha", default=1)
     ease: EaseType = imported()
     next_ref: EntityRef[StageStyleChange] = imported(name="next")
 
@@ -363,6 +364,8 @@ class StageStyleChange(PlayArchetype, BaseEvent):
     def preprocess(self):
         LevelConfig.dynamic_stages = True
         self.time = beat_to_time(self.beat)
+        self.lane_alpha *= self.alpha
+        self.judge_line_alpha *= self.alpha
         if Options.mirror:
             self.left_border_style, self.right_border_style = self.right_border_style, self.left_border_style
 

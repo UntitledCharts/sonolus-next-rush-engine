@@ -15,6 +15,8 @@ def draw_sim_line(
     right_target_time: float,
     left_transform: AffineTransform2d,
     right_transform: AffineTransform2d,
+    left_note_alpha: float,
+    right_note_alpha: float,
 ):
     if not Options.sim_line_enabled:
         return
@@ -57,9 +59,12 @@ def draw_sim_line(
     )
     a = (
         min(
-            get_alpha(left_target_time),
-            get_alpha(right_target_time),
+            get_alpha(left_target_time) * left_note_alpha,
+            get_alpha(right_target_time) * right_note_alpha,
+            1.0,
         )
         * fade_alpha
     )
+    if a <= 0:
+        return
     ActiveSkin.sim_line.draw(layout, z=z, a=a)

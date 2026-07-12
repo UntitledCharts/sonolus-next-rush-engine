@@ -244,10 +244,19 @@ class BaseNote(PlayArchetype):
                 left_limit=True,
             )
 
+        self.extend_stage_windows(self.start_time - 1.0, max(self.target_time, self.input_interval.end) + 1.0)
+
+    def _basic_extend_stage_window(self, start_time: float, end_time: float):
         if self.stage_ref.index > 0:
             stage = self.stage_ref.get()
-            stage.start_time = min(stage.start_time, self.start_time - 1.0)
-            stage.end_time = max(stage.end_time, self.target_time + 1.0)
+            stage.start_time = min(stage.start_time, start_time)
+            stage.end_time = max(stage.end_time, end_time)
+
+    def extend_stage_windows(self, start_time: float, end_time: float):
+        if self.is_attached:
+            self.attach_head_ref.get()._basic_extend_stage_window(start_time, end_time)
+            self.attach_tail_ref.get()._basic_extend_stage_window(start_time, end_time)
+        self._basic_extend_stage_window(start_time, end_time)
 
     def spawn_order(self) -> float:
         if DISABLE_NOTES or self.kind == NoteKind.ANCHOR:
@@ -378,6 +387,7 @@ class BaseNote(PlayArchetype):
         if not self.is_scored and time() >= self.target_time:
             self.despawn = True
             return
+        self.draw_hitbox()
         if time() < self.visual_start_time:
             return
         if self.tick_trigger():
@@ -410,15 +420,19 @@ class BaseNote(PlayArchetype):
             self.direction,
             self.target_time,
             transform=stage_transform.transform(),
+            note_alpha=self.visual_note_alpha,
         )
-        if Options.show_hitboxes and self.is_scored:
-            draw_start = min(self.unadjusted_input_interval.start, self.target_time - HITBOX_DRAW_MIN_EARLY_WINDOW)
-            if draw_start <= offset_adjusted_time() <= self.unadjusted_input_interval.end:
-                draw_hitbox_overlay(
-                    self.hitbox,
-                    has_tap_input(self.kind) or has_release_input(self.kind),
-                    unlerp_clamped(draw_start, self.target_time, offset_adjusted_time()),
-                )
+
+    def draw_hitbox(self):
+        if not Options.show_hitboxes or not self.is_scored:
+            return
+        draw_start = min(self.unadjusted_input_interval.start, self.target_time - HITBOX_DRAW_MIN_EARLY_WINDOW)
+        if draw_start <= offset_adjusted_time() <= self.unadjusted_input_interval.end:
+            draw_hitbox_overlay(
+                self.hitbox,
+                self.kind,
+                unlerp_clamped(draw_start, self.target_time, offset_adjusted_time()),
+            )
 
     def tick_trigger(self):
         if self.kind in (NoteKind.NORM_TICK, NoteKind.CRIT_TICK, NoteKind.HIDE_TICK):
@@ -988,6 +1002,27 @@ class BaseNote(PlayArchetype):
                 self.target_time,
             )
         return self._basic_visual_y_offset
+
+    @property
+    def _basic_visual_note_alpha(self) -> float:
+        if self.stage_ref.index > 0:
+            return self.stage_ref.get().props.note_alpha
+        else:
+            return 1.0
+
+    @property
+    def visual_note_alpha(self) -> float:
+        if self.is_attached:
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            return remap_clamped(
+                head.target_time,
+                tail.target_time,
+                head._basic_visual_note_alpha,
+                tail._basic_visual_note_alpha,
+                self.target_time,
+            )
+        return self._basic_visual_note_alpha
 
     def _basic_y_offset_at(self, t: float, left_limit: bool = False) -> float:
         if self.stage_ref.index <= 0:

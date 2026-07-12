@@ -344,14 +344,17 @@ def draw_note(
     direction: FlickDirection,
     target_time: float,
     transform: AffineTransform2d,
+    note_alpha: float,
 ):
     if not DynamicLayout.progress_start <= visual_progress <= DynamicLayout.progress_cutoff:
         return
+    if note_alpha <= 0:
+        return
     travel = approach(visual_progress)
     sprite_set = get_note_sprite_set(kind, direction)
-    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform)
-    draw_note_arrow(sprite_set.arrow, kind, lane, size, travel, target_time, direction, transform)
-    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform)
+    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha)
+    draw_note_arrow(sprite_set.arrow, kind, lane, size, travel, target_time, direction, transform, note_alpha)
+    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, note_alpha)
 
 
 def draw_slide_note_head(
@@ -363,8 +366,11 @@ def draw_slide_note_head(
     visual_progress: float = 1.0,
     *,
     transform: AffineTransform2d,
+    note_alpha: float,
 ):
     if Options.hidden > 0:
+        return
+    if note_alpha <= 0:
         return
     match connector_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
@@ -376,8 +382,8 @@ def draw_slide_note_head(
     travel = approach(visual_progress)
     sprite_set = get_note_sprite_set(kind, FlickDirection.UP_OMNI)
     etc = get_active_connector_z_offset(connector_kind, False)
-    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, etc=etc)
-    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, etc=etc)
+    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha, etc=etc)
+    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, note_alpha, etc=etc)
 
 
 def note_kind_as_normal(kind: NoteKind) -> NoteKind:
@@ -555,10 +561,11 @@ def draw_note_body(
     travel: float,
     target_time: float,
     transform: AffineTransform2d,
+    note_alpha: float,
     etc: int = 0,
 ):
     layer = get_note_body_layer(kind)
-    a = get_alpha(target_time)
+    a = min(get_alpha(target_time) * note_alpha, 1.0)
     z = get_z(layer, time=target_time, lane=lane, etc=etc)
 
     def place(q):
@@ -589,11 +596,12 @@ def draw_note_tick(
     travel: float,
     target_time: float,
     transform: AffineTransform2d,
+    note_alpha: float,
     etc: int = 0,
 ):
     if not sprite.is_available:
         return
-    a = get_alpha(target_time)
+    a = min(get_alpha(target_time) * note_alpha, 1.0)
     z = get_z(LAYER_NOTE_TICK, time=target_time, lane=lane, etc=etc)
     layout = transform.transform_quad(layout_tick(lane, travel))
     sprite.draw(layout, z=z, a=a)
@@ -608,6 +616,7 @@ def draw_note_arrow(
     target_time: float,
     direction: FlickDirection,
     transform: AffineTransform2d,
+    note_alpha: float,
 ):
     arrow_sprite = sprites.get_sprite(size, direction)
     if not arrow_sprite.is_available:
@@ -623,7 +632,7 @@ def draw_note_arrow(
         case _:
             assert_never(direction)
     animation_alpha = (1 - ease_in_cubic(animation_progress)) if Options.marker_animation else 1
-    a = get_alpha(target_time) * animation_alpha
+    a = min(get_alpha(target_time) * animation_alpha * note_alpha, 1.0)
     z = get_z(get_flick_layer(kind), time=target_time, lane=lane)
     match sprites.render_type:
         case ArrowRenderType.NORMAL:
@@ -1646,19 +1655,41 @@ def draw_hitbox_marker(
     )
 
 
-def draw_hitbox_bounds_overlay(bounds: Quad, alpha: float = 1.0):
+def get_hitbox_bounds_sprite(kind: NoteKind) -> Sprite:
+    result = +Sprite
+    if kind == NoteKind.DAMAGE:
+        result @= ActiveSkin.guide_green
+    else:
+        result @= ActiveSkin.guide_blue
+    return result
+
+
+def get_hitbox_target_sprite(kind: NoteKind) -> Sprite:
+    result = +Sprite
+    if kind == NoteKind.DAMAGE:
+        result @= ActiveSkin.guide_yellow
+    else:
+        result @= ActiveSkin.guide_red
+    return result
+
+
+def draw_hitbox_bounds_overlay(bounds: Quad, sprite: Sprite, alpha: float):
     t = HITBOX_DEBUG_BORDER_THICKNESS
     a = alpha
     z_bounds = get_z_alt(LAYER_OVERLAY, 0)
-    draw_hitbox_line(ActiveSkin.guide_blue, bounds.tl, bounds.tr, t, z_bounds, a)
-    draw_hitbox_line(ActiveSkin.guide_blue, bounds.bl, bounds.br, t, z_bounds, a)
-    draw_hitbox_line(ActiveSkin.guide_blue, bounds.tl, bounds.bl, t, z_bounds, a)
-    draw_hitbox_line(ActiveSkin.guide_blue, bounds.tr, bounds.br, t, z_bounds, a)
-    draw_hitbox_line(ActiveSkin.guide_blue, bounds.tl, bounds.br, t, z_bounds, a)
-    draw_hitbox_line(ActiveSkin.guide_blue, bounds.tr, bounds.bl, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.tl, bounds.tr, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.bl, bounds.br, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.tl, bounds.bl, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.tr, bounds.br, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.tl, bounds.br, t, z_bounds, a)
+    draw_hitbox_line(sprite, bounds.tr, bounds.bl, t, z_bounds, a)
 
 
-def draw_hitbox_overlay(hitbox: Hitbox, draw_target: bool, alpha: float = 1.0):
+def draw_connector_hitbox_overlay(bounds: Quad, alpha: float):
+    draw_hitbox_bounds_overlay(bounds, ActiveSkin.guide_blue, alpha)
+
+
+def draw_hitbox_overlay(hitbox: Hitbox, kind: NoteKind, alpha: float):
     t = HITBOX_DEBUG_BORDER_THICKNESS
     a = alpha
     z_triangle = get_z_alt(LAYER_OVERLAY, 1)
@@ -1666,9 +1697,10 @@ def draw_hitbox_overlay(hitbox: Hitbox, draw_target: bool, alpha: float = 1.0):
     z_target = get_z_alt(LAYER_OVERLAY, 3)
     z_target_dot = get_z_alt(LAYER_OVERLAY, 4)
 
-    draw_hitbox_bounds_overlay(hitbox.bounds, alpha)
+    draw_hitbox_bounds_overlay(hitbox.bounds, get_hitbox_bounds_sprite(kind), alpha)
 
-    if draw_target:
+    if has_tap_input(kind) or has_release_input(kind):
+        target_sprite = get_hitbox_target_sprite(kind)
         l = hitbox.target.l
         r = hitbox.target.r
         axis = (r - l).normalize_or_zero()
@@ -1676,7 +1708,7 @@ def draw_hitbox_overlay(hitbox: Hitbox, draw_target: bool, alpha: float = 1.0):
         apex_half = HITBOX_DEBUG_APEX_HALF
         target_apex = (l + r) / 2 + ortho * HITBOX_DEBUG_TRIANGLE_HEIGHT
         draw_hitbox_line(
-            ActiveSkin.guide_red,
+            target_sprite,
             l,
             target_apex,
             t,
@@ -1684,14 +1716,14 @@ def draw_hitbox_overlay(hitbox: Hitbox, draw_target: bool, alpha: float = 1.0):
             a,
         )
         draw_hitbox_line(
-            ActiveSkin.guide_red,
+            target_sprite,
             r,
             target_apex,
             t,
             z_triangle,
             a,
         )
-        ActiveSkin.guide_red.draw(
+        target_sprite.draw(
             Quad(
                 bl=target_apex - axis * apex_half - ortho * apex_half,
                 tl=target_apex - axis * apex_half + ortho * apex_half,
@@ -1704,7 +1736,7 @@ def draw_hitbox_overlay(hitbox: Hitbox, draw_target: bool, alpha: float = 1.0):
         draw_hitbox_marker(
             l=l,
             r=r,
-            main_sprite=ActiveSkin.guide_red,
+            main_sprite=target_sprite,
             dot_sprite=ActiveSkin.guide_black,
             z=z_target,
             z_dot=z_target_dot,
