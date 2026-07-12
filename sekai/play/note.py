@@ -394,10 +394,7 @@ class BaseNote(PlayArchetype):
             self.complete_parallel()
             return
         if time() > self.input_interval.end:
-            if self.tick_trigger():
-                self.complete_parallel()
-            else:
-                self.handle_late_miss()
+            self.handle_late_miss()
             return
         if is_head(self.kind) and time() > self.target_time:
             return
