@@ -13,6 +13,7 @@ from sekai.lib.connector import (
     get_connector_alpha_option,
     get_connector_quality_option,
     get_connector_z,
+    get_damage_connector_sprite,
     get_guide_connector_sprite,
 )
 from sekai.lib.ease import EaseType, ease
@@ -133,6 +134,8 @@ def draw_connector(
             | ConnectorKind.GUIDE_BLACK
         ):
             normal_sprite @= get_guide_connector_sprite(kind)
+        case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
+            normal_sprite @= get_damage_connector_sprite()
         case ConnectorKind.NONE:
             return
         case _:
@@ -154,6 +157,8 @@ def draw_connector(
             | ConnectorKind.GUIDE_PURPLE
             | ConnectorKind.GUIDE_CYAN
             | ConnectorKind.GUIDE_BLACK
+            | ConnectorKind.DAMAGE
+            | ConnectorKind.FAKE_DAMAGE
         ):
             pass
         case _:

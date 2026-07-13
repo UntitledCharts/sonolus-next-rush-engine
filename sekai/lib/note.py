@@ -162,6 +162,7 @@ class NoteKind(IntEnum):
     HIDE_TICK = auto()
 
     DAMAGE = auto()
+    HIDE_DAMAGE_TICK = auto()
 
     ANCHOR = auto()
 
@@ -213,7 +214,7 @@ def init_score(note_archetypes: Iterable[type[PlayArchetype | WatchArchetype]]):
                         weight = 20
                     case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK:
                         weight = 1
-                    case NoteKind.DAMAGE:
+                    case NoteKind.DAMAGE | NoteKind.HIDE_DAMAGE_TICK:
                         weight = 1
                     case NoteKind.ANCHOR:
                         weight = 1  # Doesn't really matter since anchors are not scored
@@ -272,7 +273,7 @@ def init_note_life(archetype: type[PlayArchetype | WatchArchetype]):
             | NoteKind.CRIT_TAIL_RELEASE
         ):
             archetype.life.miss_increment = -80
-        case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK | NoteKind.DAMAGE:
+        case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK | NoteKind.DAMAGE | NoteKind.HIDE_DAMAGE_TICK:
             archetype.life.miss_increment = -40
         case NoteKind.ANCHOR:
             pass
@@ -513,7 +514,7 @@ def get_note_sprite_set(kind: NoteKind, direction: FlickDirection) -> NoteSprite
             result @= ActiveSkin.normal_slide_tick_note
         case NoteKind.CRIT_TICK:
             result @= ActiveSkin.critical_slide_tick_note
-        case NoteKind.HIDE_TICK | NoteKind.ANCHOR:
+        case NoteKind.HIDE_TICK | NoteKind.ANCHOR | NoteKind.HIDE_DAMAGE_TICK:
             result @= EMPTY_NOTE_SPRITE_SET
         case NoteKind.DAMAGE:
             result @= ActiveSkin.damage_note
@@ -711,7 +712,7 @@ def get_note_particles(kind: NoteKind, direction: FlickDirection) -> NoteParticl
             result @= ActiveParticles.normal_slide_tick_note
         case NoteKind.CRIT_TICK:
             result @= ActiveParticles.critical_slide_tick_note
-        case NoteKind.HIDE_TICK | NoteKind.ANCHOR:
+        case NoteKind.HIDE_TICK | NoteKind.HIDE_DAMAGE_TICK | NoteKind.ANCHOR:
             result @= EMPTY_NOTE_PARTICLE_SET
         case NoteKind.DAMAGE:
             result @= ActiveParticles.damage_note
@@ -780,7 +781,7 @@ def get_note_effect_kind(kind: NoteKind, override: NoteEffectKind = NoteEffectKi
                     return NoteEffectKind.CRIT_TRACE
                 case NoteKind.CRIT_TICK:
                     return NoteEffectKind.CRIT_TICK
-                case NoteKind.HIDE_TICK | NoteKind.ANCHOR:
+                case NoteKind.HIDE_TICK | NoteKind.HIDE_DAMAGE_TICK | NoteKind.ANCHOR:
                     return NoteEffectKind.NONE
                 case NoteKind.DAMAGE:
                     return NoteEffectKind.DAMAGE
@@ -1376,7 +1377,21 @@ def draw_tutorial_note_slot_effects(
         )
 
 
-def get_note_window(kind: NoteKind, is_connector_tick) -> SekaiWindow:
+def damage_tick_input_start_beat(beat: float) -> float:
+    """The last 0.5-beat grid point strictly before the given beat (e.g. 15 -> 14.5, 14.1 -> 14.0)."""
+    return (ceil(beat * 2 - 1e-6) - 1) / 2
+
+
+INSTANT_HITBOX_DRAW_WINDOW = 0.050
+
+
+def hitbox_draw_start(input_start_time: float, target_time: float) -> float:
+    if input_start_time >= target_time:
+        return target_time - INSTANT_HITBOX_DRAW_WINDOW
+    return input_start_time
+
+
+def get_note_window(kind: NoteKind, is_connector_tick: bool) -> SekaiWindow:
     result = +SekaiWindow
     match kind:
         case NoteKind.NORM_TAP | NoteKind.NORM_HEAD_TAP | NoteKind.NORM_TAIL_TAP:
@@ -1416,7 +1431,7 @@ def get_note_window(kind: NoteKind, is_connector_tick) -> SekaiWindow:
                 result @= EMPTY_JUDGMENT_WINDOW
             else:
                 result @= SLIDE_TICK_JUDGMENT_WINDOW
-        case NoteKind.ANCHOR | NoteKind.DAMAGE:
+        case NoteKind.ANCHOR | NoteKind.DAMAGE | NoteKind.HIDE_DAMAGE_TICK:
             result @= EMPTY_JUDGMENT_WINDOW
         case _:
             assert_never(kind)
@@ -1486,6 +1501,7 @@ def get_note_bucket(kind: NoteKind) -> Bucket:
             | NoteKind.HIDE_TICK
             | NoteKind.ANCHOR
             | NoteKind.DAMAGE
+            | NoteKind.HIDE_DAMAGE_TICK
         ):
             result @= Bucket(-1)
         case _:
@@ -1494,7 +1510,7 @@ def get_note_bucket(kind: NoteKind) -> Bucket:
 
 
 def get_leniency(kind: NoteKind) -> float:
-    if kind == NoteKind.DAMAGE:
+    if kind in {NoteKind.DAMAGE, NoteKind.HIDE_DAMAGE_TICK}:
         return 0.0
     # For notes without input, this value doesn't matter
     return 1.0
@@ -1657,7 +1673,7 @@ def draw_hitbox_marker(
 
 def get_hitbox_bounds_sprite(kind: NoteKind) -> Sprite:
     result = +Sprite
-    if kind == NoteKind.DAMAGE:
+    if kind in {NoteKind.DAMAGE, NoteKind.HIDE_DAMAGE_TICK}:
         result @= ActiveSkin.guide_green
     else:
         result @= ActiveSkin.guide_blue
@@ -1666,7 +1682,7 @@ def get_hitbox_bounds_sprite(kind: NoteKind) -> Sprite:
 
 def get_hitbox_target_sprite(kind: NoteKind) -> Sprite:
     result = +Sprite
-    if kind == NoteKind.DAMAGE:
+    if kind in {NoteKind.DAMAGE, NoteKind.HIDE_DAMAGE_TICK}:
         result @= ActiveSkin.guide_yellow
     else:
         result @= ActiveSkin.guide_red

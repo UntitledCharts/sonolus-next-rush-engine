@@ -19,6 +19,7 @@ from sonolus.script.bucket import Bucket, Judgment
 from sonolus.script.containers import VarArray
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import Interval, lerp, remap_clamped, unlerp_clamped
+from sonolus.script.quad import Quad
 from sonolus.script.runtime import Touch, delta_time, input_offset, offset_adjusted_time, time, touches
 from sonolus.script.timing import beat_to_time
 
@@ -35,6 +36,7 @@ from sekai.lib.layout import (
     StageTransform,
     blend_stage_transform,
     camera_layout_transform_at_time,
+    compute_hitbox,
     compute_hitbox_at_time,
     compute_stage_transform,
     identity_stage_transform,
@@ -43,6 +45,7 @@ from sekai.lib.layout import (
 from sekai.lib.note import (
     NoteEffectKind,
     NoteKind,
+    damage_tick_input_start_beat,
     draw_hitbox_overlay,
     draw_note,
     get_attach_params,
@@ -54,6 +57,7 @@ from sekai.lib.note import (
     get_visual_spawn_time,
     has_release_input,
     has_tap_input,
+    hitbox_draw_start,
     is_head,
     map_note_kind,
     mirror_flick_direction,
@@ -77,7 +81,6 @@ from sekai.play.dynamic_stage import DynamicStage
 from sekai.play.events import SkillActive
 
 DEFAULT_BEST_TOUCH_TIME = -1e8
-HITBOX_DRAW_MIN_EARLY_WINDOW = 0.050
 
 
 class BaseNote(PlayArchetype):
@@ -113,6 +116,7 @@ class BaseNote(PlayArchetype):
     attach_eased_frac: float = entity_data()
 
     perfect_window_end: float = entity_data()
+    damage_tick_input_start_time: float = entity_data()
 
     # The id of the tap that activated this note, for tap notes and flicks or released the note, for release notes.
     # This is set by the input manager rather than the note itself.
@@ -153,7 +157,12 @@ class BaseNote(PlayArchetype):
 
     @property
     def unadjusted_input_interval(self) -> Interval:
-        return self.judgment_window.bad + self.target_time
+        result = +Interval
+        if self.kind == NoteKind.HIDE_DAMAGE_TICK:
+            result @= Interval(self.damage_tick_input_start_time, self.target_time)
+        else:
+            result @= self.judgment_window.bad + self.target_time
+        return result
 
     @property
     def input_interval(self) -> Interval:
@@ -175,6 +184,12 @@ class BaseNote(PlayArchetype):
         self.target_time = beat_to_time(self.beat)
         window = get_note_window(self.kind, self.active_head_ref.index > 0 or self.is_attached)
         self.perfect_window_end = window.perfect.end
+
+        if self.kind == NoteKind.HIDE_DAMAGE_TICK:
+            window_start_beat = damage_tick_input_start_beat(self.beat)
+            if self.active_head_ref.index > 0:
+                window_start_beat = max(window_start_beat, self.active_head_ref.get().beat)
+            self.damage_tick_input_start_time = beat_to_time(window_start_beat)
 
         if not self.is_attached:
             self.target_scaled_time = group_time_to_scaled_time(self.timescale_group, self.target_time)
@@ -295,6 +310,9 @@ class BaseNote(PlayArchetype):
                     self.complete()
                     return
 
+        if self.kind == NoteKind.HIDE_DAMAGE_TICK and self.is_scored and time() in self.input_interval:
+            self.hitbox.bounds @= self.damage_tick_input_bounds(offset_adjusted_time())
+
         if self.should_do_delayed_trigger():
             if self.best_touch_matches_direction:
                 self.judge(self.best_touch_time)
@@ -370,6 +388,8 @@ class BaseNote(PlayArchetype):
                 self.handle_tick_input()
             case NoteKind.DAMAGE:
                 self.handle_damage_input()
+            case NoteKind.HIDE_DAMAGE_TICK:
+                self.handle_damage_tick_input()
             case NoteKind.ANCHOR:
                 pass
             case _:
@@ -423,7 +443,7 @@ class BaseNote(PlayArchetype):
     def draw_hitbox(self):
         if not Options.show_hitboxes or not self.is_scored:
             return
-        draw_start = min(self.unadjusted_input_interval.start, self.target_time - HITBOX_DRAW_MIN_EARLY_WINDOW)
+        draw_start = hitbox_draw_start(self.unadjusted_input_interval.start, self.target_time)
         if draw_start <= offset_adjusted_time() <= self.unadjusted_input_interval.end:
             draw_hitbox_overlay(
                 self.hitbox,
@@ -740,6 +760,42 @@ class BaseNote(PlayArchetype):
         self.wrong_way = False
         self.pending_post_judge = True
 
+    def handle_damage_tick_input(self):
+        if time() > self.input_interval.end:
+            return
+        has_touch = False
+        for touch in touches():
+            if not self.hitbox.bounds.contains_point(touch.position):
+                continue
+            input_manager.disallow_empty(touch)
+            has_touch = True
+        if has_touch:
+            self.fail_damage()
+
+    def damage_tick_input_bounds(self, t: float) -> Quad:
+        connection_head_ref = +EntityRef[BaseNote]
+        if self.is_attached:
+            connection_head_ref @= self.attach_head_ref
+        else:
+            connection_head_ref @= self.ref()
+        while connection_head_ref.get().prev_ref.index > 0 and connection_head_ref.get().target_time > t:
+            connection_head_ref.index = connection_head_ref.get().prev_ref.index
+        if connection_head_ref.get().next_ref.index <= 0 and connection_head_ref.get().prev_ref.index > 0:
+            connection_head_ref.index = connection_head_ref.get().prev_ref.index
+        connection_head = connection_head_ref.get()
+        result = +Quad
+        if connection_head.next_ref.index > 0:
+            result @= compute_slide_input_bounds(
+                connection_head.connector_ease,
+                connection_head,
+                connection_head.next_ref.get(),
+                t,
+                get_leniency(self.kind),
+            )
+        else:
+            result @= self.hitbox.bounds
+        return result
+
     def handle_late_miss(self):
         if (
             (self.is_slide_end_flick or self.is_trace_flick)
@@ -756,7 +812,7 @@ class BaseNote(PlayArchetype):
         match kind:
             case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK:
                 self.fail_late(0.125)
-            case NoteKind.DAMAGE:
+            case NoteKind.DAMAGE | NoteKind.HIDE_DAMAGE_TICK:
                 self.complete_damage()
             case (
                 NoteKind.NORM_TAP
@@ -1186,6 +1242,43 @@ class BaseNote(PlayArchetype):
         return ref.get()
 
 
+def compute_slide_input_bounds(ease_type: EaseType, head: BaseNote, tail: BaseNote, t: float, leniency: float) -> Quad:
+    eff_head = head.effective_attach_head
+    eff_tail = tail.effective_attach_tail
+    input_lane, input_size = get_attach_params(
+        ease_type=ease_type,
+        head_lane=eff_head._basic_visual_lane_at(t),
+        head_size=eff_head.size,
+        head_target_time=eff_head.target_time,
+        tail_lane=eff_tail._basic_visual_lane_at(t),
+        tail_size=eff_tail.size,
+        tail_target_time=eff_tail.target_time,
+        target_time=t,
+    )
+    input_y_offset = remap_clamped(
+        head.target_time,
+        tail.target_time,
+        head.y_offset_at(t),
+        tail.y_offset_at(t),
+        t,
+    )
+    # Input arrives one input offset late, so the whole view state (stage transforms and layout)
+    # is queried at t, looking back by the offset rather than using the current frame.
+    input_transform = blend_stage_transform(
+        head._basic_stage_transform_at(t),
+        tail._basic_stage_transform_at(t),
+        unlerp_clamped(head.target_time, tail.target_time, t),
+    )
+    return compute_hitbox(
+        camera_layout_transform_at_time(t),
+        input_lane,
+        input_size,
+        leniency,
+        input_y_offset,
+        stage_transform=input_transform.transform(),
+    ).bounds
+
+
 @level_memory
 class NoteMemory:
     active_tap_input_notes: VarArray[EntityRef[BaseNote], Dim[256]]
@@ -1269,6 +1362,9 @@ DamageNote = BaseNote.derive(archetype_names.DAMAGE_NOTE, is_scored=True, key=No
 AnchorNote = BaseNote.derive(archetype_names.ANCHOR_NOTE, is_scored=False, key=NoteKind.ANCHOR)
 TransientHiddenTickNote = BaseNote.derive(
     archetype_names.TRANSIENT_HIDDEN_TICK_NOTE, is_scored=True, key=NoteKind.HIDE_TICK
+)
+TransientHiddenDamageTickNote = BaseNote.derive(
+    archetype_names.TRANSIENT_HIDDEN_DAMAGE_TICK_NOTE, is_scored=True, key=NoteKind.HIDE_DAMAGE_TICK
 )
 FakeNormalTapNote = BaseNote.derive(archetype_names.FAKE_NORMAL_TAP_NOTE, is_scored=False, key=NoteKind.NORM_TAP)
 FakeCriticalTapNote = BaseNote.derive(archetype_names.FAKE_CRITICAL_TAP_NOTE, is_scored=False, key=NoteKind.CRIT_TAP)
@@ -1359,6 +1455,9 @@ FakeAnchorNote = BaseNote.derive(archetype_names.FAKE_ANCHOR_NOTE, is_scored=Fal
 FakeTransientHiddenTickNote = BaseNote.derive(
     archetype_names.FAKE_TRANSIENT_HIDDEN_TICK_NOTE, is_scored=False, key=NoteKind.HIDE_TICK
 )
+FakeTransientHiddenDamageTickNote = BaseNote.derive(
+    archetype_names.FAKE_TRANSIENT_HIDDEN_DAMAGE_TICK_NOTE, is_scored=False, key=NoteKind.HIDE_DAMAGE_TICK
+)
 
 
 NOTE_ARCHETYPES = (
@@ -1397,6 +1496,7 @@ NOTE_ARCHETYPES = (
     DamageNote,
     AnchorNote,
     TransientHiddenTickNote,
+    TransientHiddenDamageTickNote,
     FakeNormalTapNote,
     FakeCriticalTapNote,
     FakeNormalFlickNote,
@@ -1432,6 +1532,7 @@ NOTE_ARCHETYPES = (
     FakeDamageNote,
     FakeAnchorNote,
     FakeTransientHiddenTickNote,
+    FakeTransientHiddenDamageTickNote,
 )
 
 

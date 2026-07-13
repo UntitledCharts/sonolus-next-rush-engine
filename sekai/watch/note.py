@@ -13,6 +13,7 @@ from sonolus.script.archetype import (
 )
 from sonolus.script.bucket import Judgment
 from sonolus.script.interval import lerp, remap_clamped, unlerp_clamped
+from sonolus.script.quad import Quad
 from sonolus.script.runtime import is_replay, is_skip, time
 from sonolus.script.timing import beat_to_time
 
@@ -26,6 +27,7 @@ from sekai.lib.layout import (
     StageTransform,
     blend_stage_transform,
     camera_layout_transform_at_time,
+    compute_hitbox,
     compute_hitbox_at_time,
     compute_stage_transform,
     identity_stage_transform,
@@ -34,6 +36,7 @@ from sekai.lib.layout import (
 from sekai.lib.note import (
     NoteEffectKind,
     NoteKind,
+    damage_tick_input_start_beat,
     draw_hitbox_overlay,
     draw_note,
     get_attach_params,
@@ -41,6 +44,7 @@ from sekai.lib.note import (
     get_note_bucket,
     get_note_effect_kind,
     get_visual_spawn_time,
+    hitbox_draw_start,
     is_head,
     map_note_kind,
     mirror_flick_direction,
@@ -60,7 +64,7 @@ from sekai.lib.timescale import (
     group_time_to_scaled_time,
     update_timescale_group,
 )
-from sekai.play.note import HITBOX_DRAW_MIN_EARLY_WINDOW, derive_note_archetypes, get_note_window
+from sekai.play.note import derive_note_archetypes, get_note_window
 from sekai.watch.custom_elements import spawn_custom
 from sekai.watch.dynamic_stage import WatchDynamicStage
 
@@ -372,14 +376,57 @@ class WatchBaseNote(WatchArchetype):
     def draw_hitbox(self):
         if not Options.show_hitboxes or not self.is_scored:
             return
+        if self.kind == NoteKind.HIDE_DAMAGE_TICK:
+            self.draw_damage_tick_hitbox()
+            return
         input_interval = get_note_window(self.kind, self.active_head_ref.index > 0).bad + self.target_time
-        draw_start = min(input_interval.start, self.target_time - HITBOX_DRAW_MIN_EARLY_WINDOW)
+        draw_start = hitbox_draw_start(input_interval.start, self.target_time)
         if draw_start <= time() <= input_interval.end:
             draw_hitbox_overlay(
                 self.hitbox,
                 self.kind,
                 unlerp_clamped(draw_start, self.target_time, time()),
             )
+
+    def draw_damage_tick_hitbox(self):
+        # Damage segments have no connector-level hold hitbox, so this is the only hitbox drawn for them.
+        if self.active_head_ref.index <= 0:
+            return
+        window_start_beat = max(damage_tick_input_start_beat(self.beat), self.active_head_ref.get().beat)
+        window_start_time = beat_to_time(window_start_beat)
+        draw_start = hitbox_draw_start(window_start_time, self.target_time)
+        if draw_start <= time() <= self.target_time:
+            hitbox = +Hitbox
+            hitbox.bounds @= self.damage_tick_input_bounds(time())
+            draw_hitbox_overlay(
+                hitbox,
+                self.kind,
+                unlerp_clamped(draw_start, self.target_time, time()),
+            )
+
+    def damage_tick_input_bounds(self, t: float) -> Quad:
+        connection_head_ref = +EntityRef[WatchBaseNote]
+        if self.is_attached:
+            connection_head_ref @= self.attach_head_ref
+        else:
+            connection_head_ref @= self.ref()
+        while connection_head_ref.get().prev_ref.index > 0 and connection_head_ref.get().target_time > t:
+            connection_head_ref.index = connection_head_ref.get().prev_ref.index
+        if connection_head_ref.get().next_ref.index <= 0 and connection_head_ref.get().prev_ref.index > 0:
+            connection_head_ref.index = connection_head_ref.get().prev_ref.index
+        connection_head = connection_head_ref.get()
+        result = +Quad
+        if connection_head.next_ref.index > 0:
+            result @= compute_slide_input_bounds(
+                connection_head.connector_ease,
+                connection_head,
+                connection_head.next_ref.get(),
+                t,
+                get_leniency(self.kind),
+            )
+        else:
+            result @= self.hitbox.bounds
+        return result
 
     def terminate(self):
         if is_skip():
@@ -656,6 +703,43 @@ class WatchBaseNote(WatchArchetype):
         else:
             ref @= self.ref()
         return ref.get()
+
+
+def compute_slide_input_bounds(
+    ease_type: EaseType, head: WatchBaseNote, tail: WatchBaseNote, t: float, leniency: float
+) -> Quad:
+    eff_head = head.effective_attach_head
+    eff_tail = tail.effective_attach_tail
+    input_lane, input_size = get_attach_params(
+        ease_type=ease_type,
+        head_lane=eff_head._basic_visual_lane_at(t),
+        head_size=eff_head.size,
+        head_target_time=eff_head.target_time,
+        tail_lane=eff_tail._basic_visual_lane_at(t),
+        tail_size=eff_tail.size,
+        tail_target_time=eff_tail.target_time,
+        target_time=t,
+    )
+    input_y_offset = remap_clamped(
+        head.target_time,
+        tail.target_time,
+        head.y_offset_at(t),
+        tail.y_offset_at(t),
+        t,
+    )
+    input_transform = blend_stage_transform(
+        head._basic_stage_transform_at(t),
+        tail._basic_stage_transform_at(t),
+        unlerp_clamped(head.target_time, tail.target_time, t),
+    )
+    return compute_hitbox(
+        camera_layout_transform_at_time(t),
+        input_lane,
+        input_size,
+        leniency,
+        input_y_offset,
+        stage_transform=input_transform.transform(),
+    ).bounds
 
 
 WATCH_NOTE_ARCHETYPES = derive_note_archetypes(WatchBaseNote)

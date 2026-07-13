@@ -334,6 +334,11 @@ class BaseSkin:
     guide_black: Sprite = sprite("Sekai Guide Black")
     guide_black_fallback: StandardSprite.NOTE_CONNECTION_NEUTRAL_SEAMLESS
 
+    damage_slide_connection: Sprite = sprite("Sekai Damage Slide Connection")
+    damage_slide_connection_fallback: StandardSprite.NOTE_CONNECTION_PURPLE_SEAMLESS
+    damage_slide_connection_active: Sprite = sprite("Sekai Damage Slide Connection Active")
+    damage_slide_connection_active_fallback: StandardSprite.NOTE_CONNECTION_RED_SEAMLESS
+
     beat_line: StandardSprite.GRID_NEUTRAL
     preview_divider: StandardSprite.GRID_NEUTRAL
     bpm_change_line: StandardSprite.GRID_PURPLE
@@ -1336,6 +1341,9 @@ class ActiveSkin:
     guide_neutral: Sprite
     guide_black: Sprite
 
+    damage_slide_connector: Sprite
+    damage_slide_connector_active: Sprite
+
     beat_line: Sprite
     preview_divider: Sprite
     bpm_change_line: Sprite
@@ -1884,6 +1892,16 @@ def init_skin():
     ActiveSkin.guide_black = first_available_sprite(
         BaseSkin.guide_black,
         BaseSkin.guide_black_fallback,
+    )
+
+    ActiveSkin.damage_slide_connector = first_available_sprite(
+        BaseSkin.damage_slide_connection,
+        BaseSkin.damage_slide_connection_fallback,
+    )
+
+    ActiveSkin.damage_slide_connector_active = first_available_sprite(
+        BaseSkin.damage_slide_connection_active,
+        BaseSkin.damage_slide_connection_active_fallback,
     )
 
     ActiveSkin.beat_line = BaseSkin.beat_line

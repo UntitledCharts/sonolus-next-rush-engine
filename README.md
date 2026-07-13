@@ -144,6 +144,13 @@ Shorthand used in the tables:
 | Score Rank        | `Score Rank {S, A, B, C, D}`, `Score Rank Text {S, A, B, C, D}`                                                                                                                                                                 |
 | Skill System      | `Skill Bar Life`, `Skill Bar Score`, `Skill Bar Judgment`, `Skill Number {0..17}` (optional; same glyph layout as `UI Number`, used in preference when present, otherwise falls back to `UI Number`), `Skill Icon {1..5}`, `Skill Judgment Line` |
 
+#### Damage Slide Connectors
+
+| Connector        | Precedence                                                                |
+|------------------|---------------------------------------------------------------------------|
+| Damage           | `Sekai Damage Slide Connection` -> `NOTE_CONNECTION_PURPLE_SEAMLESS`      |
+| Damage (Touched) | `Sekai Damage Slide Connection Active` -> `NOTE_CONNECTION_RED_SEAMLESS`  |
+
 ### Effect Clips
 
 | Name                   |

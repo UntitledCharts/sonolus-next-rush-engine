@@ -12,7 +12,6 @@ from sonolus.script.timing import beat_to_time
 from sekai.debug import DISABLE_NOTES
 from sekai.lib import archetype_names
 from sekai.lib.connector import (
-    CONNECTOR_LENIENCY,
     CONNECTOR_PARTICLE_ACTIVE_DELAY,
     CONNECTOR_SLOT_SPAWN_PERIOD,
     CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY,
@@ -28,6 +27,7 @@ from sekai.lib.connector import (
     destroy_looped_sfx,
     draw_connector,
     draw_connector_slot_glow_effect,
+    get_connector_input_leniency,
     has_connector_input,
     inactive_connector_sfx_times,
     normal_connector_sfx_is_active,
@@ -38,7 +38,7 @@ from sekai.lib.connector import (
     update_linear_connector_particle,
 )
 from sekai.lib.ease import EaseType, ease
-from sekai.lib.layout import StageTransform, blend_stage_transform, compute_hitbox, current_layout_transform
+from sekai.lib.layout import StageTransform, blend_stage_transform
 from sekai.lib.note import draw_connector_hitbox_overlay, draw_slide_note_head, get_attach_params
 from sekai.lib.options import Options
 from sekai.lib.stage import get_stage_props
@@ -160,32 +160,13 @@ class Connector(PlayArchetype):
         if self.active_head_ref.index > 0:
             tail_processed = self.active_tail_ref.index > 0 and self.active_tail.is_despawned
             if not tail_processed and current_time in self.input_active_interval:
-                input_lane, input_size = self.get_attached_params(offset_adjusted_time())
-                head = self.head
-                tail = self.tail
-                oat = offset_adjusted_time()
-                input_y_offset = remap_clamped(
-                    head.target_time,
-                    tail.target_time,
-                    head.y_offset_at(oat),
-                    tail.y_offset_at(oat),
-                    oat,
+                self.active_connector_info.input_bounds @= note.compute_slide_input_bounds(
+                    self.ease_type,
+                    self.head,
+                    self.tail,
+                    offset_adjusted_time(),
+                    get_connector_input_leniency(self.kind),
                 )
-                input_transform = blend_stage_transform(
-                    head._basic_visual_stage_transform(),
-                    tail._basic_visual_stage_transform(),
-                    unlerp_clamped(head.target_time, tail.target_time, oat),
-                )
-                # We could offset adjust this, but it doesn't really matter since this is just for the visual
-                # active state of the connector.
-                self.active_connector_info.input_bounds @= compute_hitbox(
-                    current_layout_transform(),
-                    input_lane,
-                    input_size,
-                    CONNECTOR_LENIENCY,
-                    input_y_offset,
-                    stage_transform=input_transform.transform(),
-                ).bounds
                 bounds = self.active_connector_info.input_bounds
                 for touch in touches():
                     if not touch.ended and bounds.contains_point(touch.position):
@@ -250,7 +231,13 @@ class Connector(PlayArchetype):
             segment_tail = self.segment_tail
             if self.active_head_ref.index > 0:
                 active_head = self.active_head
-                if current_time < active_head.target_time:
+                if self.kind == ConnectorKind.DAMAGE:
+                    # No 'leniency' to be active at the start
+                    if self.active_connector_info.is_active:
+                        visual_state = ConnectorVisualState.ACTIVE
+                    else:
+                        visual_state = ConnectorVisualState.WAITING
+                elif current_time < active_head.target_time:
                     visual_state = ConnectorVisualState.WAITING
                 elif (
                     adj_time < beat_to_time(active_head.beat + START_LENIENCY_BEATS)
@@ -591,6 +578,8 @@ class SlideManager(PlayArchetype):
                 | ConnectorKind.GUIDE_PURPLE
                 | ConnectorKind.GUIDE_CYAN
                 | ConnectorKind.GUIDE_BLACK
+                | ConnectorKind.DAMAGE
+                | ConnectorKind.FAKE_DAMAGE
             ):
                 pass
             case _:
@@ -624,6 +613,8 @@ class SlideManager(PlayArchetype):
                 | ConnectorKind.GUIDE_PURPLE
                 | ConnectorKind.GUIDE_CYAN
                 | ConnectorKind.GUIDE_BLACK
+                | ConnectorKind.DAMAGE
+                | ConnectorKind.FAKE_DAMAGE
             ):
                 pass
             case _:
@@ -690,6 +681,8 @@ def connector_sfx_same_group(kind: ConnectorKind, active_kind: ConnectorKind) ->
             | ConnectorKind.GUIDE_PURPLE
             | ConnectorKind.GUIDE_CYAN
             | ConnectorKind.GUIDE_BLACK
+            | ConnectorKind.DAMAGE
+            | ConnectorKind.FAKE_DAMAGE
         ):
             return False
         case _:

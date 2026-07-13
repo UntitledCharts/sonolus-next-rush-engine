@@ -26,7 +26,7 @@ from sekai.lib.connector import (
     update_linear_connector_particle,
 )
 from sekai.lib.ease import EaseType, ease
-from sekai.lib.layout import StageTransform, blend_stage_transform, compute_hitbox, current_layout_transform
+from sekai.lib.layout import StageTransform, blend_stage_transform
 from sekai.lib.note import draw_connector_hitbox_overlay, draw_slide_note_head, get_attach_params
 from sekai.lib.options import Options
 from sekai.lib.stage import get_stage_props
@@ -149,6 +149,9 @@ class WatchConnector(WatchArchetype):
             if self.active_head_ref.index > 0:
                 if is_replay():
                     visual_state = Streams.connector_visual_states[self.index].get_previous_inclusive(current_time)
+                elif self.kind == ConnectorKind.DAMAGE:
+                    # Autoplay never touches damage connectors.
+                    visual_state = ConnectorVisualState.WAITING
                 elif current_time < self.active_head.target_time:
                     visual_state = ConnectorVisualState.WAITING
                 else:
@@ -232,29 +235,13 @@ class WatchConnector(WatchArchetype):
         if self.active_head_ref.index <= 0 or not has_connector_input(self.kind):
             return
         if time() in self.visual_active_interval:
-            input_lane, input_size = self.get_attached_params(time())
-            head = self.head
-            tail = self.tail
-            input_y_offset = remap_clamped(
-                head.target_time,
-                tail.target_time,
-                head.y_offset_at(time()),
-                tail.y_offset_at(time()),
+            bounds = note.compute_slide_input_bounds(
+                self.ease_type,
+                self.head,
+                self.tail,
                 time(),
-            )
-            input_transform = blend_stage_transform(
-                head._basic_visual_stage_transform(),
-                tail._basic_visual_stage_transform(),
-                unlerp_clamped(head.target_time, tail.target_time, time()),
-            )
-            bounds = compute_hitbox(
-                current_layout_transform(),
-                input_lane,
-                input_size,
                 CONNECTOR_LENIENCY,
-                input_y_offset,
-                stage_transform=input_transform.transform(),
-            ).bounds
+            )
             draw_connector_hitbox_overlay(bounds, 0.6)
 
     def get_attached_params(self, target_time: float) -> tuple[float, float]:

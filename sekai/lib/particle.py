@@ -737,7 +737,7 @@ def init_particles():
         directional=EMPTY_PARTICLE,
         tick=EMPTY_PARTICLE,
         lane=EMPTY_PARTICLE,
-        lane_basic=BaseParticles.lane,
+        lane_basic=EMPTY_PARTICLE,
         slot_linear=EMPTY_PARTICLE,
         slot_linear_great=EMPTY_PARTICLE,
         slot_linear_good=EMPTY_PARTICLE,
