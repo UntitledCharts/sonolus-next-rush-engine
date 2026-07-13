@@ -558,7 +558,7 @@ def draw_life_number(number: int, z: ZIndex, alpha: float = 1.0):
     digit_gap = 0
     match LevelConfig.ui_version:
         case Version.v3:
-            margin_offset = 0.61
+            margin_offset = 0.625
             y_offset = 0.04314
             h = 0.06141 * ui.secondary_metric_config.scale * scale_ratio
             w = h
@@ -629,8 +629,8 @@ def draw_score_bar_number(number: int, z: ZIndex, alpha: float = 1.0):
     match LevelConfig.ui_version:
         case Version.v3:
             margin_offset = 1.02
-            y_offset = -0.09
-            h = 0.09141 * ui.primary_metric_config.scale * scale_ratio
+            y_offset = -0.077
+            h = 0.0913 * ui.primary_metric_config.scale * scale_ratio
             w = h
             digit_gap = w * -0.3
         case Version.v1:
