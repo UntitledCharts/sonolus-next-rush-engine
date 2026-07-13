@@ -356,11 +356,12 @@ SKILL_GLYPH_DOT = 15
 SKILL_GLYPH_PERCENT = 16
 SKILL_GLYPH_SECOND = 17
 
-SKILL_GLYPH_WIDTH_FACTOR = 6.25
+SKILL_GLYPH_WIDTH_FACTOR = 7
 SKILL_GLYPH_HEIGHT_FACTOR = 1
 SKILL_GLYPH_GAP_FACTOR = -4
-SKILL_DOT_GAP_FACTOR = -6
-SKILL_PERCENT_GAP_FACTOR = -2
+SKILL_LV_GAP_FACTOR = -6
+SKILL_DOT_GAP_FACTOR = -8
+SKILL_PERCENT_GAP_FACTOR = -3.75
 
 
 def skill_glyph_gap_factor(glyph: int) -> float:
@@ -373,6 +374,9 @@ def skill_glyph_gap_factor(glyph: int) -> float:
 
 
 def skill_gap_factor(left_glyph: int, right_glyph: int) -> float:
+    if left_glyph == SKILL_GLYPH_L and right_glyph == SKILL_GLYPH_V:
+        return SKILL_LV_GAP_FACTOR
+
     result = skill_glyph_gap_factor(left_glyph)
     right = skill_glyph_gap_factor(right_glyph)
     if right != SKILL_GLYPH_GAP_FACTOR:
@@ -381,6 +385,8 @@ def skill_gap_factor(left_glyph: int, right_glyph: int) -> float:
 
 
 SKILL_BAR_BASE_X = -6.7
+SKILL_BAR_GROUP_OFFSET_X = -0.4
+SKILL_BAR_GROUP_OFFSET_Y = 0.01
 SKILL_BAR_H = 0.08
 SKILL_BAR_HALF_W = SKILL_BAR_H * 21
 SKILL_NOTCH_PUSH = 1.35777
@@ -451,12 +457,12 @@ def draw_skill_bar(
         scale_ratio = min(1, aspect_ratio() / TARGET_ASPECT_RATIO)
         has_side_notch = screen().l != safe_area().l or screen().r != safe_area().r
         edge_offset = SKILL_NOTCH_PUSH * scale_ratio if has_side_notch else -SKILL_EDGE_MARGIN
-        bar_center_x = screen().l / Layout.fixed_w_scale + SKILL_BAR_HALF_W + edge_offset
+        bar_center_x = screen().l / Layout.fixed_w_scale + SKILL_BAR_HALF_W + edge_offset + SKILL_BAR_GROUP_OFFSET_X
         x_ratio = bar_center_x - SKILL_BAR_BASE_X
         y_ratio = SKILL_REF_TOP_EDGE - (screen().t - Layout.t) / Layout.fixed_h_scale + SKILL_REF_Y_RATIO
 
         x = SKILL_BAR_BASE_X + x_ratio
-        y = 0.433 - y_ratio
+        y = 0.433 - y_ratio + SKILL_BAR_GROUP_OFFSET_Y
         start_center = Vec2(x=x - 0.2, y=y)
         target_center = Vec2(x=x, y=y)
         current_center = lerp(start_center, target_center, anim)
@@ -480,7 +486,7 @@ def draw_skill_bar(
 
     if LevelConfig.ui_version == Version.v3:
         x = -7.5 + x_ratio
-        y = 0.45 - y_ratio
+        y = 0.45 - y_ratio + SKILL_BAR_GROUP_OFFSET_Y
         icon_start_center = Vec2(x=x - 0.2, y=y)
         icon_target_center = Vec2(x=x, y=y)
         icon_current_center = lerp(icon_start_center, icon_target_center, anim)
@@ -502,8 +508,8 @@ def draw_skill_bar(
     text_current_center = +Vec2
 
     if LevelConfig.ui_version == Version.v3:
-        x = -5.53 + x_ratio
-        y = 0.474 - y_ratio
+        x = -5.52 + x_ratio
+        y = 0.474 - y_ratio + SKILL_BAR_GROUP_OFFSET_Y
         text_start_center = Vec2(x=x - 0.2, y=y)
         text_target_center = Vec2(x=x, y=y)
         text_changing_center = Vec2(x=x + 0.1, y=y)
