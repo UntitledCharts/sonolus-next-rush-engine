@@ -19,7 +19,7 @@ from sekai.lib.connector import (
     destroy_looped_particle,
     draw_connector,
     draw_connector_slot_glow_effect,
-    has_connector_input,
+    should_show_connector_hitbox,
     spawn_connector_slot_particles,
     spawn_linear_connector_trail_particle,
     update_circular_connector_particle,
@@ -232,7 +232,7 @@ class WatchConnector(WatchArchetype):
     def draw_hitbox(self):
         if not Options.show_hitboxes:
             return
-        if self.active_head_ref.index <= 0 or not has_connector_input(self.kind):
+        if self.active_head_ref.index <= 0 or not should_show_connector_hitbox(self.kind):
             return
         if time() in self.visual_active_interval:
             bounds = note.compute_slide_input_bounds(

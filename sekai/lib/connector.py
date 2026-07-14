@@ -140,7 +140,9 @@ def is_fake_connector(kind: ConnectorKind) -> bool:
     return is_fake_active_connector(kind) or kind == ConnectorKind.FAKE_DAMAGE
 
 
-def has_connector_input(kind: ConnectorKind) -> bool:
+def should_show_connector_hitbox(kind: ConnectorKind) -> bool:
+    # DAMAGE is input-tracked but excluded: its region is already visualized by the tick
+    # hitboxes, which follow the head and would coincide with a connector-level overlay.
     return kind in {ConnectorKind.ACTIVE_NORMAL, ConnectorKind.ACTIVE_CRITICAL}
 
 

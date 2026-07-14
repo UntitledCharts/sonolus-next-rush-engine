@@ -486,41 +486,52 @@ def _emit_damage_ticks(
     """Emit a TransientHiddenDamageTickNote every half beat over each DAMAGE segment of the slide.
 
     Ticks cover both segment endpoints, except that the slide's very first beat never gets a tick
-    and a damage->damage joint is emitted once, by the earlier segment.
+    and a damage->damage joint is emitted once, by the earlier segment. A damage run ending off the
+    half-beat grid gets a tick at its final beat, since no grid tick's window covers that stretch.
     """
     spans = list(itertools.pairwise(separator_indices))
     section_by_span_head = _input_section_bounds(slide.notes, separator_indices)
     slide_start_beat = slide.notes[0].beat
+
+    def emit_tick(beat: float, head_ln: LevelNote, section_head_idx: int) -> None:
+        tick = emit_note(
+            LevelNote(
+                beat=beat,
+                lane=0.0,
+                size=0.0,
+                kind=NoteKind.HIDE_DAMAGE_TICK,
+                timescale_group=head_ln.timescale_group,
+                is_fake=head_ln.is_fake,
+            )
+        )
+        attach_head, attach_tail = _bracketing_non_attached(non_attached, beat)
+        tick.attach_head_ref = attach_head.ref()
+        tick.attach_tail_ref = attach_tail.ref()
+        tick.is_attached = True
+        tick.active_head_ref = built[section_head_idx].ref()
+
     for span_i, (span_head_idx, span_tail_idx) in enumerate(spans):
         head_ln = slide.notes[span_head_idx]
         if head_ln.segment_kind != ConnectorKind.DAMAGE:
             continue
         head_beat = head_ln.beat
+        tail_beat = slide.notes[span_tail_idx].beat
         prev_is_damage = span_i > 0 and slide.notes[spans[span_i - 1][0]].segment_kind == ConnectorKind.DAMAGE
+        next_is_damage = (
+            span_i + 1 < len(spans) and slide.notes[spans[span_i + 1][0]].segment_kind == ConnectorKind.DAMAGE
+        )
         section_head_idx = section_by_span_head[span_head_idx][0]
         first_step = math.ceil(head_beat / _DAMAGE_TICK_STEP - _BEAT_EPSILON)
-        last_step = math.floor(slide.notes[span_tail_idx].beat / _DAMAGE_TICK_STEP + _BEAT_EPSILON)
+        last_step = math.floor(tail_beat / _DAMAGE_TICK_STEP + _BEAT_EPSILON)
         for step in range(first_step, last_step + 1):
             beat = step * _DAMAGE_TICK_STEP
             if abs(beat - slide_start_beat) < _BEAT_EPSILON:
                 continue
             if prev_is_damage and abs(beat - head_beat) < _BEAT_EPSILON:
                 continue
-            tick = emit_note(
-                LevelNote(
-                    beat=beat,
-                    lane=0.0,
-                    size=0.0,
-                    kind=NoteKind.HIDE_DAMAGE_TICK,
-                    timescale_group=head_ln.timescale_group,
-                    is_fake=head_ln.is_fake,
-                )
-            )
-            attach_head, attach_tail = _bracketing_non_attached(non_attached, beat)
-            tick.attach_head_ref = attach_head.ref()
-            tick.attach_tail_ref = attach_tail.ref()
-            tick.is_attached = True
-            tick.active_head_ref = built[section_head_idx].ref()
+            emit_tick(beat, head_ln, section_head_idx)
+        if not next_is_damage and tail_beat > last_step * _DAMAGE_TICK_STEP + _BEAT_EPSILON:
+            emit_tick(tail_beat, head_ln, section_head_idx)
 
 
 def _bracketing_non_attached(non_attached: list[BaseNote], beat: float) -> tuple[BaseNote, BaseNote]:
