@@ -535,6 +535,7 @@ class SlideManager(PlayArchetype):
                 | ConnectorKind.ACTIVE_CRITICAL
                 | ConnectorKind.ACTIVE_FAKE_NORMAL
                 | ConnectorKind.ACTIVE_FAKE_CRITICAL
+                | ConnectorKind.DAMAGE
             ):
                 draw_slide_note_head(
                     self.active_head.kind,

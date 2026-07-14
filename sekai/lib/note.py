@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from enum import IntEnum, auto
 from math import ceil, floor
-from typing import assert_never, cast
+from typing import Literal, assert_never, cast
 
 from sonolus.script.archetype import EntityRef, HapticType, PlayArchetype, WatchArchetype, get_archetype_by_name
 from sonolus.script.bucket import Bucket, Judgment
@@ -360,7 +360,7 @@ def draw_note(
 
 def draw_slide_note_head(
     kind: NoteKind,
-    connector_kind: ActiveConnectorKind,
+    connector_kind: ActiveConnectorKind | Literal[ConnectorKind.DAMAGE],
     lane: float,
     size: float,
     target_time: float,
@@ -378,6 +378,8 @@ def draw_slide_note_head(
             kind = note_kind_as_normal(kind)
         case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
             kind = note_kind_as_critical(kind)
+        case ConnectorKind.DAMAGE:
+            pass  # Keep kind as is
         case _:
             assert_never(connector_kind)
     travel = approach(visual_progress)
