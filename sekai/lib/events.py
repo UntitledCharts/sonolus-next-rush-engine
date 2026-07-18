@@ -207,25 +207,27 @@ def draw_fever_side_bar(draw_time: float):
             )
 
         if a_left > 0:
-            side_sprite.draw(layout1, get_z_alt(LAYER_STAGE), a=a_left)
-            ActiveSkin.guide_neutral.draw(point1, get_z_alt(LAYER_STAGE, 1), a=a_left)
-            ActiveSkin.guide_neutral.draw(point2, get_z_alt(LAYER_STAGE, 1), a=a_left)
+            side_sprite.draw(layout1, get_z_alt(LAYER_STAGE).tuple, a=a_left)
+            ActiveSkin.guide_neutral.draw(point1, get_z_alt(LAYER_STAGE, 1).tuple, a=a_left)
+            ActiveSkin.guide_neutral.draw(point2, get_z_alt(LAYER_STAGE, 1).tuple, a=a_left)
         if a_right > 0:
-            side_sprite.draw(layout2, get_z_alt(LAYER_STAGE), a=a_right)
-            ActiveSkin.sekai_fever_text.draw(fever_text_layout, get_z_alt(LAYER_STAGE, 1), a=a_right)
+            side_sprite.draw(layout2, get_z_alt(LAYER_STAGE).tuple, a=a_right)
+            ActiveSkin.sekai_fever_text.draw(fever_text_layout, get_z_alt(LAYER_STAGE, 1).tuple, a=a_right)
             if screen().t < DynamicLayout.t:
-                ActiveSkin.sekai_super_fever_text.draw(super_fever_text_layout, get_z_alt(LAYER_STAGE, 1), a=a_right)
+                ActiveSkin.sekai_super_fever_text.draw(
+                    super_fever_text_layout, get_z_alt(LAYER_STAGE, 1).tuple, a=a_right
+                )
             else:
                 ActiveSkin.sekai_super_fever_text_tablet.draw(
-                    super_fever_text_layout, get_z_alt(LAYER_STAGE, 1), a=a_right
+                    super_fever_text_layout, get_z_alt(LAYER_STAGE, 1).tuple, a=a_right
                 )
     elif screen().t < DynamicLayout.t or not ActiveSkin.sekai_stage_fever_tablet.is_available:
         if ActiveSkin.sekai_stage_fever.is_available:
             layout = layout_sekai_stage()
-            ActiveSkin.sekai_stage_fever.draw(layout, get_z_alt(LAYER_STAGE), a=a)
+            ActiveSkin.sekai_stage_fever.draw(layout, get_z_alt(LAYER_STAGE).tuple, a=a)
     else:
         layout = layout_sekai_stage_t()
-        ActiveSkin.sekai_stage_fever_tablet.draw(layout, get_z_alt(LAYER_STAGE), a=a)
+        ActiveSkin.sekai_stage_fever_tablet.draw(layout, get_z_alt(LAYER_STAGE).tuple, a=a)
 
 
 def draw_fever_gauge(percentage: float):
@@ -260,9 +262,9 @@ def draw_fever_gauge(percentage: float):
         layout2 @= layout_fever_gauge_right(t)
 
     if a_left > 0:
-        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, get_z_alt(LAYER_GAUGE), a=a_left)
+        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout1, get_z_alt(LAYER_GAUGE).tuple, a=a_left)
     if a_right > 0:
-        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, get_z_alt(LAYER_GAUGE), a=a_right)
+        ActiveSkin.sekai_fever_gauge.get_sprite(percentage).draw(layout2, get_z_alt(LAYER_GAUGE).tuple, a=a_right)
 
 
 def spawn_fever_start_particle(percentage: float):
@@ -620,7 +622,7 @@ def draw_judgment_effect(
     anim = enter_progress - exit_progress
     layout = transform.transform_quad(layout_skill_judgment_line(l, r, y_offset))
     z = get_z_alt(LAYER_JUDGMENT_SKILL)
-    ActiveSkin.skill_judgment_line.draw(layout, z=z, a=anim * stage_alpha)
+    ActiveSkin.skill_judgment_line.draw(layout, z=z.tuple, a=anim * stage_alpha)
 
 
 def reset_fever_bounds():

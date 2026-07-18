@@ -197,20 +197,20 @@ def draw_note_body(
     match sprites.render_type:
         case BodyRenderType.NORMAL:
             left_layout, middle_layout, right_layout = layout_preview_regular_note_body(lane, size, col, y)
-            sprites.left.draw(left_layout, z=z)
-            sprites.middle.draw(middle_layout, z=z)
-            sprites.right.draw(right_layout, z=z)
+            sprites.left.draw(left_layout, z=z.tuple)
+            sprites.middle.draw(middle_layout, z=z.tuple)
+            sprites.right.draw(right_layout, z=z.tuple)
         case BodyRenderType.SLIM:
             left_layout, middle_layout, right_layout = layout_preview_slim_note_body(lane, size, col, y)
-            sprites.left.draw(left_layout, z=z)
-            sprites.middle.draw(middle_layout, z=z)
-            sprites.right.draw(right_layout, z=z)
+            sprites.left.draw(left_layout, z=z.tuple)
+            sprites.middle.draw(middle_layout, z=z.tuple)
+            sprites.right.draw(right_layout, z=z.tuple)
         case BodyRenderType.NORMAL_FALLBACK:
             layout = layout_preview_regular_note_body_fallback(lane, size, col, y)
-            sprites.middle.draw(layout, z=z)
+            sprites.middle.draw(layout, z=z.tuple)
         case BodyRenderType.SLIM_FALLBACK:
             layout = layout_preview_slim_note_body_fallback(lane, size, col, y)
-            sprites.middle.draw(layout, z=z)
+            sprites.middle.draw(layout, z=z.tuple)
 
 
 def draw_note_arrow(
@@ -232,16 +232,16 @@ def draw_note_arrow(
     match sprites.render_type:
         case ArrowRenderType.NORMAL:
             layout = layout_preview_flick_arrow(lane, size, direction, col, y)
-            sprites.get_sprite(size, direction).draw(layout, z=z)
+            sprites.get_sprite(size, direction).draw(layout, z=z.tuple)
         case ArrowRenderType.FALLBACK:
             layout = layout_preview_flick_arrow_fallback(lane, size, direction, col, y)
-            sprites.get_sprite(size, direction).draw(layout, z=z)
+            sprites.get_sprite(size, direction).draw(layout, z=z.tuple)
 
 
 def draw_note_tick(sprite: Sprite, lane: float, col: int, y: float, adjusted_time: float):
     z = get_z(LAYER_NOTE_TICK, time=adjusted_time, lane=lane)
     layout = layout_preview_tick(lane, col, y)
-    sprite.draw(layout, z=z)
+    sprite.draw(layout, z=z.tuple)
 
 
 PREVIEW_NOTE_ARCHETYPES = derive_note_archetypes(PreviewBaseNote)

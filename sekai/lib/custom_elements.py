@@ -122,13 +122,13 @@ def draw_combo_label(ap: bool, combo: int):
     layout = FixedUiLayout.combo_label
     if ap or not Options.ap_effect:
         ActiveSkin.combo_label.get_sprite(ComboType.NORMAL).draw(
-            quad=layout, z=get_z_alt(LAYER_JUDGMENT, 1), a=ui.combo_config.alpha
+            quad=layout, z=get_z_alt(LAYER_JUDGMENT, 1).tuple, a=ui.combo_config.alpha
         )
     else:
         ActiveSkin.combo_label.get_sprite(ComboType.AP).draw(
-            quad=layout, z=get_z_alt(LAYER_JUDGMENT, 1), a=ui.combo_config.alpha
+            quad=layout, z=get_z_alt(LAYER_JUDGMENT, 1).tuple, a=ui.combo_config.alpha
         )
-        ActiveSkin.combo_label.get_sprite(ComboType.GLOW).draw(quad=layout, z=get_z_alt(LAYER_JUDGMENT), a=a)
+        ActiveSkin.combo_label.get_sprite(ComboType.GLOW).draw(quad=layout, z=get_z_alt(LAYER_JUDGMENT).tuple, a=a)
 
 
 def draw_combo_number(draw_time: float, ap: bool, combo: int):
@@ -215,7 +215,7 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int):
         ),
     )
     drawing_combo.draw_number(
-        z=get_z_alt(LAYER_JUDGMENT), z1=get_z_alt(LAYER_JUDGMENT, 1), z2=get_z_alt(LAYER_JUDGMENT, 2)
+        z=get_z_alt(LAYER_JUDGMENT).tuple, z1=get_z_alt(LAYER_JUDGMENT, 1).tuple, z2=get_z_alt(LAYER_JUDGMENT, 2).tuple
     )
 
 
@@ -287,7 +287,7 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
         layout1=LayoutConfig(width=w, gap=digit_gap, scale=s, height=h, start_x=start_x),
         layout2=LayoutConfig(width=0, gap=0, scale=0, height=0, start_x=0),
     )
-    drawing_combo.draw_number(z=0, z1=get_z_alt(LAYER_JUDGMENT), z2=get_z_alt(LAYER_JUDGMENT, 1))
+    drawing_combo.draw_number(z=0, z1=get_z_alt(LAYER_JUDGMENT).tuple, z2=get_z_alt(LAYER_JUDGMENT, 1).tuple)
 
 
 class CoreConfig(Record):
@@ -479,7 +479,7 @@ def draw_judgment_text(draw_time: float, judgment: Judgment, windows: SekaiWindo
     s = unlerp_clamped(draw_time, draw_time + 0.064, time())
     layout = layout_combo_label(screen_center, w=w * s / 2, h=h * s / 2)
     ActiveSkin.judgment.get_sprite(judgment_type=judgment, windows=windows, accuracy=accuracy).draw(
-        quad=layout, z=get_z_alt(LAYER_JUDGMENT), a=a
+        quad=layout, z=get_z_alt(LAYER_JUDGMENT).tuple, a=a
     )
 
 

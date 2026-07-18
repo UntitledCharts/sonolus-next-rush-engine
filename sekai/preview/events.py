@@ -31,7 +31,7 @@ class PreviewSkill(PreviewArchetype):
     def render(self):
         ActiveSkin.skill_line.draw(
             layout_preview_bar_line(self.time, "both"),
-            z=get_z_alt(LAYER_SKILL_LINE),
+            z=get_z_alt(LAYER_SKILL_LINE).tuple,
             a=0.8,
         )
         print_at_time(
@@ -68,12 +68,12 @@ class PreviewFeverChance(PreviewArchetype):
             return
         ActiveSkin.fever_chance_line.draw(
             layout_preview_bar_line(self.time, "right"),
-            z=get_z_alt(LAYER_FEVER_LINE_TOP),
+            z=get_z_alt(LAYER_FEVER_LINE_TOP).tuple,
             a=0.8,
         )
         ActiveSkin.fever_start_line.draw(
             layout_preview_bar_line(self.time, "left_only"),
-            z=get_z_alt(LAYER_FEVER_LINE_BOTTOM),
+            z=get_z_alt(LAYER_FEVER_LINE_BOTTOM).tuple,
             a=0.8,
         )
         print_at_time(
@@ -110,12 +110,12 @@ class PreviewFeverStart(PreviewArchetype):
             return
         ActiveSkin.fever_start_line.draw(
             layout_preview_bar_line(self.time, "right"),
-            z=get_z_alt(LAYER_FEVER_LINE_TOP),
+            z=get_z_alt(LAYER_FEVER_LINE_TOP).tuple,
             a=0.8,
         )
         ActiveSkin.fever_chance_line.draw(
             layout_preview_bar_line(self.time, "left_only"),
-            z=get_z_alt(LAYER_FEVER_LINE_BOTTOM),
+            z=get_z_alt(LAYER_FEVER_LINE_BOTTOM).tuple,
             a=0.8,
         )
         print_at_time(

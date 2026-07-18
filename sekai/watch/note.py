@@ -44,6 +44,7 @@ from sekai.lib.note import (
     get_note_bucket,
     get_note_effect_kind,
     get_visual_spawn_time,
+    hitbox_draw_alpha,
     hitbox_draw_start,
     is_head,
     map_note_kind,
@@ -380,12 +381,13 @@ class WatchBaseNote(WatchArchetype):
             self.draw_damage_tick_hitbox()
             return
         input_interval = get_note_window(self.kind, self.active_head_ref.index > 0).bad + self.target_time
-        draw_start = hitbox_draw_start(input_interval.start, self.target_time)
+        draw_start = hitbox_draw_start(self.kind, input_interval.start, self.target_time)
         if draw_start <= time() <= input_interval.end:
             draw_hitbox_overlay(
                 self.hitbox,
                 self.kind,
-                unlerp_clamped(draw_start, self.target_time, time()),
+                hitbox_draw_alpha(self.kind, draw_start, self.target_time, time()),
+                time_to_target=self.target_time - time(),
             )
 
     def draw_damage_tick_hitbox(self):
@@ -394,14 +396,15 @@ class WatchBaseNote(WatchArchetype):
             return
         window_start_beat = max(damage_tick_input_start_beat(self.beat), self.active_head_ref.get().beat)
         window_start_time = beat_to_time(window_start_beat)
-        draw_start = hitbox_draw_start(window_start_time, self.target_time)
+        draw_start = hitbox_draw_start(self.kind, window_start_time, self.target_time)
         if draw_start <= time() <= self.target_time:
             hitbox = +Hitbox
             hitbox.bounds @= self.damage_tick_input_bounds(time())
             draw_hitbox_overlay(
                 hitbox,
                 self.kind,
-                unlerp_clamped(draw_start, self.target_time, time()),
+                hitbox_draw_alpha(self.kind, draw_start, self.target_time, time()),
+                time_to_target=self.target_time - time(),
             )
 
     def damage_tick_input_bounds(self, t: float) -> Quad:

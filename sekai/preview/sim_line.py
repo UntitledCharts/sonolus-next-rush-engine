@@ -1,7 +1,7 @@
 from sonolus.script.archetype import EntityRef, PreviewArchetype, imported
 
 from sekai.lib import archetype_names
-from sekai.lib.layer import LAYER_SIM_LINE, get_z_alt
+from sekai.lib.layer import LAYER_SIM_LINE, get_z
 from sekai.lib.skin import ActiveSkin
 from sekai.preview.layout import layout_preview_sim_line
 from sekai.preview.note import PreviewBaseNote
@@ -22,7 +22,7 @@ class PreviewSimLine(PreviewArchetype):
             col=self.left.preview_col,
             y=self.left.preview_y,
         )
-        ActiveSkin.sim_line.draw(layout, z=get_z_alt(LAYER_SIM_LINE))
+        ActiveSkin.sim_line.draw(layout, z=get_z(LAYER_SIM_LINE).tuple)
 
     @property
     def left(self) -> PreviewBaseNote:

@@ -57,6 +57,7 @@ from sekai.lib.note import (
     get_visual_spawn_time,
     has_release_input,
     has_tap_input,
+    hitbox_draw_alpha,
     hitbox_draw_start,
     is_head,
     map_note_kind,
@@ -443,12 +444,13 @@ class BaseNote(PlayArchetype):
     def draw_hitbox(self):
         if not Options.show_hitboxes or not self.is_scored:
             return
-        draw_start = hitbox_draw_start(self.unadjusted_input_interval.start, self.target_time)
+        draw_start = hitbox_draw_start(self.kind, self.unadjusted_input_interval.start, self.target_time)
         if draw_start <= offset_adjusted_time() <= self.unadjusted_input_interval.end:
             draw_hitbox_overlay(
                 self.hitbox,
                 self.kind,
-                unlerp_clamped(draw_start, self.target_time, offset_adjusted_time()),
+                hitbox_draw_alpha(self.kind, draw_start, self.target_time, offset_adjusted_time()),
+                time_to_target=self.target_time - offset_adjusted_time(),
             )
 
     def tick_trigger(self):

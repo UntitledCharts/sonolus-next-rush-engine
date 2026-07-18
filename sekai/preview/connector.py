@@ -236,7 +236,7 @@ def draw_connector(
                 end_y=end_y,
                 col=col,
             ):
-                normal_sprite.draw(layout, z=z, a=a)
+                normal_sprite.draw(layout, z=z.tuple, a=a)
 
         last_lane = next_lane
         last_size = next_size

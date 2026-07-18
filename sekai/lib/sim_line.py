@@ -67,4 +67,4 @@ def draw_sim_line(
     )
     if a <= 0:
         return
-    ActiveSkin.sim_line.draw(layout, z=z, a=a)
+    ActiveSkin.sim_line.draw(layout, z=z.tuple, a=a)

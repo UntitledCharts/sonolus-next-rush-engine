@@ -132,7 +132,7 @@ def lane_to_preview_x(lane: float, col: int) -> float:
 
 
 def get_adjusted_time(time: float, col: int) -> float:
-    # get_z only supports time within +/- 30s accurately, so we adjust time to be relative to the column's time
+    # Times are kept relative to the column so the z time component stays consistent across columns
     return time - col * preview_column_secs()
 
 

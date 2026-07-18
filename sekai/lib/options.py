@@ -455,6 +455,7 @@ class Options:
     )
     show_hitboxes: bool = toggle_option(
         name="Show Hitboxes",
+        standard=True,
         advanced=True,
         scope="Next Sekai",
         default=False,
@@ -478,6 +479,7 @@ class Options:
     )
     test_aspect_ratio: bool = toggle_option(
         name="Test Aspect Ratio",
+        standard=True,
         advanced=True,
         scope="Next Sekai",
         default=False,

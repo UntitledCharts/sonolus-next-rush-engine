@@ -7,10 +7,10 @@ from sonolus.script.archetype import EntityRef, HapticType, PlayArchetype, Watch
 from sonolus.script.bucket import Bucket, Judgment
 from sonolus.script.easing import ease_in_cubic
 from sonolus.script.effect import Effect
-from sonolus.script.interval import clamp, lerp, remap_clamped
+from sonolus.script.interval import clamp, lerp, remap_clamped, unlerp_clamped
 from sonolus.script.quad import Quad
 from sonolus.script.runtime import is_tutorial, is_watch, level_life, level_score, time
-from sonolus.script.sprite import Sprite, ZIndex
+from sonolus.script.sprite import Sprite
 from sonolus.script.vec import Vec2
 
 from sekai.lib import archetype_names
@@ -45,6 +45,7 @@ from sekai.lib.layer import (
     LAYER_NOTE_SLIM_BODY,
     LAYER_NOTE_TICK,
     LAYER_OVERLAY,
+    ZIndexes,
     get_z,
     get_z_alt,
 )
@@ -577,20 +578,20 @@ def draw_note_body(
     match sprites.render_type:
         case BodyRenderType.NORMAL:
             left_layout, middle_layout, right_layout = layout_regular_note_body(lane, size, travel)
-            sprites.left.draw(place(left_layout), z=z, a=a)
-            sprites.middle.draw(place(middle_layout), z=z, a=a)
-            sprites.right.draw(place(right_layout), z=z, a=a)
+            sprites.left.draw(place(left_layout), z=z.tuple, a=a)
+            sprites.middle.draw(place(middle_layout), z=z.tuple, a=a)
+            sprites.right.draw(place(right_layout), z=z.tuple, a=a)
         case BodyRenderType.SLIM:
             left_layout, middle_layout, right_layout = layout_slim_note_body(lane, size, travel)
-            sprites.left.draw(place(left_layout), z=z, a=a)
-            sprites.middle.draw(place(middle_layout), z=z, a=a)
-            sprites.right.draw(place(right_layout), z=z, a=a)
+            sprites.left.draw(place(left_layout), z=z.tuple, a=a)
+            sprites.middle.draw(place(middle_layout), z=z.tuple, a=a)
+            sprites.right.draw(place(right_layout), z=z.tuple, a=a)
         case BodyRenderType.NORMAL_FALLBACK:
             layout = layout_regular_note_body_fallback(lane, size, travel)
-            sprites.middle.draw(place(layout), z=z, a=a)
+            sprites.middle.draw(place(layout), z=z.tuple, a=a)
         case BodyRenderType.SLIM_FALLBACK:
             layout = layout_slim_note_body_fallback(lane, size, travel)
-            sprites.middle.draw(place(layout), z=z, a=a)
+            sprites.middle.draw(place(layout), z=z.tuple, a=a)
 
 
 def draw_note_tick(
@@ -607,7 +608,7 @@ def draw_note_tick(
     a = min(get_alpha(target_time) * note_alpha, 1.0)
     z = get_z(LAYER_NOTE_TICK, time=target_time, lane=lane, etc=etc)
     layout = transform.transform_quad(layout_tick(lane, travel))
-    sprite.draw(layout, z=z, a=a)
+    sprite.draw(layout, z=z.tuple, a=a)
 
 
 def draw_note_arrow(
@@ -640,12 +641,12 @@ def draw_note_arrow(
     match sprites.render_type:
         case ArrowRenderType.NORMAL:
             layout = transform.transform_quad(layout_flick_arrow(lane, size, direction, travel, animation_progress))
-            arrow_sprite.draw(layout, z=z, a=a)
+            arrow_sprite.draw(layout, z=z.tuple, a=a)
         case ArrowRenderType.FALLBACK:
             layout = transform.transform_quad(
                 layout_flick_arrow_fallback(lane, size, direction, travel, animation_progress)
             )
-            arrow_sprite.draw(layout, z=z, a=a)
+            arrow_sprite.draw(layout, z=z.tuple, a=a)
 
 
 def get_flick_layer(kind: NoteKind) -> float:
@@ -1385,12 +1386,19 @@ def damage_tick_input_start_beat(beat: float) -> float:
 
 
 INSTANT_HITBOX_DRAW_WINDOW = 0.050
+DAMAGE_HITBOX_ACTIVE_WINDOW = 1 / 60
 
 
-def hitbox_draw_start(input_start_time: float, target_time: float) -> float:
-    if input_start_time >= target_time:
+def hitbox_draw_start(kind: NoteKind, input_start_time: float, target_time: float) -> float:
+    if kind == NoteKind.DAMAGE:
         return target_time - INSTANT_HITBOX_DRAW_WINDOW
     return input_start_time
+
+
+def hitbox_draw_alpha(kind: NoteKind, draw_start: float, target_time: float, current_time: float) -> float:
+    if kind == NoteKind.HIDE_DAMAGE_TICK:
+        return 1.0
+    return unlerp_clamped(draw_start, target_time, current_time)
 
 
 def get_note_window(kind: NoteKind, is_connector_tick: bool) -> SekaiWindow:
@@ -1590,7 +1598,7 @@ HITBOX_DEBUG_TRIANGLE_HEIGHT = 0.2
 HITBOX_DEBUG_APEX_HALF = 0.012
 
 
-def draw_hitbox_line(sprite: Sprite, p1: Vec2, p2: Vec2, thickness: float, z: ZIndex, a: float):
+def draw_hitbox_line(sprite: Sprite, p1: Vec2, p2: Vec2, thickness: float, z: ZIndexes, a: float):
     ortho = (p2 - p1).orthogonal().normalize_or_zero() * (thickness / 2)
     sprite.draw(
         Quad(
@@ -1599,7 +1607,7 @@ def draw_hitbox_line(sprite: Sprite, p1: Vec2, p2: Vec2, thickness: float, z: ZI
             tr=p2 + ortho,
             tl=p1 + ortho,
         ),
-        z=z,
+        z=z.tuple,
         a=a,
     )
 
@@ -1609,8 +1617,8 @@ def draw_hitbox_marker(
     r: Vec2,
     main_sprite: Sprite,
     dot_sprite: Sprite,
-    z: ZIndex,
-    z_dot: ZIndex,
+    z: ZIndexes,
+    z_dot: ZIndexes,
     a: float,
 ):
     t = HITBOX_DEBUG_BORDER_THICKNESS
@@ -1628,7 +1636,7 @@ def draw_hitbox_marker(
             tr=ri + ortho * t,
             br=ri - ortho * t,
         ),
-        z=z,
+        z=z.tuple,
         a=a,
     )
     main_sprite.draw(
@@ -1638,7 +1646,7 @@ def draw_hitbox_marker(
             tr=li + ortho * t,
             br=li - ortho * t,
         ),
-        z=z,
+        z=z.tuple,
         a=a,
     )
     main_sprite.draw(
@@ -1648,7 +1656,7 @@ def draw_hitbox_marker(
             tr=r + ortho * end_h,
             br=r - ortho * end_h,
         ),
-        z=z,
+        z=z.tuple,
         a=a,
     )
     dot_sprite.draw(
@@ -1658,7 +1666,7 @@ def draw_hitbox_marker(
             tr=l + axis * (2 * dot) + ortho * dot,
             br=l + axis * (2 * dot) - ortho * dot,
         ),
-        z=z_dot,
+        z=z_dot.tuple,
         a=a,
     )
     dot_sprite.draw(
@@ -1668,14 +1676,19 @@ def draw_hitbox_marker(
             tr=r + ortho * dot,
             br=r - ortho * dot,
         ),
-        z=z_dot,
+        z=z_dot.tuple,
         a=a,
     )
 
 
-def get_hitbox_bounds_sprite(kind: NoteKind) -> Sprite:
+def get_hitbox_bounds_sprite(kind: NoteKind, time_to_target: float) -> Sprite:
     result = +Sprite
-    if kind in {NoteKind.DAMAGE, NoteKind.HIDE_DAMAGE_TICK}:
+    if kind == NoteKind.DAMAGE:
+        if time_to_target > DAMAGE_HITBOX_ACTIVE_WINDOW:
+            result @= ActiveSkin.guide_neutral
+        else:
+            result @= ActiveSkin.guide_green
+    elif kind == NoteKind.HIDE_DAMAGE_TICK:
         result @= ActiveSkin.guide_green
     else:
         result @= ActiveSkin.guide_blue
@@ -1707,7 +1720,7 @@ def draw_connector_hitbox_overlay(bounds: Quad, alpha: float):
     draw_hitbox_bounds_overlay(bounds, ActiveSkin.guide_blue, alpha)
 
 
-def draw_hitbox_overlay(hitbox: Hitbox, kind: NoteKind, alpha: float):
+def draw_hitbox_overlay(hitbox: Hitbox, kind: NoteKind, alpha: float, *, time_to_target: float):
     t = HITBOX_DEBUG_BORDER_THICKNESS
     a = alpha
     z_triangle = get_z_alt(LAYER_OVERLAY, 1)
@@ -1715,7 +1728,7 @@ def draw_hitbox_overlay(hitbox: Hitbox, kind: NoteKind, alpha: float):
     z_target = get_z_alt(LAYER_OVERLAY, 3)
     z_target_dot = get_z_alt(LAYER_OVERLAY, 4)
 
-    draw_hitbox_bounds_overlay(hitbox.bounds, get_hitbox_bounds_sprite(kind), alpha)
+    draw_hitbox_bounds_overlay(hitbox.bounds, get_hitbox_bounds_sprite(kind, time_to_target), alpha)
 
     if has_tap_input(kind) or has_release_input(kind):
         target_sprite = get_hitbox_target_sprite(kind)
@@ -1748,7 +1761,7 @@ def draw_hitbox_overlay(hitbox: Hitbox, kind: NoteKind, alpha: float):
                 tr=target_apex + axis * apex_half + ortho * apex_half,
                 br=target_apex + axis * apex_half - ortho * apex_half,
             ),
-            z=z_apex,
+            z=z_apex.tuple,
             a=a,
         )
         draw_hitbox_marker(

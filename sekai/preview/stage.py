@@ -2,10 +2,9 @@ from math import ceil, floor
 from typing import assert_never
 
 from sonolus.script.interval import lerp
-from sonolus.script.sprite import ZIndex
 from sonolus.script.values import swap
 
-from sekai.lib.layer import LAYER_PREVIEW_COVER, LAYER_STAGE, get_z_alt
+from sekai.lib.layer import LAYER_PREVIEW_COVER, LAYER_STAGE, ZIndexes, get_z, get_z_alt
 from sekai.lib.skin import ActiveSkin
 from sekai.lib.stage import (
     DivisionParity,
@@ -44,11 +43,11 @@ def draw_preview_stage():
     for col in range(PreviewLayout.column_count):
         left_border_layout = layout_preview_lane_by_edges(-6.5, -6, col)
         right_border_layout = layout_preview_lane_by_edges(6, 6.5, col)
-        ActiveSkin.stage_left_border.draw(left_border_layout, z=get_z_alt(LAYER_STAGE))
-        ActiveSkin.stage_right_border.draw(right_border_layout, z=get_z_alt(LAYER_STAGE))
+        ActiveSkin.stage_left_border.draw(left_border_layout, z=get_z(LAYER_STAGE).tuple)
+        ActiveSkin.stage_right_border.draw(right_border_layout, z=get_z(LAYER_STAGE).tuple)
         for lane in (-5, -3, -1, 1, 3, 5):
             layout = layout_preview_lane(lane, 1, col)
-            ActiveSkin.lane.draw(layout, z=get_z_alt(LAYER_STAGE))
+            ActiveSkin.lane.draw(layout, z=get_z(LAYER_STAGE).tuple)
 
 
 def draw_preview_cover():
@@ -57,11 +56,11 @@ def draw_preview_cover():
     z = get_z_alt(LAYER_PREVIEW_COVER)
     ActiveSkin.cover.draw(
         bottom_layout,
-        z=z,
+        z=z.tuple,
     )
     ActiveSkin.cover.draw(
         top_layout,
-        z=z,
+        z=z.tuple,
     )
 
 
@@ -125,7 +124,7 @@ def slice_lane_alpha(props_a: StageProps, props_b: StageProps) -> float:
 
 
 def draw_dynamic_stage_lane_bg_slice(
-    props_a: StageProps, props_b: StageProps, col: int, t_a: float, t_b: float, z: ZIndex
+    props_a: StageProps, props_b: StageProps, col: int, t_a: float, t_b: float, z: ZIndexes
 ):
     alpha = slice_lane_alpha(props_a, props_b)
     if alpha <= 0:
@@ -142,7 +141,7 @@ def draw_dynamic_stage_lane_bg_slice(
         return
 
     layout = layout_preview_lane_strip(mask_l_a, mask_r_a, t_a, mask_l_b, mask_r_b, t_b, col)
-    ActiveSkin.lane_background_preview.draw(layout, z=z, a=alpha)
+    ActiveSkin.lane_background_preview.draw(layout, z=z.tuple, a=alpha)
 
 
 def draw_dynamic_stage_border_slice(
@@ -152,8 +151,8 @@ def draw_dynamic_stage_border_slice(
     col: int,
     t_a: float,
     t_b: float,
-    z_a: ZIndex,
-    z_b: ZIndex,
+    z_a: ZIndexes,
+    z_b: ZIndexes,
 ):
     alpha = slice_lane_alpha(props_a, props_b)
     if alpha <= 0:
@@ -222,7 +221,7 @@ def draw_border_strip_for_style(
     t_a: float,
     t_b: float,
     alpha: float,
-    z: ZIndex,
+    z: ZIndexes,
 ):
     if alpha <= 0:
         return
@@ -252,7 +251,7 @@ def draw_solid_border_strip(
     t_a: float,
     t_b: float,
     alpha: float,
-    z: ZIndex,
+    z: ZIndexes,
 ):
     sign = -1 if is_left else 1
     center_a = edge_a + sign * width / 2
@@ -261,14 +260,14 @@ def draw_solid_border_strip(
     if not is_left:
         swap(layout.bl, layout.br)
         swap(layout.tl, layout.tr)
-    ActiveSkin.stage_border_preview.draw(layout, z=z, a=alpha)
+    ActiveSkin.stage_border_preview.draw(layout, z=z.tuple, a=alpha)
 
 
 def draw_light_border_strip(
-    width: float, edge_a: float, edge_b: float, col: int, t_a: float, t_b: float, alpha: float, z: ZIndex
+    width: float, edge_a: float, edge_b: float, col: int, t_a: float, t_b: float, alpha: float, z: ZIndexes
 ):
     layout = layout_preview_lane_rotated_strip(edge_a, edge_b, t_a, t_b, width, col)
-    ActiveSkin.lane_divider_preview.draw(layout, z=z, a=alpha)
+    ActiveSkin.lane_divider_preview.draw(layout, z=z.tuple, a=alpha)
 
 
 def draw_dynamic_stage_dividers_slice(
@@ -278,8 +277,8 @@ def draw_dynamic_stage_dividers_slice(
     col: int,
     t_a: float,
     t_b: float,
-    z_a: ZIndex,
-    z_b: ZIndex,
+    z_a: ZIndexes,
+    z_b: ZIndexes,
 ):
     division_line_alpha = (props_a.division_line_alpha + props_b.division_line_alpha) / 2
     alpha = slice_lane_alpha(props_a, props_b) * division_line_alpha
@@ -317,7 +316,7 @@ def draw_dynamic_stage_division_set(
     t_b: float,
     div_props: DivisionProps,
     alpha: float,
-    z: ZIndex,
+    z: ZIndexes,
 ):
     """Draw the dividers for one division set across a slice.
 
@@ -384,10 +383,10 @@ def draw_dynamic_stage_division_set(
 
 
 def draw_divider_strip(
-    pos_a: float, pos_b: float, t_a: float, t_b: float, width: float, col: int, alpha: float, z: ZIndex
+    pos_a: float, pos_b: float, t_a: float, t_b: float, width: float, col: int, alpha: float, z: ZIndexes
 ):
     layout = layout_preview_lane_rotated_strip(pos_a, pos_b, t_a, t_b, width, col)
-    ActiveSkin.lane_divider_preview.draw(layout, z=z, a=alpha)
+    ActiveSkin.lane_divider_preview.draw(layout, z=z.tuple, a=alpha)
 
 
 def bsearch_divider_mask_edge(

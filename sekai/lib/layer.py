@@ -1,4 +1,4 @@
-from sonolus.script.sprite import ZIndex
+from sonolus.script.record import Record
 
 LAYER_BACKGROUND = 0.5
 LAYER_ACTIVE_SLIDE_CONNECTOR_UNDER = 1
@@ -48,6 +48,17 @@ LAYER_JUDGMENT = 23.8
 LAYER_OVERLAY = 24
 
 
+class ZIndexes(Record):
+    z1: float
+    z2: float
+    z3: float
+    z4: float
+
+    @property
+    def tuple(self) -> "tuple[float, float, float, float]":
+        return self.z1, self.z2, self.z3, self.z4
+
+
 def get_z(
     layer: float,
     time: float = 0.0,
@@ -55,19 +66,21 @@ def get_z(
     etc: int = 0,
     *,
     invert_time: bool = False,
-) -> ZIndex:
+) -> ZIndexes:
     lane_side = lane > 0
     etc_lane = etc * 2 + lane_side
-    return (
-        layer,
-        time if invert_time else -time,
-        abs(lane),
-        etc_lane,
+    return ZIndexes(
+        z1=layer,
+        z2=time if invert_time else -time,
+        z3=abs(lane),
+        z4=etc_lane,
     )
 
 
-def get_z_alt(layer: float, sublayer: int = 0) -> ZIndex:
-    return (
-        layer,
-        sublayer,
+def get_z_alt(layer: float, sublayer: int = 0) -> ZIndexes:
+    return ZIndexes(
+        z1=layer,
+        z2=sublayer,
+        z3=0.0,
+        z4=0.0,
     )
