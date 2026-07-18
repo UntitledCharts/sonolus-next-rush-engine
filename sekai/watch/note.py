@@ -105,6 +105,8 @@ class WatchBaseNote(WatchArchetype):
 
     active_connector_info: ActiveConnectorInfo = shared_memory()
 
+    init_chain_ref: EntityRef[WatchBaseNote] = shared_memory()
+
     hitbox: Hitbox = entity_memory()
     attach_eased_frac: float = shared_memory()
 

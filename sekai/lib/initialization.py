@@ -1,7 +1,7 @@
 from math import floor
 from typing import Any, Protocol
 
-from sonolus.script.archetype import EntityRef
+from sonolus.script.archetype import EntityRef, entity_info_at
 from sonolus.script.containers import sort_linked_entities
 from sonolus.script.globals import level_data
 from sonolus.script.runtime import level_score
@@ -10,6 +10,13 @@ from sonolus.script.runtime import level_score
 @level_data
 class LastNote:
     last_time: float
+
+
+def count_entities() -> int:
+    entity_count = 0
+    while entity_info_at(entity_count).index == entity_count:
+        entity_count += 1
+    return entity_count
 
 
 def calculate_note_weight(

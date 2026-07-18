@@ -15,7 +15,7 @@ from sekai.lib.connector import (
     schedule_connector_sfx,
 )
 from sekai.lib.custom_elements import init_fixed_ui_layout
-from sekai.lib.initialization import LastNote, calculate_note_weight, sort_entities_by_time
+from sekai.lib.initialization import LastNote, calculate_note_weight, count_entities, sort_entities_by_time
 from sekai.lib.layout import (
     StaticStageData,
     init_layout,
@@ -80,9 +80,10 @@ class Initialization(PlayArchetype):
         custom_elements.LifeManager.initial_life = self.initial_life
         custom_elements.LifeManager.max_life = max(2000, self.initial_life * 2)
 
-        sorted_linked_list()
+        entity_count = count_entities()
+        sorted_linked_list(entity_count)
         if Options.auto_sfx:
-            schedule_auto_connector_sfx()
+            schedule_auto_connector_sfx(entity_count)
 
     def initialize(self):
         StaticStage.spawn()
@@ -100,10 +101,7 @@ class Initialization(PlayArchetype):
         self.despawn = True
 
 
-def sorted_linked_list():
-    entity_count = 0
-    while entity_info_at(entity_count).index == entity_count:
-        entity_count += 1
+def sorted_linked_list(entity_count: int):
     note_head, note_length, skill_head, skill_length = initial_list(entity_count)
 
     sorted_skill_head = +EntityRef[Skill]
@@ -124,6 +122,39 @@ def initial_list(entity_count):
 
     note_id = note.BaseNote._compile_time_id()
     skill_id = Skill._compile_time_id()
+
+    init_head = 0
+    beats_ascending = True
+    next_chain_beat = 1e8
+    for i in range(entity_count):
+        entity_index: int = entity_count - 1 - i
+        if note_id in PlayArchetype._get_mro_id_array(entity_info_at(entity_index).archetype_id):
+            chain_note = note.BaseNote.at(entity_index)
+            if chain_note.beat > next_chain_beat:
+                beats_ascending = False
+            next_chain_beat = chain_note.beat
+            chain_note.tick_head_ref.index = init_head
+            init_head = entity_index
+
+    def get_beat(n):
+        return n.beat
+
+    def get_chain_next(n):
+        return n.tick_head_ref
+
+    if not beats_ascending:
+        init_head = sort_linked_entities(
+            note.BaseNote.at(init_head).ref(), get_value=get_beat, get_next_ref=get_chain_next
+        ).index
+
+    init_index = init_head
+    while init_index > 0:
+        init_note = note.BaseNote.at(init_index)
+        next_init_index = init_note.tick_head_ref.index
+        init_note.init_data()
+        init_note.tick_head_ref.index = 0
+        init_index = next_init_index
+
     for i in range(entity_count):
         entity_index: int = entity_count - 1 - i
         info = entity_info_at(entity_index)
@@ -131,7 +162,6 @@ def initial_list(entity_count):
         is_note = note_id in mro
         is_skill = skill_id in mro
         if is_note:
-            note.BaseNote.at(entity_index).init_data()
             if note.BaseNote.at(entity_index).is_scored:
                 note.BaseNote.at(entity_index).next_ref.index = note_head
                 note_head = entity_index
@@ -144,21 +174,11 @@ def initial_list(entity_count):
     return note_head, note_length, skill_head, skill_length
 
 
-def schedule_auto_connector_sfx():
-    entity_count = 0
-    while entity_info_at(entity_count).index == entity_count:
-        entity_count += 1
-    schedule_auto_connector_sfx_kind(entity_count, ConnectorKind.ACTIVE_NORMAL)
-    schedule_auto_connector_sfx_kind(entity_count, ConnectorKind.ACTIVE_CRITICAL)
-
-
-def schedule_auto_connector_sfx_kind(entity_count: int, sfx_kind: ActiveConnectorKind):
+def schedule_auto_connector_sfx(entity_count: int):
     connector_id = Connector._compile_time_id()
 
-    # Collect matching connectors into a linked list once (instead of re-scanning every entity for
-    # every event). Scanning in reverse yields ascending entity order, so that ties on activation
-    # time keep the original "highest entity index wins" active-connector tie-break after the sort.
-    list_head = 0
+    normal_head = 0
+    critical_head = 0
     for i in range(entity_count - 1, -1, -1):
         info = entity_info_at(i)
         mro = PlayArchetype._get_mro_id_array(info.archetype_id)
@@ -167,17 +187,25 @@ def schedule_auto_connector_sfx_kind(entity_count: int, sfx_kind: ActiveConnecto
         connector = Connector.at(i)
         if connector.active_head_ref.index <= 0:
             continue
-        if not connector_sfx_matches_kind(connector.segment_head.segment_kind, sfx_kind):
-            continue
         if connector.active_head.target_time == connector.active_tail.target_time:
             # Zero-length slide: its activation and release land on the same instant, which the
             # hold-wins-over-release tie-break would otherwise leave stuck on. It holds for no
             # duration, so skip it entirely.
             continue
-        connector.sfx_act_next.index = list_head
-        connector.sfx_deact_next.index = list_head
-        list_head = i
+        if connector_sfx_matches_kind(connector.segment_head.segment_kind, ConnectorKind.ACTIVE_NORMAL):
+            connector.sfx_act_next.index = normal_head
+            connector.sfx_deact_next.index = normal_head
+            normal_head = i
+        elif connector_sfx_matches_kind(connector.segment_head.segment_kind, ConnectorKind.ACTIVE_CRITICAL):
+            connector.sfx_act_next.index = critical_head
+            connector.sfx_deact_next.index = critical_head
+            critical_head = i
 
+    schedule_auto_connector_sfx_kind(normal_head, ConnectorKind.ACTIVE_NORMAL)
+    schedule_auto_connector_sfx_kind(critical_head, ConnectorKind.ACTIVE_CRITICAL)
+
+
+def schedule_auto_connector_sfx_kind(list_head: int, sfx_kind: ActiveConnectorKind):
     if list_head <= 0:
         return
 
