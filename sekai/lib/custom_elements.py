@@ -44,13 +44,13 @@ class FixedUiLayout:
 def init_fixed_ui_layout():
     ui = runtime_ui()
 
-    combo_base_h = 0.04225 * ui.combo_config.scale
-    combo_base_w = combo_base_h * 3.22 * 6.65
+    combo_base_h = 0.09 * ui.combo_config.scale
+    combo_base_w = combo_base_h * 2.5 * 7.183
     combo_h, combo_w = transform_fixed_size(combo_base_h, combo_base_w)
-    FixedUiLayout.combo_label = layout_combo_label(Vec2(x=5.337, y=0.485), w=combo_w / 2, h=combo_h / 2)
+    FixedUiLayout.combo_label = layout_combo_label(Vec2(x=5.337, y=0.483), w=combo_w / 2, h=combo_h / 2)
 
     accuracy_base_h = 0.054 * 1.3 * ui.judgment_config.scale
-    accuracy_base_w = accuracy_base_h * 23.6
+    accuracy_base_w = accuracy_base_h * (123 / 38) * 7.183
     accuracy_h, accuracy_w = transform_fixed_size(accuracy_base_h, accuracy_base_w)
     FixedUiLayout.judgment_accuracy = layout_combo_label(Vec2(x=0, y=0.723), w=accuracy_w / 2, h=accuracy_h / 2)
 
@@ -156,13 +156,14 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int):
 
     screen_center = Vec2(x=5.337, y=0.585)
 
-    base_h = 0.1222 * ui.combo_config.scale
-    base_h2 = 0.15886 * ui.combo_config.scale
-    base_w = base_h * 0.79 * 7
-    base_w2 = base_h2 * 0.79 * 7
+    base_h = 0.23 * ui.combo_config.scale
+    base_h2 = 0.25 * ui.combo_config.scale
+    base_w = base_h * 7.183
+    base_w2 = base_h2 * 7.183
 
     s = 0.6 + 0.4 * unlerp_clamped(draw_time, draw_time + 0.112, time())
-    s2 = 0.762 + 0.231 * unlerp_clamped(draw_time + 0.112, draw_time + 0.192, time())
+    s2_start = base_h / base_h2
+    s2 = s2_start + (1 - s2_start) * unlerp_clamped(draw_time + 0.112, draw_time + 0.192, time())
 
     a = ui.combo_config.alpha
     a2 = (
@@ -175,8 +176,8 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int):
     h, w = transform_fixed_size(base_h, base_w)
     h2, w2 = transform_fixed_size(base_h2, base_w2)
 
-    digit_gap = w * (0.24 + Options.combo_distance)
-    digit_gap2 = w2 * (0.24 + Options.combo_distance)
+    digit_gap = w * -0.5
+    digit_gap2 = w2 * -0.5
     total_width = digit_count * w + (digit_count - 1) * digit_gap
     total_width2 = digit_count * w2 + (digit_count - 1) * digit_gap2
     start_x = screen_center.x - total_width / 2
@@ -189,7 +190,7 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int):
             digit_count=digit_count,
             is_score=False,
         ),
-        design=ScoreDesignConfig(s_int=1, s_dot=1, s_dec=1, g_dec=1),
+        design=ScoreDesignConfig(s_int=1, s_dot=1, s_dec=1, s_pct=1),
         common=CommonConfig(
             center_x=screen_center.x,
             center_y=screen_center.y,
@@ -241,10 +242,10 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
             n_int += 1
     digit_count = n_int + 6
 
-    screen_center = Vec2(x=5.337, y=0.39)
+    screen_center = Vec2(x=5.337, y=0.41)
 
-    base_h = 0.1222 * ui.combo_config.scale * 0.4
-    base_w = base_h * 0.79 * 7
+    base_h = 0.23 * ui.combo_config.scale * 0.4
+    base_w = base_h * 7.183
 
     s = 1.0
 
@@ -253,19 +254,19 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
 
     h, w = transform_fixed_size(base_h, base_w)
 
-    digit_gap = w * (0.24 + Options.combo_distance)
+    digit_gap = w * -0.5
 
     s_int = 1.0
     s_dot = 0.5
     s_dec = 0.6
-    g_dec = 0.9
+    s_pct = 1.0
 
     count_large = n_int + 2
     count_dot = 1
-    count_small = 3
+    count_small = 2
 
-    total_w_factor = (count_large * s_int) + (count_dot * s_dot) + (count_small * s_dec)
-    total_gap_factor = (count_large * s_int) + (count_dot * s_dot) + (count_small * g_dec) - g_dec
+    total_w_factor = (count_large * s_int) + (count_dot * s_dot) + (count_small * s_dec) + s_pct
+    total_gap_factor = (n_int - 1) * s_int + (s_int + s_dot) + s_int + (s_int + s_dec) / 2 + s_dec + (s_dec + s_pct) / 2
 
     total_width = (total_w_factor * w) + (total_gap_factor * digit_gap)
 
@@ -278,7 +279,7 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
             digit_count=digit_count,
             is_score=True,
         ),
-        design=ScoreDesignConfig(s_int=s_int, s_dot=s_dot, s_dec=s_dec, g_dec=g_dec),
+        design=ScoreDesignConfig(s_int=s_int, s_dot=s_dot, s_dec=s_dec, s_pct=s_pct),
         common=CommonConfig(
             center_x=screen_center.x,
             center_y=screen_center.y,
@@ -320,7 +321,7 @@ class ScoreDesignConfig(Record):
     s_int: float
     s_dot: float
     s_dec: float
-    g_dec: float
+    s_pct: float
 
 
 class ComboNumberLayout(Record):
@@ -360,30 +361,39 @@ class ComboNumberLayout(Record):
                 if i < n_int:
                     digit = floor(self.core.combo_number / (10 ** (n_int - 1 - i))) % 10  # Integer part
                     scale_factor = self.design.s_int
-                    gap_factor = self.design.s_int
                     layout_scale_factor = self.design.s_int
+                    if i == n_int - 1:
+                        gap_factor = (self.design.s_int + self.design.s_dot) / 2
+                    else:
+                        gap_factor = self.design.s_int
                 elif i == n_int:
                     digit = 10  # Dot(.)
                     scale_factor = self.design.s_int
-                    gap_factor = self.design.s_dot
+                    gap_factor = (self.design.s_dot + self.design.s_int) / 2
                     layout_scale_factor = self.design.s_dot
                 elif i == n_int + 1 or i == n_int + 2:
                     decimal_idx = i - n_int
                     digit = floor(self.core.combo_number * (10**decimal_idx)) % 10
                     scale_factor = self.design.s_int
-                    gap_factor = self.design.s_int
                     layout_scale_factor = self.design.s_int
+                    if i == n_int + 2:
+                        gap_factor = (self.design.s_int + self.design.s_dec) / 2
+                    else:
+                        gap_factor = self.design.s_int
                 elif i == n_int + 3 or i == n_int + 4:
                     decimal_idx = i - n_int
                     digit = floor(self.core.combo_number * (10**decimal_idx)) % 10
                     scale_factor = self.design.s_dec
-                    gap_factor = self.design.g_dec
                     layout_scale_factor = self.design.s_dec
+                    if i == n_int + 4:
+                        gap_factor = (self.design.s_dec + self.design.s_pct) / 2
+                    else:
+                        gap_factor = self.design.s_dec
                 elif i == n_int + 5:
                     digit = 11  # Percent(%)
                     scale_factor = self.design.s_dec
-                    gap_factor = self.design.g_dec
-                    layout_scale_factor = self.design.s_dec
+                    gap_factor = self.design.s_pct
+                    layout_scale_factor = self.design.s_pct
 
                 layout_w1 = self.layout1.width * layout_scale_factor
 
@@ -473,7 +483,7 @@ def draw_judgment_text(draw_time: float, judgment: Judgment, windows: SekaiWindo
     screen_center = Vec2(x=0, y=0.792)
 
     base_h = 0.09 * ui.combo_config.scale
-    base_w = base_h * 27.3
+    base_w = base_h * (310 / 80) * 7.183
     h, w = transform_fixed_size(base_h, base_w)
     a = ui.judgment_config.alpha * unlerp_clamped(draw_time, draw_time + 0.064, time())
     s = unlerp_clamped(draw_time, draw_time + 0.064, time())
@@ -703,7 +713,7 @@ def draw_score_bar_raw_number(number: int, z: ZIndex, time: float, alpha: float 
     match LevelConfig.ui_version:
         case Version.v3:
             margin_offset = 0.56 + (0.492 - 0.56) * clamp(time / 0.2, 0, 1)
-            y_offset = -0.102
+            y_offset = -0.10
             h = 0.06 * ui.primary_metric_config.scale * scale_ratio
             w = h
             digit_gap = w * -0.3

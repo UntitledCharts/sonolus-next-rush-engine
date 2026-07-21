@@ -172,15 +172,6 @@ class Options:
         default=0,
         values=["Disable", "Arcade% (+)", "Arcade% (-)", "Accuracy%"],
     )
-    combo_distance: float = slider_option(
-        name="Custom Combo Number Distance",
-        scope="Rush",
-        advanced=True,
-        default=0,
-        min=-0.25,
-        max=0.25,
-        step=0.01,
-    )
     custom_judgment: bool = toggle_option(
         name="Custom Judgment",
         scope="Rush",
