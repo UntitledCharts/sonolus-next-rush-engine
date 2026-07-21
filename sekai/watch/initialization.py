@@ -94,6 +94,7 @@ class WatchInitialization(WatchArchetype):
 
         init_event_list(self.first_camera_ref)
         WatchStaticStage.spawn()
+        custom_elements.StateManager.spawn()
 
         for input_time, lanes in Streams.empty_input_lanes.iter_items_from(-2):
             for lane in lanes:
@@ -123,9 +124,17 @@ def sorted_linked_list(entity_count: int):
         sorted_skill_head @= sort_entities_by_time(skill_head, Skill)
         count_skill(sorted_skill_head.index)
 
+    sorted_note_head = +EntityRef[note.WatchBaseNote]
     if note_length > 0:
-        sorted_note_head = sort_entities_by_time(note_head, note.WatchBaseNote)
+        sorted_note_head @= sort_entities_by_time(note_head, note.WatchBaseNote)
         setting_combo(sorted_note_head.index, sorted_skill_head.index)
+    else:
+        custom_elements.ScoreIndicator.score = 1000000
+        custom_elements.ScoreIndicator.percentage = 100
+        custom_elements.ScoreIndicator.first = -1e8
+
+    if is_replay():
+        calculate_replay_life(sorted_note_head.index, sorted_skill_head.index)
 
 
 def initial_list(entity_count):
@@ -191,6 +200,7 @@ def setting_combo(head: int, skill: int) -> None:
     skill_ptr = skill
     combo = 0
     count = 0
+    fever_hits = 0
     ap = False
     prev_acc = 0
     prev_damage = 0
@@ -217,13 +227,17 @@ def setting_combo(head: int, skill: int) -> None:
                     skill_ptr = Skill.at(skill_ptr).next_ref.index
 
         judgment = note.WatchBaseNote.at(ptr).judgment
+        in_fever_window = Fever.fever_chance_time <= note.WatchBaseNote.at(ptr).target_time < Fever.fever_start_time
         if is_replay() and judgment in (Judgment.GOOD, Judgment.MISS):
             combo = 0
-            if Fever.fever_chance_time <= note.WatchBaseNote.at(ptr).calc_time < Fever.fever_start_time:
+            if in_fever_window:
                 Fever.fever_chance_cant_super_fever = True
         else:
             combo += 1
+            if in_fever_window:
+                fever_hits += 1
         note.WatchBaseNote.at(ptr).combo = combo
+        note.WatchBaseNote.at(ptr).fever_hits = fever_hits
 
         if is_replay() and judgment != Judgment.PERFECT:
             ap = True
@@ -248,7 +262,7 @@ def setting_combo(head: int, skill: int) -> None:
 
         count += 1
         note.WatchBaseNote.at(ptr).count = count
-        if Fever.fever_chance_time <= note.WatchBaseNote.at(ptr).calc_time < Fever.fever_start_time:
+        if in_fever_window:
             Fever.fever_first_count = (
                 min(note.WatchBaseNote.at(ptr).count, Fever.fever_first_count)
                 if Fever.fever_first_count != 0
@@ -530,3 +544,41 @@ def count_skill(head: int) -> None:
             life = clamp(life + Skill.at(ptr).value, 0, LifeManager.max_life)
         Skill.at(ptr).current_life = life
         ptr = Skill.at(ptr).next_ref.index
+
+
+def calculate_replay_life(note_head: int, skill_head: int) -> None:
+    life = 1.0 * LifeManager.initial_life
+    first_event_time = 1e8
+    note_ptr = note_head
+    skill_ptr = skill_head
+    while note_ptr > 0 or skill_ptr > 0:
+        note_time = note.WatchBaseNote.at(note_ptr).calc_time if note_ptr > 0 else 1e8
+        skill_time = Skill.at(skill_ptr).start_time if skill_ptr > 0 else 1e8
+        if skill_ptr > 0 and skill_time <= note_time:
+            current_skill = Skill.at(skill_ptr)
+            if current_skill.effect == SkillMode.HEAL:
+                first_event_time = min(first_event_time, skill_time)
+                if life > 0:
+                    life = clamp(life + current_skill.value, 0, LifeManager.max_life)
+            current_skill.current_life = life
+            current_skill.next_note_time = note_time
+            skill_ptr = current_skill.next_ref.index
+        else:
+            current_note = note.WatchBaseNote.at(note_ptr)
+            first_event_time = min(first_event_time, note_time)
+            if life > 0:
+                match current_note.judgment:
+                    case Judgment.PERFECT:
+                        life += (
+                            current_note.archetype_life.perfect_increment + current_note.entity_life.perfect_increment
+                        )
+                    case Judgment.GREAT:
+                        life += current_note.archetype_life.great_increment + current_note.entity_life.great_increment
+                    case Judgment.GOOD:
+                        life += current_note.archetype_life.good_increment + current_note.entity_life.good_increment
+                    case Judgment.MISS:
+                        life += current_note.archetype_life.miss_increment + current_note.entity_life.miss_increment
+                life = clamp(life, 0, LifeManager.max_life)
+            current_note.replay_life = life
+            note_ptr = current_note.next_ref.index
+    LifeManager.first = first_event_time

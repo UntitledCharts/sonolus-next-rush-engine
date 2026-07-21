@@ -12,5 +12,3 @@ class Streams:
     connector_effect_kinds: StreamGroup[ConnectorKind, Dim[1_000_000]]
     connector_normal_sfx_times: StreamGroup[ConnectorSfxTimes, Dim[1_000_000]]
     connector_critical_sfx_times: StreamGroup[ConnectorSfxTimes, Dim[1_000_000]]
-    fever_chance_counter: StreamGroup[float, Dim[1_000_000]]
-    life: StreamGroup[float, Dim[1_000_000]]

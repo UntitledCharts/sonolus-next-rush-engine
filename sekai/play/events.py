@@ -12,7 +12,7 @@ from sonolus.script.archetype import (
 )
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp
-from sonolus.script.runtime import add_life_scheduled, is_multiplayer, offset_adjusted_time, time
+from sonolus.script.runtime import add_life_scheduled, is_multiplayer, time
 from sonolus.script.timing import beat_to_time
 
 from sekai.lib import archetype_names
@@ -30,7 +30,6 @@ from sekai.lib.events import (
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.skin import ActiveSkin
-from sekai.lib.streams import Streams
 from sekai.play import custom_elements
 
 
@@ -127,26 +126,25 @@ class FeverChance(PlayArchetype):
             min(self.start_time, Fever.fever_chance_time) if Fever.fever_chance_time != 0 else self.start_time
         )
 
+    def show_ui(self) -> bool:
+        return is_multiplayer() or Options.forced_fever_chance or self.force
+
     def spawn_order(self):
-        return self.start_time
+        return self.start_time if self.show_ui() else 1e8
 
     def should_spawn(self):
-        return time() >= self.start_time
+        return self.show_ui() and time() >= self.start_time
 
     def update_parallel(self):
         current_time = time()
         elapsed = current_time - self.start_time
 
-        show_ui = is_multiplayer() or Options.forced_fever_chance or self.force
-
         if current_time >= Fever.fever_start_time:
-            if show_ui:
-                spawn_fever_start_particle(self.percentage)
+            spawn_fever_start_particle(self.percentage)
             self.despawn = True
             return
         if current_time >= Fever.fever_chance_time and not self.checker:
-            if show_ui:
-                spawn_fever_chance_particle()
+            spawn_fever_chance_particle()
             self.checker = True
         self.percentage = clamp(
             Fever.fever_chance_current_combo / self.counter,
@@ -154,13 +152,10 @@ class FeverChance(PlayArchetype):
             0.9 if not Fever.fever_chance_cant_super_fever or self.percentage >= 0.9 else 0.89,
         )
 
-        Streams.fever_chance_counter[self.index][offset_adjusted_time()] = self.percentage
-
-        if show_ui:
-            if Options.fever_effect == 0:
-                draw_fever_side_cover(elapsed)
-            draw_fever_side_bar(elapsed)
-            draw_fever_gauge(self.percentage)
+        if Options.fever_effect == 0:
+            draw_fever_side_cover(elapsed)
+        draw_fever_side_bar(elapsed)
+        draw_fever_gauge(self.percentage)
 
     @callback(order=3)
     def update_sequential(self):

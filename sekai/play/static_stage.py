@@ -45,7 +45,6 @@ class StaticStage(PlayArchetype):
     def update_sequential(self):
         refresh_layout()
         reset_fever_bounds()
-        Streams.life[self.index][offset_adjusted_time()] = LifeManager.life
 
     @callback(order=3)
     def touch(self):

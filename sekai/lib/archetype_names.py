@@ -97,6 +97,7 @@ FAKE_TRANSIENT_HIDDEN_TICK_NOTE = "FakeTransientHiddenTickNote"
 FAKE_TRANSIENT_HIDDEN_DAMAGE_TICK_NOTE = "FakeTransientHiddenDamageTickNote"
 
 # custom elements
+STATE_MANAGER = "_StateManager"
 COMBO_JUDGE = "ComboJudge"
 JUDGMENT_ACCURACY = "JudgmentAccuracy"
 DAMAGE_FLASH = "DamageFlash"

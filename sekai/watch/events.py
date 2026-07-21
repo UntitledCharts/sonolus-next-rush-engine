@@ -31,7 +31,6 @@ from sekai.lib.events import (
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.skin import ActiveSkin
-from sekai.lib.streams import Streams
 
 
 @level_memory
@@ -50,6 +49,7 @@ class Skill(WatchArchetype):
     duration: float = imported(name="duration", default=6)
     start_time: float = entity_data()
     current_life: float = entity_data()
+    next_note_time: float = entity_data()
     name = archetype_names.SKILL
     count: int = shared_memory()
     next_ref: EntityRef[Skill] = entity_data()
@@ -84,12 +84,15 @@ class Skill(WatchArchetype):
         if 0 <= elapsed < self.duration and self.effect == SkillMode.JUDGMENT and not LevelConfig.dynamic_stages:
             draw_judgment_effect(elapsed, duration=self.duration)
 
+    @callback(order=4)
     def update_sequential(self):
         if not is_replay():
             if time() < self.start_time:
                 LifeManager.life = LifeManager.initial_life
             else:
                 LifeManager.life = self.current_life
+        elif self.start_time <= time() < self.next_note_time:
+            LifeManager.life = self.current_life
         t = time()
         if self.start_time <= t < self.end_time_effect and self.effect == SkillMode.JUDGMENT:
             SkillActive.judgment = True
@@ -129,13 +132,6 @@ class FeverChance(WatchArchetype):
         if not Options.forced_fever_chance and not self.force:
             return
         current_time = time()
-        current_stream = Streams.fever_chance_counter[self.index]
-        if (
-            is_replay()
-            and not current_stream.has_previous_key(current_time)
-            and not current_stream.has_next_key(current_time)
-        ):
-            return
         if is_skip():
             self.checker = 0
             if current_time <= self.start_time:
@@ -149,14 +145,10 @@ class FeverChance(WatchArchetype):
         if current_time >= Fever.fever_chance_time and not self.checker:
             spawn_fever_chance_particle()
             self.checker = 1
-        self.percentage = (
-            clamp(
-                Fever.fever_chance_current_combo / self.counter,
-                0,
-                0.9 if not Fever.fever_chance_cant_super_fever or self.percentage >= 0.9 else 0.89,
-            )
-            if not is_replay()
-            else current_stream[current_time]
+        self.percentage = clamp(
+            Fever.fever_chance_current_combo / self.counter,
+            0,
+            0.9 if not Fever.fever_chance_cant_super_fever or self.percentage >= 0.9 else 0.89,
         )
         elapsed = current_time - self.start_time
         if Options.fever_effect == 0:

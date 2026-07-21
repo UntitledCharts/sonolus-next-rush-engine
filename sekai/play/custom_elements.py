@@ -197,8 +197,7 @@ class ComboJudge(PlayArchetype):
                 ScoreIndicator.percentage = ScoreIndicator.acc_sum.total / ScoreIndicator.count
 
     def calculate_life(self):
-        # Always track life (not just when the custom bar is shown): the life stream and the
-        # dead effect depend on it, and the server reads the stream from replays.
+        # Always track life (not just when the custom bar is shown): the dead effect depends on it.
         if LifeManager.life == 0:
             return
         current_note = note.BaseNote.at(self.note_index)

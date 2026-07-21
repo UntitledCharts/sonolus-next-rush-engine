@@ -123,6 +123,8 @@ class WatchBaseNote(WatchArchetype):
     score: float = shared_memory()
     percentage: float = shared_memory()
     note_raw_score: float = shared_memory()
+    fever_hits: int = shared_memory()
+    replay_life: float = shared_memory()
 
     def init_data(self):
         if self.data_init_done:

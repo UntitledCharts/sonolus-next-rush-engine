@@ -1,5 +1,5 @@
 from sonolus.script.archetype import WatchArchetype, callback, entity_memory
-from sonolus.script.runtime import is_replay, is_skip, time
+from sonolus.script.runtime import is_skip, time
 
 from sekai.lib import archetype_names
 from sekai.lib.custom_elements import LifeManager, ScoreIndicator
@@ -10,9 +10,7 @@ from sekai.lib.layout import (
     StaticStageData,
     refresh_layout,
 )
-from sekai.lib.options import Options
 from sekai.lib.stage import draw_stage_and_accessories, play_lane_particle
-from sekai.lib.streams import Streams
 
 
 class WatchStaticStage(WatchArchetype):
@@ -32,14 +30,6 @@ class WatchStaticStage(WatchArchetype):
     def update_sequential(self):
         refresh_layout()
         reset_fever_bounds()
-        LifeManager.life = Streams.life[self.index][time()] if is_replay() else LifeManager.life
-        if is_skip() and time() < ScoreIndicator.first:
-            if Options.custom_score == 2:
-                ScoreIndicator.percentage = 100
-            else:
-                ScoreIndicator.percentage = 0
-            ScoreIndicator.score = 0
-            ScoreIndicator.ap = False
 
     def update_parallel(self):
         draw_stage_and_accessories(

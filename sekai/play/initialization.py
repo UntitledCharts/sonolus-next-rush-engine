@@ -112,6 +112,11 @@ def sorted_linked_list(entity_count: int):
     if note_length > 0:
         sorted_note_head = sort_entities_by_time(note_head, note.BaseNote)
         setting_count(sorted_note_head.index, sorted_skill_head.index)
+    else:
+        # No scorable notes: the result can never change, so show the maximum score from the start.
+        custom_elements.ScoreIndicator.max_score = 1000000
+        custom_elements.ScoreIndicator.score = 1000000
+        custom_elements.ScoreIndicator.percentage = 100
 
 
 def initial_list(entity_count):
