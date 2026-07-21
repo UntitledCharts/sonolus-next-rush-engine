@@ -1333,13 +1333,13 @@ def draw_score_bar(
 
 
 def get_gauge_progress(score):
-    xp = (0, 4000, 400000, 620000, 840000, 1000000)
+    xp = (0, 20000, 400000, 620000, 840000, 1000000)
     fp = (
         0,
         0.45,
-        0.6 if LevelConfig.ui_version == Version.v3 else 0.577,
-        0.75 if LevelConfig.ui_version == Version.v3 else 0.72,
-        0.9 if LevelConfig.ui_version == Version.v3 else 0.87,
+        0.6,
+        0.75,
+        0.9,
         1.0,
     )
 
@@ -1353,7 +1353,7 @@ def get_score_rank(score):
         return ScoreRankType.A
     elif score >= 400000:
         return ScoreRankType.B
-    elif score >= 4000:
+    elif score >= 20000:
         return ScoreRankType.C
     else:
         return ScoreRankType.D
