@@ -33,6 +33,8 @@ from sekai.lib.skin import (
 
 AP_EFFECT_SPEED = 4.1887903
 
+COMBO_NUMBER_FALLBACK_SCALE = 0.67
+
 
 @level_memory
 class FixedUiLayout:
@@ -156,8 +158,9 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int):
 
     screen_center = Vec2(x=5.337, y=0.585)
 
-    base_h = 0.23 * ui.combo_config.scale
-    base_h2 = 0.25 * ui.combo_config.scale
+    fallback_scale = COMBO_NUMBER_FALLBACK_SCALE if ActiveSkin.combo_number.is_fallback else 1.0
+    base_h = 0.23 * ui.combo_config.scale * fallback_scale
+    base_h2 = 0.25 * ui.combo_config.scale * fallback_scale
     base_w = base_h * 7.183
     base_w2 = base_h2 * 7.183
 
@@ -176,8 +179,9 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int):
     h, w = transform_fixed_size(base_h, base_w)
     h2, w2 = transform_fixed_size(base_h2, base_w2)
 
-    digit_gap = w * -0.5
-    digit_gap2 = w2 * -0.5
+    gap_coeff = 0.5 / fallback_scale - 1
+    digit_gap = w * gap_coeff
+    digit_gap2 = w2 * gap_coeff
     total_width = digit_count * w + (digit_count - 1) * digit_gap
     total_width2 = digit_count * w2 + (digit_count - 1) * digit_gap2
     start_x = screen_center.x - total_width / 2
@@ -244,7 +248,8 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
 
     screen_center = Vec2(x=5.337, y=0.41)
 
-    base_h = 0.23 * ui.combo_config.scale * 0.4
+    fallback_scale = COMBO_NUMBER_FALLBACK_SCALE if ActiveSkin.combo_number.is_fallback else 1.0
+    base_h = 0.23 * ui.combo_config.scale * 0.4 * fallback_scale
     base_w = base_h * 7.183
 
     s = 1.0
@@ -254,7 +259,7 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
 
     h, w = transform_fixed_size(base_h, base_w)
 
-    digit_gap = w * -0.5
+    digit_gap = w * (0.5 / fallback_scale - 1)
 
     s_int = 1.0
     s_dot = 0.5
