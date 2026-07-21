@@ -447,7 +447,7 @@ class ComboNumberLayout(Record):
 
             digit_layout2 = self.layout_combo_number(l=l2, r=r2, t=t2, b=b2)
 
-            if not self.core.ap and Options.ap_effect:
+            if not self.core.ap and Options.ap_effect and not ActiveSkin.combo_number.is_fallback:
                 ActiveSkin.combo_number.get_sprite(combo=digit, combo_type=ComboType.GLOW).draw(
                     quad=digit_layout, z=z2, a=self.alpha.a3
                 )

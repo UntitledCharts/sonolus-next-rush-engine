@@ -631,16 +631,18 @@ class ComboNumberSpriteSet(Record):
     normal: SpriteGroup
     ap: SpriteGroup
     glow: SpriteGroup
+    is_fallback: bool
 
     def get_sprite(self, combo: int, combo_type: ComboType):
+        index = combo + 5 if self.is_fallback and combo >= 10 else combo
         result = +Sprite
         match combo_type:
             case ComboType.NORMAL:
-                result @= self.normal[combo]
+                result @= self.normal[index]
             case ComboType.AP:
-                result @= self.ap[combo]
+                result @= self.ap[index]
             case ComboType.GLOW:
-                result @= self.glow[combo]
+                result @= self.glow[index]
             case _:
                 assert_never(combo_type)
         return result
@@ -1922,9 +1924,20 @@ def init_skin():
         auto=BaseSkin.auto,
     )
 
-    ActiveSkin.combo_number = ComboNumberSpriteSet(
-        normal=BaseSkin.combo_number, ap=BaseSkin.ap_combo_number, glow=BaseSkin.combo_number_glow
-    )
+    if BaseSkin.combo_number[0].is_available:
+        ActiveSkin.combo_number = ComboNumberSpriteSet(
+            normal=BaseSkin.combo_number,
+            ap=BaseSkin.ap_combo_number,
+            glow=BaseSkin.combo_number_glow,
+            is_fallback=False,
+        )
+    else:
+        ActiveSkin.combo_number = ComboNumberSpriteSet(
+            normal=BaseSkin.ui_number,
+            ap=BaseSkin.ui_number,
+            glow=BaseSkin.ui_number,
+            is_fallback=True,
+        )
     ActiveSkin.combo_label = ComboLabelSpriteSet(
         normal=BaseSkin.combo_label, ap=BaseSkin.ap_combo_label, glow=BaseSkin.combo_label_glow
     )
