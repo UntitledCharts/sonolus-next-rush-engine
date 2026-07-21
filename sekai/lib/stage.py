@@ -1336,9 +1336,9 @@ def get_gauge_progress(score):
     xp = (0, 4000, 400000, 620000, 840000, 1000000)
     fp = (
         0,
-        0.447,
+        0.45,
         0.6 if LevelConfig.ui_version == Version.v3 else 0.577,
-        0.755 if LevelConfig.ui_version == Version.v3 else 0.72,
+        0.75 if LevelConfig.ui_version == Version.v3 else 0.72,
         0.9 if LevelConfig.ui_version == Version.v3 else 0.87,
         1.0,
     )

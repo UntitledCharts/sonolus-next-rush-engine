@@ -1241,7 +1241,7 @@ def layout_score_gauge(gauge=0.0, score_type: ScoreGaugeType = ScoreGaugeType.NO
     bar_h_current = bar_h_unscaled * scale_ratio
     y_shift = (bar_h_unscaled - bar_h_current) / 2
 
-    # c = 0-0.44 b = 0.44-0.6 a= 0.6-0.75 s=0.75-0.9
+    # c = 0-0.45 b = 0.45-0.6 a= 0.6-0.75 s=0.75-0.9
 
     margin_offset = 0
     y_offset = 0
