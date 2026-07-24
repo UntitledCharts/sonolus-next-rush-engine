@@ -27,8 +27,7 @@ def spawn_custom(
 
 
 class StateManager(WatchArchetype):
-    """Resets score/life/fever level-memory state on skips.
-    """
+    """Resets score/life/fever level-memory state on skips."""
 
     name = archetype_names.STATE_MANAGER
 
