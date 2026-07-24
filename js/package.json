@@ -36,12 +36,12 @@
     "build": "tsc -p . && node ./build.js"
   },
   "dependencies": {
-    "@sonolus/core": "~7.15.2"
+    "@sonolus/core": "~7.15.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "~2.5.2",
-    "@sonolus/sonolus.js": "~9.7.2",
-    "@types/node": "^26.1.0",
-    "typescript": "~6.0.3"
+    "@biomejs/biome": "~2.5.5",
+    "@sonolus/sonolus.js": "~9.7.3",
+    "@types/node": "^26.1.1",
+    "typescript": "~7.0.2"
   }
 }
