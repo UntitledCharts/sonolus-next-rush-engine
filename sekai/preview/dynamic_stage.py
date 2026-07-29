@@ -69,7 +69,7 @@ class PreviewStageTransformChange(PreviewArchetype, BaseEvent):
 
     time: float = entity_data()
 
-    @callback(order=-2)
+    @callback(order=-3)
     def preprocess(self):
         LevelConfig.dynamic_stages = True
         self.time = beat_to_time(self.beat)
