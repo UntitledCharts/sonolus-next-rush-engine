@@ -16,23 +16,23 @@ Partial database engine item compatible with [sonolus-express](https://github.co
 
 Converts sus chart to USC.
 
--   `sus`: sus chart.
+- `sus`: sus chart.
 
 ### `uscToLevelData(usc, offset?)`
 
 Converts USC to Level Data.
 
--   `usc`: usc chart.
--   `offset`: offset (default: `0`).
+- `usc`: usc chart.
+- `offset`: offset (default: `0`).
 
 ### Assets
 
 The following assets are exposed as package entry points:
 
--   `EngineConfiguration`
--   `EnginePlayData`
--   `EngineWatchData`
--   `EnginePreviewData`
--   `EngineTutorialData`
--   `EngineRom`
--   `EngineThumbnail`
+- `EngineConfiguration`
+- `EnginePlayData`
+- `EngineWatchData`
+- `EnginePreviewData`
+- `EngineTutorialData`
+- `EngineRom`
+- `EngineThumbnail`

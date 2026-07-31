@@ -27,11 +27,11 @@
   },
   "scripts": {
     "check-type": "tsc -p . --noEmit",
-    "check-lint": "biome lint",
-    "check-format": "biome format",
-    "biome": "biome check",
-    "format": "biome format --write",
-    "fix": "biome check --write",
+    "check-lint": "oxlint src",
+    "check-format": "oxfmt --check .oxlintrc.json .oxfmtrc.json README.md build.js version.js src",
+    "oxc": "npm run check-lint && npm run check-format",
+    "format": "oxfmt .oxlintrc.json .oxfmtrc.json README.md build.js version.js src",
+    "fix": "oxlint --fix src && oxfmt .oxlintrc.json .oxfmtrc.json README.md build.js version.js src",
     "version": "node ./version.js",
     "build": "tsc -p . && node ./build.js"
   },
@@ -39,9 +39,11 @@
     "@sonolus/core": "~7.15.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "~2.5.5",
     "@sonolus/sonolus.js": "~9.7.3",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
+    "oxfmt": "~0.61.0",
+    "oxlint": "~1.76.0",
+    "oxlint-tsgolint": "~7.0.2001",
     "typescript": "~7.0.2"
   }
 }
