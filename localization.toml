@@ -36,7 +36,7 @@ none.ko = "사용 안 함"
 
 [options.skill_effect]
 title.en = "Skill Effect"
-title.ko = "스킬 효과"
+title.ko = "스킬/활약 표시"
 
 [options.ap_effect]
 title.en = "AP Effect"
@@ -70,7 +70,7 @@ title.ko = "커스텀 판정"
 
 [options.auto_judgment]
 title.en = "Auto Judgment Display"
-title.ko = "자동 판정 표시"
+title.ko = "Auto 판정 표시"
 description.en = "Displays judgment as 'Auto' during Watch mode when Custom Judgment is enabled."
 description.ko = "커스텀 판정이 활성화된 경우 Watch 모드에서 판정을 'Auto'로 표시합니다."
 
@@ -144,11 +144,7 @@ sonolus.ko = "Sonolus"
 sonolus_and_custom_judgment.en = "Sonolus + Custom Judgment"
 sonolus_and_custom_judgment.ko = "Sonolus 및 커스텀 판정"
 all.en = "All"
-all.ko = "전체"
-
-[options.lock_stage_aspect_ratio]
-description.en = "Custom UI does not support disabling this feature. If it crashes, please disable the conflicting settings."
-description.ko = "커스텀 UI는 이 기능 비활성화를 지원하지 않습니다. 크래시가 발생하면 충돌하는 설정을 비활성화해 주세요."
+all.ko = "전체 숨김"
 
 [options.slide_quality]
 title.en = "Slide Quality"
