@@ -1,0 +1,253 @@
+[options.vibrate_mode]
+title.en = "Vibration Mode"
+title.ko = "진동 모드"
+
+[options.vibrate_mode.values]
+disabled.en = "Disabled"
+disabled.ko = "사용 안 함"
+miss.en = "On Miss"
+miss.ko = "MISS 판정 시"
+miss_and_good.en = "On Miss and Good"
+miss_and_good.ko = "MISS 및 GOOD 판정 시"
+
+[options.slide_alpha]
+title.en = "Slide Alpha"
+title.ko = "슬라이드 불투명도"
+
+[options.guide_alpha]
+title.en = "Guide Alpha"
+title.ko = "가이드 불투명도"
+
+[options.background_alpha]
+title.en = "Background Brightness"
+title.ko = "배경 밝기"
+
+[options.fever_effect]
+title.en = "Fever Effect"
+title.ko = "피버 효과"
+
+[options.fever_effect.values]
+default.en = "Default"
+default.ko = "기본"
+lightweight.en = "Lightweight"
+lightweight.ko = "경량"
+none.en = "None"
+none.ko = "사용 안 함"
+
+[options.skill_effect]
+title.en = "Skill Effect"
+title.ko = "스킬 효과"
+
+[options.ap_effect]
+title.en = "AP Effect"
+title.ko = "AP 효과"
+
+[options.custom_accuracy]
+title.en = "Late/Fast/Flick"
+title.ko = "LATE/FAST/FLICK 표시"
+
+[options.custom_combo]
+title.en = "Custom Combo"
+title.ko = "커스텀 콤보"
+
+[options.custom_score]
+title.en = "Custom Score Indicator"
+title.ko = "커스텀 점수 표시"
+
+[options.custom_score.values]
+disable.en = "Disable"
+disable.ko = "사용 안 함"
+arcade_positive.en = "Arcade% (+)"
+arcade_positive.ko = "아케이드% (+)"
+arcade_negative.en = "Arcade% (-)"
+arcade_negative.ko = "아케이드% (-)"
+accuracy.en = "Accuracy%"
+accuracy.ko = "정확도%"
+
+[options.custom_judgment]
+title.en = "Custom Judgment"
+title.ko = "커스텀 판정"
+
+[options.auto_judgment]
+title.en = "Auto Judgment Display"
+title.ko = "자동 판정 표시"
+description.en = "Displays judgment as 'Auto' during Watch mode when Custom Judgment is enabled."
+description.ko = "커스텀 판정이 활성화된 경우 Watch 모드에서 판정을 'Auto'로 표시합니다."
+
+[options.custom_damage]
+title.en = "Custom Damage Effect"
+title.ko = "커스텀 대미지 효과"
+
+[options.custom_life_bar]
+title.en = "Custom Life Bar"
+title.ko = "커스텀 라이프 바"
+
+[options.custom_score_bar]
+title.en = "Custom Score Bar"
+title.ko = "커스텀 점수 바"
+
+[options.custom_tag]
+title.en = "Custom Tag"
+title.ko = "커스텀 태그"
+description.en = "Displays special tags (e.g., Auto Live) during Watch mode."
+description.ko = "Watch 모드에서 특수 태그(예: Auto Live)를 표시합니다."
+
+[options.ui_intro]
+title.en = "UI Intro Effect"
+title.ko = "UI 인트로 효과"
+
+[options.note_perspective]
+title.en = "Note Perspective"
+title.ko = "노트 원근감"
+description.en = "Sets the perspective of the notes. As it approaches 0, the notes are drawn vertically."
+description.ko = "노트의 원근감을 설정합니다. 0에 가까울수록 노트를 수직으로 표시합니다."
+
+[options.prevent_empty_lane_sfx]
+title.en = "Prevent Empty Lane Effect Overwrite"
+title.ko = "빈 레인 효과 덮어쓰기 방지"
+
+[options.stage_cover_mode]
+title.en = "Stage Cover Mode"
+title.ko = "스테이지 커버 모드"
+
+[options.stage_cover_mode.values]
+stage.en = "Stage"
+stage.ko = "스테이지"
+stage_and_line.en = "Stage and Line"
+stage_and_line.ko = "스테이지 및 판정선"
+full_width.en = "Full Width"
+full_width.ko = "전체 너비"
+
+[options.stage_cover_scroll_speed_compensation]
+title.en = "Stage Cover Note Speed Compensation"
+title.ko = "스테이지 커버 노트 속도 보정"
+description.en = "Reduces note speed to compensate for the reduced visible area from stage cover."
+description.ko = "스테이지 커버로 인해 줄어든 표시 영역을 보정하기 위해 노트 속도를 낮춥니다."
+
+[options.stage_cover_scroll_speed_compensation.values]
+off.en = "Off"
+off.ko = "사용 안 함"
+fixed_only.en = "Fixed Only"
+fixed_only.ko = "고정 속도만"
+full.en = "Full"
+full.ko = "전체"
+
+[options.hide_ui]
+title.en = "Hide UI"
+title.ko = "UI 숨기기"
+
+[options.hide_ui.values]
+none.en = "None"
+none.ko = "숨기지 않음"
+sonolus.en = "Sonolus"
+sonolus.ko = "Sonolus"
+sonolus_and_custom_judgment.en = "Sonolus + Custom Judgment"
+sonolus_and_custom_judgment.ko = "Sonolus 및 커스텀 판정"
+all.en = "All"
+all.ko = "전체"
+
+[options.lock_stage_aspect_ratio]
+description.en = "Custom UI does not support disabling this feature. If it crashes, please disable the conflicting settings."
+description.ko = "커스텀 UI는 이 기능 비활성화를 지원하지 않습니다. 크래시가 발생하면 충돌하는 설정을 비활성화해 주세요."
+
+[options.slide_quality]
+title.en = "Slide Quality"
+title.ko = "슬라이드 품질"
+
+[options.guide_quality]
+title.en = "Guide Quality"
+title.ko = "가이드 품질"
+
+[options.note_margin]
+title.en = "Note Margin"
+title.ko = "노트 여백"
+description.en = "Shrinks the drawn width of notes to make adjacent notes easier to read."
+description.ko = "인접한 노트를 쉽게 구분할 수 있도록 표시되는 노트의 너비를 줄입니다."
+
+[options.preview_display_mode]
+title.en = "Preview Display Mode"
+title.ko = "프리뷰 표시 방식"
+description.en = "Controls preview note placement. 'Ingame' uses note speed based spacing"
+description.ko = "프리뷰에서 노트를 배치하는 방식을 설정합니다. '인게임'은 노트 속도에 따른 간격을 사용합니다."
+
+[options.preview_display_mode.values]
+editor.en = "Editor"
+editor.ko = "에디터"
+ingame.en = "Ingame"
+ingame.ko = "인게임"
+
+[options.effect_animation_speed]
+title.en = "Effect Animation Speed"
+title.ko = "이펙트 애니메이션 속도"
+
+[options.alternative_approach_curve]
+title.en = "Alternative Approach Curve"
+title.ko = "대체 접근 곡선 사용"
+
+[options.disable_timescale]
+title.en = "Disable Timescale"
+title.ko = "시간배율 비활성화"
+
+[options.disable_fake_notes]
+title.en = "Disable Fake Notes"
+title.ko = "가짜 노트 비활성화"
+
+[options.forced_fever_chance]
+title.en = "Forced Fever Chance"
+title.ko = "피버 찬스 강제 활성화"
+description.en = "Enables Fever Chance even in solo play."
+description.ko = "솔로 플레이에서도 피버 찬스를 활성화합니다."
+
+[options.skill_mode]
+title.en = "Skill Mode"
+title.ko = "스킬 모드"
+
+[options.skill_mode.values]
+level_default.en = "Level Default"
+level_default.ko = "레벨 기본값"
+score_up.en = "Score Up"
+score_up.ko = "스코어 UP"
+life_up.en = "Life Up"
+life_up.ko = "라이프 회복"
+accuracy_up.en = "Accuracy Up"
+accuracy_up.ko = "판정 강화"
+
+[options.score_mode]
+title.en = "Score Mode"
+title.ko = "점수 모드"
+
+[options.score_mode.values]
+weighted_flat.en = "Weighted Flat"
+weighted_flat.ko = "가중치 적용 · 고정 배점"
+weighted_combo.en = "Weighted Combo (Sekai Standard)"
+weighted_combo.ko = "가중치 적용 · 콤보 보너스 (세카이 표준)"
+unweighted_flat.en = "Unweighted Flat (Sekai Ranked Match)"
+unweighted_flat.ko = "균등 가중치 · 고정 배점 (세카이 랭크 매치)"
+unweighted_combo.en = "Unweighted Combo"
+unweighted_combo.ko = "균등 가중치 · 콤보 보너스"
+
+[options.show_hitboxes]
+title.en = "Show Hitboxes"
+title.ko = "판정 범위 표시"
+
+[options.background_auto_correction]
+title.en = "Background Auto Correction"
+title.ko = "배경 자동 보정"
+
+[options.hitbox_range]
+title.en = "Hitbox"
+title.ko = "판정 범위"
+
+[options.hitbox_range.values]
+default.en = "Default"
+default.ko = "기본"
+full_vertical.en = "Full Vertical"
+full_vertical.ko = "전체 수직"
+full_adaptive.en = "Full Adaptive"
+full_adaptive.ko = "전체 적응형"
+
+[options.test_aspect_ratio]
+title.en = "Test Aspect Ratio"
+title.ko = "화면비 테스트"
+description.en = "Draws reference boxes for 21:9, 16:9, and 4:3 screens."
+description.ko = "21:9, 16:9, 4:3 화면의 기준 상자를 표시합니다."

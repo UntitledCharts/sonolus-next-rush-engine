@@ -1,7 +1,9 @@
 from enum import IntEnum
 
-from sonolus.script.options import options, select_option, slider_option, toggle_option
+from sonolus.script.options import select_option, slider_option, toggle_option
 from sonolus.script.text import StandardText
+
+from sekai.lib.localization import localized_options
 
 
 class ScoreMode(IntEnum):
@@ -64,7 +66,7 @@ class PreviewDisplayMode(IntEnum):
     INGAME = 1
 
 
-@options
+@localized_options
 class Options:
     speed: float = slider_option(
         name=StandardText.SPEED,
@@ -114,7 +116,6 @@ class Options:
     )
     background_alpha: float = slider_option(
         name=StandardText.STAGE_ALPHA,
-        title="Background Brightness",
         scope="Sekai",
         default=1,
         min=0.5,
@@ -135,7 +136,7 @@ class Options:
         name="Fever Effect",
         scope="Rush",
         default=0,
-        values=["Default", "Lightweight", "None"],
+        values=["default", "lightweight", "none"],
     )
     skill_effect: bool = toggle_option(
         name="Skill Effect",
@@ -170,7 +171,7 @@ class Options:
         name="Custom Score Indicator",
         scope="Rush",
         default=0,
-        values=["Disable", "Arcade% (+)", "Arcade% (-)", "Accuracy%"],
+        values=["disable", "arcade_positive", "arcade_negative", "accuracy"],
     )
     custom_judgment: bool = toggle_option(
         name="Custom Judgment",
@@ -179,7 +180,6 @@ class Options:
     )
     auto_judgment: bool = toggle_option(
         name="Auto Judgment Display",
-        description="Displays judgment as 'Auto' during Watch mode when Custom Judgment is enabled.",
         scope="Rush",
         default=True,
     )
@@ -200,7 +200,6 @@ class Options:
     )
     custom_tag: bool = toggle_option(
         name="Custom Tag",
-        description="Displays special tags (e.g., Auto Live) during Watch mode.",
         scope="Rush",
         default=True,
     )
@@ -211,7 +210,6 @@ class Options:
     )
     note_perspective: float = slider_option(
         name="Note Perspective",
-        description="Sets the perspective of the notes. As it approaches 0, the notes are drawn vertically.",
         scope="Rush",
         default=1,
         min=0,
@@ -242,9 +240,9 @@ class Options:
         name="Vibration Mode",
         scope="Sekai",
         values=[
-            "Disabled",
-            "On Miss",
-            "On Miss and Good",
+            "disabled",
+            "miss",
+            "miss_and_good",
         ],
         default=0,
     )
@@ -296,9 +294,9 @@ class Options:
         advanced=True,
         scope="Sekai",
         values=[
-            "Stage",
-            "Stage and Line",
-            "Full Width",
+            "stage",
+            "stage_and_line",
+            "full_width",
         ],
         default=1,
     )
@@ -317,9 +315,9 @@ class Options:
         advanced=True,
         scope="Sekai",
         values=[
-            "Off",
-            "Fixed Only",
-            "Full",
+            "off",
+            "fixed_only",
+            "full",
         ],
         default=1,
     )
@@ -336,14 +334,13 @@ class Options:
     lock_stage_aspect_ratio: bool = toggle_option(
         name=StandardText.STAGE_ASPECTRATIO_LOCK,
         scope="Sekai",
-        description="Custom UI does not support disabling this feature. If it crashes, please disable the conflicting settings.",
         default=True,
     )
     hide_ui: int = select_option(
         name="Hide UI",
         scope="Rush",
         default=0,
-        values=["None", "Sonolus", "Sonolus + Custom Judgment", "All"],
+        values=["none", "sonolus", "sonolus_and_custom_judgment", "all"],
     )
     show_lane: bool = toggle_option(
         name=StandardText.STAGE,
@@ -378,11 +375,10 @@ class Options:
     )
     preview_display_mode: PreviewDisplayMode = select_option(
         name="Preview Display Mode",
-        description="Controls preview note placement. 'Ingame' uses note speed based spacing",
         scope="Rush",
         values=[
-            "Editor",
-            "Ingame",
+            "editor",
+            "ingame",
         ],
         default=PreviewDisplayMode.EDITOR,
     )
@@ -415,7 +411,6 @@ class Options:
     )
     forced_fever_chance: bool = toggle_option(
         name="Forced Fever Chance",
-        description="Enables Fever Chance even in solo play.",
         scope="Rush",
         default=False,
     )
@@ -423,10 +418,10 @@ class Options:
         name="Skill Mode",
         scope="Rush",
         values=[
-            "Level Default",
-            "Score Up",
-            "Life Up",
-            "Accuracy Up",
+            "level_default",
+            "score_up",
+            "life_up",
+            "accuracy_up",
         ],
         standard=True,
         default=SkillMode.LEVEL_DEFAULT,
@@ -435,10 +430,10 @@ class Options:
         name="Score Mode",
         scope="Sekai",
         values=[
-            "Weighted Flat",
-            "Weighted Combo",
-            "Unweighted Flat",
-            "Unweighted Combo",
+            "weighted_flat",
+            "weighted_combo",
+            "unweighted_flat",
+            "unweighted_combo",
         ],
         standard=True,
         advanced=True,
@@ -462,9 +457,9 @@ class Options:
         advanced=True,
         scope="Rush",
         values=[
-            "Default",
-            "Full Vertical",
-            "Full Adaptive",
+            "default",
+            "full_vertical",
+            "full_adaptive",
         ],
         default=HitboxRange.DEFAULT,
     )
