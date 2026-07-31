@@ -1,22 +1,28 @@
 [options.vibrate_mode]
 title.en = "Vibration Mode"
 title.ko = "진동 모드"
+title.fr = "Mode des Vibrations"
 
 [options.vibrate_mode.values]
 disabled.en = "Disabled"
 disabled.ko = "사용 안 함"
+disabled.fr = "Désactivées"
 miss.en = "On Miss"
 miss.ko = "MISS 판정 시"
+miss.fr = "Sur un Miss"
 miss_and_good.en = "On Miss and Good"
 miss_and_good.ko = "MISS 및 GOOD 판정 시"
+miss_and_good.fr = "Sur un Miss et un Good"
 
 [options.slide_alpha]
 title.en = "Slide Alpha"
 title.ko = "슬라이드 불투명도"
+title.fr = "Opacité des Slides"
 
 [options.guide_alpha]
 title.en = "Guide Alpha"
 title.ko = "가이드 불투명도"
+title.fr = "Opacité des Guides"
 
 [options.background_alpha]
 title.en = "Background Brightness"
@@ -109,32 +115,42 @@ title.ko = "빈 레인 효과 덮어쓰기 방지"
 [options.stage_cover_mode]
 title.en = "Stage Cover Mode"
 title.ko = "스테이지 커버 모드"
+title.fr = "Mode de Masquage de la Scène"
 
 [options.stage_cover_mode.values]
 stage.en = "Stage"
 stage.ko = "스테이지"
+stage.fr = "Scène"
 stage_and_line.en = "Stage and Line"
 stage_and_line.ko = "스테이지 및 판정선"
+stage_and_line.fr = "Scène et Ligne de Jugement"
 full_width.en = "Full Width"
 full_width.ko = "전체 너비"
+full_width.fr = "Toute la Largeur"
 
 [options.stage_cover_scroll_speed_compensation]
 title.en = "Stage Cover Note Speed Compensation"
 title.ko = "스테이지 커버 노트 속도 보정"
+title.fr = "Compensation de la Vitesse due au Masquage"
 description.en = "Reduces note speed to compensate for the reduced visible area from stage cover."
 description.ko = "스테이지 커버로 인해 줄어든 표시 영역을 보정하기 위해 노트 속도를 낮춥니다."
+description.fr = "Réduit la vitesse des notes pour compenser la perte de surface d'affichage due au masquage."
 
 [options.stage_cover_scroll_speed_compensation.values]
 off.en = "Off"
 off.ko = "사용 안 함"
+off.fr = "Désactivée"
 fixed_only.en = "Fixed Only"
 fixed_only.ko = "고정 속도만"
+fixed_only.fr = "Vitesse Fixe Uniquement"
 full.en = "Full"
 full.ko = "전체"
+full.fr = "Complète"
 
 [options.hide_ui]
 title.en = "Hide UI"
 title.ko = "UI 숨기기"
+title.fr = "Masquer l'Interface"
 
 [options.hide_ui.values]
 none.en = "None"
@@ -149,16 +165,20 @@ all.ko = "전체 숨김"
 [options.slide_quality]
 title.en = "Slide Quality"
 title.ko = "슬라이드 품질"
+title.fr = "Qualité des Slides"
 
 [options.guide_quality]
 title.en = "Guide Quality"
 title.ko = "가이드 품질"
+title.fr = "Qualité des Guides"
 
 [options.note_margin]
 title.en = "Note Margin"
 title.ko = "노트 여백"
+title.fr = "Marge des Notes"
 description.en = "Shrinks the drawn width of notes to make adjacent notes easier to read."
 description.ko = "인접한 노트를 쉽게 구분할 수 있도록 표시되는 노트의 너비를 줄입니다."
+description.fr = "Réduit la largeur affichée des notes pour mieux distinguer celles qui sont adjacentes."
 
 [options.preview_display_mode]
 title.en = "Preview Display Mode"
@@ -175,18 +195,22 @@ ingame.ko = "인게임"
 [options.effect_animation_speed]
 title.en = "Effect Animation Speed"
 title.ko = "이펙트 애니메이션 속도"
+title.fr = "Vitesse des Animations d'Effets"
 
 [options.alternative_approach_curve]
 title.en = "Alternative Approach Curve"
 title.ko = "대체 접근 곡선 사용"
+title.fr = "Courbe d'Approche Alternative"
 
 [options.disable_timescale]
 title.en = "Disable Timescale"
 title.ko = "시간배율 비활성화"
+title.fr = "Désactiver l'Échelle de Temps"
 
 [options.disable_fake_notes]
 title.en = "Disable Fake Notes"
 title.ko = "가짜 노트 비활성화"
+title.fr = "Désactiver les Fausses Notes"
 
 [options.forced_fever_chance]
 title.en = "Forced Fever Chance"
@@ -211,20 +235,26 @@ accuracy_up.ko = "판정 강화"
 [options.score_mode]
 title.en = "Score Mode"
 title.ko = "점수 모드"
+title.fr = "Mode de Score"
 
 [options.score_mode.values]
 weighted_flat.en = "Weighted Flat"
 weighted_flat.ko = "가중치 적용 · 고정 배점"
+weighted_flat.fr = "Pondéré · Fixe"
 weighted_combo.en = "Weighted Combo (Sekai Standard)"
 weighted_combo.ko = "가중치 적용 · 콤보 보너스 (세카이 표준)"
+weighted_combo.fr = "Pondéré · Combo (Standard Sekai)"
 unweighted_flat.en = "Unweighted Flat (Sekai Ranked Match)"
 unweighted_flat.ko = "균등 가중치 · 고정 배점 (세카이 랭크 매치)"
+unweighted_flat.fr = "Non Pondéré · Fixe (Match Classé Sekai)"
 unweighted_combo.en = "Unweighted Combo"
 unweighted_combo.ko = "균등 가중치 · 콤보 보너스"
+unweighted_combo.fr = "Non Pondéré · Combo"
 
 [options.show_hitboxes]
 title.en = "Show Hitboxes"
 title.ko = "판정 범위 표시"
+title.fr = "Afficher les Hitboxes"
 
 [options.background_auto_correction]
 title.en = "Background Auto Correction"
@@ -245,5 +275,7 @@ full_adaptive.ko = "전체 적응형"
 [options.test_aspect_ratio]
 title.en = "Test Aspect Ratio"
 title.ko = "화면비 테스트"
+title.fr = "Tester le Format d'Image"
 description.en = "Draws reference boxes for 21:9, 16:9, and 4:3 screens."
 description.ko = "21:9, 16:9, 4:3 화면의 기준 상자를 표시합니다."
+description.fr = "Affiche des repères pour les écrans 21:9, 16:9 et 4:3."
