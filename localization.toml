@@ -16,7 +16,7 @@ miss_and_good.fr = "Sur un Miss et un Good"
 
 [options.slide_alpha]
 title.en = "Slide Alpha"
-title.ko = "슬라이드 불투명도"
+title.ko = "롱 노트 불투명도"
 title.fr = "Opacité des Slides"
 
 [options.guide_alpha]
@@ -31,15 +31,15 @@ title.fr = "Luminosité de l'Arrière-plan"
 
 [options.fever_effect]
 title.en = "Fever Effect"
-title.ko = "피버 효과"
+title.ko = "피버 연출"
 title.fr = "Effet de Fever"
 
 [options.fever_effect.values]
 default.en = "Default"
-default.ko = "기본"
+default.ko = "표준"
 default.fr = "Par Défaut"
 lightweight.en = "Lightweight"
-lightweight.ko = "경량"
+lightweight.ko = "라이트"
 lightweight.fr = "Allégé"
 none.en = "None"
 none.ko = "사용 안 함"
@@ -52,12 +52,12 @@ title.fr = "Effet de Compétence"
 
 [options.ap_effect]
 title.en = "AP Effect"
-title.ko = "AP 효과"
+title.ko = "AP 계속 연출"
 title.fr = "Effet AP"
 
 [options.custom_accuracy]
 title.en = "Late/Fast/Flick"
-title.ko = "LATE/FAST/FLICK 표시"
+title.ko = "LATE/FAST/FLICK"
 title.fr = "Late/Fast/Flick"
 
 [options.custom_combo]
@@ -140,7 +140,7 @@ title.fr = "Empêcher l'Écrasement de l'Effet d'une Lane Vide"
 
 [options.stage_cover_mode]
 title.en = "Stage Cover Mode"
-title.ko = "스테이지 커버 모드"
+title.ko = "노트 시작 위치 모드"
 title.fr = "Mode de Masquage de la Scène"
 
 [options.stage_cover_mode.values]
@@ -156,10 +156,10 @@ full_width.fr = "Toute la Largeur"
 
 [options.stage_cover_scroll_speed_compensation]
 title.en = "Stage Cover Note Speed Compensation"
-title.ko = "스테이지 커버 노트 속도 보정"
+title.ko = "노트 시작 위치 노트 속도 보정"
 title.fr = "Compensation de la Vitesse due au Masquage"
 description.en = "Reduces note speed to compensate for the reduced visible area from stage cover."
-description.ko = "스테이지 커버로 인해 줄어든 표시 영역을 보정하기 위해 노트 속도를 낮춥니다."
+description.ko = "노트 시작 위치로 인해 줄어든 표시 영역을 보정하기 위해 노트 속도를 낮춥니다."
 description.fr = "Réduit la vitesse des notes pour compenser la perte de surface d'affichage due au masquage."
 
 [options.stage_cover_scroll_speed_compensation.values]
