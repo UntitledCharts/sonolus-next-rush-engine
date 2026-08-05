@@ -2,27 +2,33 @@
 title.en = "Vibration Mode"
 title.ko = "진동 모드"
 title.fr = "Mode des Vibrations"
+title.ru = "Режим вибрации"
 
 [options.vibrate_mode.values]
 disabled.en = "Disabled"
 disabled.ko = "사용 안 함"
 disabled.fr = "Désactivées"
+disabled.ru = "Отключено"
 miss.en = "On Miss"
 miss.ko = "MISS 판정 시"
 miss.fr = "Sur un Miss"
+miss.ru = "На Miss"
 miss_and_good.en = "On Miss and Good"
 miss_and_good.ko = "MISS 및 GOOD 판정 시"
 miss_and_good.fr = "Sur un Miss et un Good"
+miss_and_good.ru = "На Miss и Good"
 
 [options.slide_alpha]
 title.en = "Slide Alpha"
 title.ko = "롱 노트 불투명도"
 title.fr = "Opacité des Slides"
+title.ru = "Альфа слайда"
 
 [options.guide_alpha]
 title.en = "Guide Alpha"
 title.ko = "가이드 불투명도"
 title.fr = "Opacité des Guides"
+title.ru = "Альфа гайда"
 
 [options.background_alpha]
 title.en = "Background Brightness"
@@ -142,41 +148,50 @@ title.fr = "Empêcher l'Écrasement de l'Effet d'une Lane Vide"
 title.en = "Stage Cover Mode"
 title.ko = "노트 시작 위치 모드"
 title.fr = "Mode de Masquage de la Scène"
+title.ru = "Режим покрытия сцены"
 
 [options.stage_cover_mode.values]
 stage.en = "Stage"
 stage.ko = "스테이지"
 stage.fr = "Scène"
+stage.ru = "Сцена"
 stage_and_line.en = "Stage and Line"
 stage_and_line.ko = "스테이지 및 판정선"
 stage_and_line.fr = "Scène et Ligne de Jugement"
+stage_and_line.ru = "Сцена и линия"
 full_width.en = "Full Width"
 full_width.ko = "전체 너비"
 full_width.fr = "Toute la Largeur"
+full_width.ru = "Полная широта"
 
 [options.stage_cover_scroll_speed_compensation]
 title.en = "Stage Cover Note Speed Compensation"
 title.ko = "노트 시작 위치 노트 속도 보정"
 title.fr = "Compensation de la Vitesse due au Masquage"
+title.ru = "Компенсация скорости ноты покрытия сцены"
 description.en = "Reduces note speed to compensate for the reduced visible area from stage cover."
 description.ko = "노트 시작 위치로 인해 줄어든 표시 영역을 보정하기 위해 노트 속도를 낮춥니다."
 description.fr = "Réduit la vitesse des notes pour compenser la perte de surface d'affichage due au masquage."
+description.ru = "Понижает скорость нот чтобы компенсировать уменьшенную видимую зону от покрытия сцены."
 
 [options.stage_cover_scroll_speed_compensation.values]
 off.en = "Off"
 off.ko = "사용 안 함"
 off.fr = "Désactivée"
+off.ru = "Отключить"
 fixed_only.en = "Fixed Only"
 fixed_only.ko = "고정 속도만"
 fixed_only.fr = "Vitesse Fixe Uniquement"
 full.en = "Full"
 full.ko = "전체"
 full.fr = "Complète"
+full.ru = "Полный"
 
 [options.hide_ui]
 title.en = "Hide UI"
 title.ko = "UI 숨기기"
 title.fr = "Masquer l'Interface"
+title.ru = "Спрятать UI"
 
 [options.hide_ui.values]
 none.en = "None"
@@ -196,19 +211,23 @@ all.fr = "Tout"
 title.en = "Slide Quality"
 title.ko = "슬라이드 품질"
 title.fr = "Qualité des Slides"
+title.ru = "Качество слайда"
 
 [options.guide_quality]
 title.en = "Guide Quality"
 title.ko = "가이드 품질"
 title.fr = "Qualité des Guides"
+title.ru = "Качество гайда"
 
 [options.note_margin]
 title.en = "Note Margin"
 title.ko = "노트 여백"
 title.fr = "Marge des Notes"
+title.ru = "Допуск ноты"
 description.en = "Shrinks the drawn width of notes to make adjacent notes easier to read."
 description.ko = "인접한 노트를 쉽게 구분할 수 있도록 표시되는 노트의 너비를 줄입니다."
 description.fr = "Réduit la largeur affichée des notes pour mieux distinguer celles qui sont adjacentes."
+description.ru = "Сокращает нарисованную широту нот чтобы сделать ближние ноты легче для чтения."
 
 [options.preview_display_mode]
 title.en = "Preview Display Mode"
@@ -230,21 +249,25 @@ ingame.fr = "Ingame"
 title.en = "Effect Animation Speed"
 title.ko = "이펙트 애니메이션 속도"
 title.fr = "Vitesse des Animations d'Effets"
+title.ru = "Скорость анимации эффекта"
 
 [options.alternative_approach_curve]
 title.en = "Alternative Approach Curve"
 title.ko = "대체 접근 곡선 사용"
 title.fr = "Courbe d'Approche Alternative"
+title.ru = "Альтернативный подход изгиба"
 
 [options.disable_timescale]
 title.en = "Disable Timescale"
 title.ko = "시간배율 비활성화"
 title.fr = "Désactiver l'Échelle de Temps"
+title.ru = "Отключить таймскейл"
 
 [options.disable_fake_notes]
 title.en = "Disable Fake Notes"
 title.ko = "가짜 노트 비활성화"
 title.fr = "Désactiver les Fausses Notes"
+title.ru = "Отключить фейк ноты"
 
 [options.forced_fever_chance]
 title.en = "Forced Fever Chance"
@@ -277,25 +300,31 @@ accuracy_up.fr = "Amélioration du Jugement"
 title.en = "Score Mode"
 title.ko = "점수 모드"
 title.fr = "Mode de Score"
+title.ru = "Режим счёта"
 
 [options.score_mode.values]
 weighted_flat.en = "Weighted Flat"
 weighted_flat.ko = "가중치 적용 · 고정 배점"
 weighted_flat.fr = "Pondéré · Fixe"
+weighted_flat.ru = "Определённо-взвешенный"
 weighted_combo.en = "Weighted Combo (Sekai Standard)"
 weighted_combo.ko = "가중치 적용 · 콤보 보너스 (세카이 표준)"
 weighted_combo.fr = "Pondéré · Combo (Standard Sekai)"
+weighted_combo.ru = "Взвешенное комбо (Стандарт секая)"
 unweighted_flat.en = "Unweighted Flat (Sekai Ranked Match)"
 unweighted_flat.ko = "균등 가중치 · 고정 배점 (세카이 랭크 매치)"
 unweighted_flat.fr = "Non Pondéré · Fixe (Match Classé Sekai)"
+unweighted_flat.ru = "Определённо-невзвешенный (Ранг матч секая)"
 unweighted_combo.en = "Unweighted Combo"
 unweighted_combo.ko = "균등 가중치 · 콤보 보너스"
 unweighted_combo.fr = "Non Pondéré · Combo"
+unweighted_combo.ru = "Невзвешенное комбо"
 
 [options.show_hitboxes]
 title.en = "Show Hitboxes"
 title.ko = "판정 범위 표시"
 title.fr = "Afficher les Hitboxes"
+title.ru = "Показать хитбоксы"
 
 [options.background_auto_correction]
 title.en = "Background Auto Correction"
@@ -322,6 +351,8 @@ full_adaptive.fr = "Adaptative Complète"
 title.en = "Test Aspect Ratio"
 title.ko = "화면비 테스트"
 title.fr = "Tester le Format d'Image"
+title.ru = "Протестировать соотношение сторон"
 description.en = "Draws reference boxes for 21:9, 16:9, and 4:3 screens."
 description.ko = "21:9, 16:9, 4:3 화면의 기준 상자를 표시합니다."
 description.fr = "Affiche des repères pour les écrans 21:9, 16:9 et 4:3."
+description.ru = "Рисует референс 'коробки' для экранов на 21:9, 16:9 и 4:3."
