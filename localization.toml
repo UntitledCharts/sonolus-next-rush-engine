@@ -34,115 +34,141 @@ title.ru = "Альфа гайда"
 title.en = "Background Brightness"
 title.ko = "배경 밝기"
 title.fr = "Luminosité de l'Arrière-plan"
+title.ru = "Яркость заднего фона"
 
 [options.fever_effect]
 title.en = "Fever Effect"
 title.ko = "피버 연출"
 title.fr = "Effet de Fever"
+title.ru = "Эффект лихорадки"
 
 [options.fever_effect.values]
 default.en = "Default"
 default.ko = "표준"
 default.fr = "Par Défaut"
+default.ru = "По дефолту"
 lightweight.en = "Lightweight"
 lightweight.ko = "라이트"
 lightweight.fr = "Allégé"
+lightweight.ru = "Облегчённый"
 none.en = "None"
 none.ko = "사용 안 함"
 none.fr = "Aucun"
+none.ru = "Никакой"
 
 [options.skill_effect]
 title.en = "Skill Effect"
 title.ko = "스킬/활약 표시"
 title.fr = "Effet de Compétence"
+title.ru = "Эффект скилла"
 
 [options.ap_effect]
 title.en = "AP Effect"
 title.ko = "AP 계속 연출"
 title.fr = "Effet AP"
+title.ru = "Эффект AP"
 
 [options.custom_accuracy]
 title.en = "Late/Fast/Flick"
 title.ko = "LATE/FAST/FLICK"
 title.fr = "Late/Fast/Flick"
+title.ru = "Late/Fast/Flick"
 
 [options.custom_combo]
 title.en = "Custom Combo"
 title.ko = "커스텀 콤보"
 title.fr = "Combo Personnalisé"
+title.ru = "Кастомное комбо"
 
 [options.custom_score]
 title.en = "Custom Score Indicator"
 title.ko = "커스텀 점수 표시"
 title.fr = "Indicateur de Score Personnalisé"
+title.ru = "Кастомный индикатор счёта"
 
 [options.custom_score.values]
 disable.en = "Disable"
 disable.ko = "사용 안 함"
 disable.fr = "Désactivé"
+disable.ru = "Отключить"
 arcade_positive.en = "Arcade% (+)"
 arcade_positive.ko = "아케이드% (+)"
 arcade_positive.fr = "Arcade% (+)"
+arcade_positive.ru = "Аркада% (+)"
 arcade_negative.en = "Arcade% (-)"
 arcade_negative.ko = "아케이드% (-)"
 arcade_negative.fr = "Arcade% (-)"
+arcade_negative.ru = "Arcade% (-)"
 accuracy.en = "Accuracy%"
 accuracy.ko = "정확도%"
 accuracy.fr = "Précision%"
+accuracy.ru = "Аккуратность%"
 
 [options.custom_judgment]
 title.en = "Custom Judgment"
 title.ko = "커스텀 판정"
 title.fr = "Jugement Personnalisé"
+title.ru = "Кастомное суждение"
 
 [options.auto_judgment]
 title.en = "Auto Judgment Display"
 title.ko = "Auto 판정 표시"
 title.fr = "Affichage du Jugement Auto"
+title.ru = "Авто-дисплей суждения"
 description.en = "Displays judgment as 'Auto' during Watch mode when Custom Judgment is enabled."
 description.ko = "커스텀 판정이 활성화된 경우 Watch 모드에서 판정을 'Auto'로 표시합니다."
 description.fr = "Affiche le jugement sous la forme « Auto » en mode Watch lorsque le jugement personnalisé est activé."
+description.ru = "Показывает суждение как 'Авто' во время режима Просмотра когда Кастомное суждение включено."
 
 [options.custom_damage]
 title.en = "Custom Damage Effect"
 title.ko = "커스텀 대미지 효과"
 title.fr = "Effet de Dégâts Personnalisé"
+title.ru = "Кастомный эффект урона"
 
 [options.custom_life_bar]
 title.en = "Custom Life Bar"
 title.ko = "커스텀 라이프 바"
 title.fr = "Barre de Vie Personnalisée"
+title.ru = "Кастомная шкала жизни"
 
 [options.custom_score_bar]
 title.en = "Custom Score Bar"
 title.ko = "커스텀 점수 바"
 title.fr = "Barre de Score Personnalisée"
+title.ru = "Кастомная шкала счёта"
 
 [options.custom_tag]
 title.en = "Custom Tag"
 title.ko = "커스텀 태그"
 title.fr = "Tag Personnalisé"
+title.ru = "Кастомный тэг"
 description.en = "Displays special tags (e.g., Auto Live) during Watch mode."
 description.ko = "Watch 모드에서 특수 태그(예: Auto Live)를 표시합니다."
 description.fr = "Affiche des tags spéciaux (par ex. Auto Live) en mode Watch."
+description.ru = "Отображает специальный тэг (к примеру, Авто-Игра) во время режима Просмотра."
 
 [options.ui_intro]
 title.en = "UI Intro Effect"
 title.ko = "UI 인트로 효과"
 title.fr = "Effet d'Introduction de l'Interface"
+title.ru = "Эффект UI интро"
 
 [options.note_perspective]
 title.en = "Note Perspective"
 title.ko = "노트 원근감"
 title.fr = "Perspective des Notes"
+title.ru = "Перспектива ноты"
 description.en = "Sets the perspective of the notes. As it approaches 0, the notes are drawn vertically."
 description.ko = "노트의 원근감을 설정합니다. 0에 가까울수록 노트를 수직으로 표시합니다."
 description.fr = "Règle la perspective des notes. Plus la valeur se rapproche de 0, plus les notes sont affichées verticalement."
+description.ru = "Ставит перспективу нот. Приближаясь к 0, ноты вырисовываются вертикально."
 
 [options.prevent_empty_lane_sfx]
 title.en = "Prevent Empty Lane Effect Overwrite"
 title.ko = "빈 레인 효과 덮어쓰기 방지"
 title.fr = "Empêcher l'Écrasement de l'Effet d'une Lane Vide"
+title.ru = "Предотвратить перепись эффекта пустой линии"
 
 [options.stage_cover_mode]
 title.en = "Stage Cover Mode"
@@ -182,6 +208,7 @@ off.ru = "Отключить"
 fixed_only.en = "Fixed Only"
 fixed_only.ko = "고정 속도만"
 fixed_only.fr = "Vitesse Fixe Uniquement"
+fixed_only.ru = "Только определённый"
 full.en = "Full"
 full.ko = "전체"
 full.fr = "Complète"
@@ -197,15 +224,19 @@ title.ru = "Спрятать UI"
 none.en = "None"
 none.ko = "숨기지 않음"
 none.fr = "Aucun"
+none.ru = "Никакой"
 sonolus.en = "Sonolus"
 sonolus.ko = "Sonolus"
 sonolus.fr = "Sonolus"
+sonolus.ru = "Sonolus"
 sonolus_and_custom_judgment.en = "Sonolus + Custom Judgment"
 sonolus_and_custom_judgment.ko = "Sonolus 및 커스텀 판정"
 sonolus_and_custom_judgment.fr = "Sonolus + Jugement Personnalisé"
+sonolus_and_custom_judgment.ru = "Sonolus + Кастомное суждение"
 all.en = "All"
 all.ko = "전체 숨김"
 all.fr = "Tout"
+all.ru = "Всё"
 
 [options.slide_quality]
 title.en = "Slide Quality"
@@ -233,17 +264,21 @@ description.ru = "Сокращает нарисованную широту но�
 title.en = "Preview Display Mode"
 title.ko = "프리뷰 표시 방식"
 title.fr = "Mode d'Affichage de la Prévisualisation"
+title.ru = "Превью режима дисплея"
 description.en = "Controls preview note placement. 'Ingame' uses note speed based spacing"
 description.ko = "프리뷰에서 노트를 배치하는 방식을 설정합니다. '인게임'은 노트 속도에 따른 간격을 사용합니다."
 description.fr = "Contrôle le placement des notes dans la prévisualisation. « Ingame » utilise un espacement basé sur la vitesse des notes."
+description.ru = "Контролирует превью расположения нот. 'Внутри-игровой' использует основанное расположение на скорости нот"
 
 [options.preview_display_mode.values]
 editor.en = "Editor"
 editor.ko = "에디터"
 editor.fr = "Éditeur"
+editor.ru = "Редактор"
 ingame.en = "Ingame"
 ingame.ko = "인게임"
 ingame.fr = "Ingame"
+ingame.ru = "Внутри-игровой"
 
 [options.effect_animation_speed]
 title.en = "Effect Animation Speed"
@@ -273,28 +308,35 @@ title.ru = "Отключить фейк ноты"
 title.en = "Forced Fever Chance"
 title.ko = "피버 찬스 강제 활성화"
 title.fr = "Fever Chance Forcée"
+title.ru = "Принужденный шанс лихорадки"
 description.en = "Enables Fever Chance even in solo play."
 description.ko = "솔로 플레이에서도 피버 찬스를 활성화합니다."
 description.fr = "Active la Fever Chance même en solo."
+description.ru = "Включает шанс лихорадки даже в соло игре."
 
 [options.skill_mode]
 title.en = "Skill Mode"
 title.ko = "스킬 모드"
 title.fr = "Mode de Compétence"
+title.ru = "Режим скилла"
 
 [options.skill_mode.values]
 level_default.en = "Level Default"
 level_default.ko = "레벨 기본값"
 level_default.fr = "Par Défaut du Niveau"
+level_default.ru = "Дефолт левела"
 score_up.en = "Score Up"
 score_up.ko = "스코어 UP"
 score_up.fr = "Augmentation du Score"
+score_up.ru = "Повышен счёт"
 life_up.en = "Life Up"
 life_up.ko = "라이프 회복"
 life_up.fr = "Récupération de Vie"
+life_up.ru = "Повышено ХП"
 accuracy_up.en = "Accuracy Up"
 accuracy_up.ko = "판정 강화"
 accuracy_up.fr = "Amélioration du Jugement"
+accuracy_up.ru = "Повышена Аккуратность"
 
 [options.score_mode]
 title.en = "Score Mode"
@@ -330,22 +372,27 @@ title.ru = "Показать хитбоксы"
 title.en = "Background Auto Correction"
 title.ko = "배경 자동 보정"
 title.fr = "Correction Automatique de l'Arrière-plan"
+title.ru = "Авто-коррекция заднего фона"
 
 [options.hitbox_range]
 title.en = "Hitbox"
 title.ko = "판정 범위"
 title.fr = "Hitbox"
+title.ru = "Хитбокс"
 
 [options.hitbox_range.values]
 default.en = "Default"
 default.ko = "기본"
 default.fr = "Par Défaut"
+default.ru = "Дефолт"
 full_vertical.en = "Full Vertical"
 full_vertical.ko = "전체 수직"
 full_vertical.fr = "Verticale Complète"
+full_vertical.ru = "Полностью вертикальный"
 full_adaptive.en = "Full Adaptive"
 full_adaptive.ko = "전체 적응형"
 full_adaptive.fr = "Adaptative Complète"
+full_adaptive.ru = "Полностью адаптированный"
 
 [options.test_aspect_ratio]
 title.en = "Test Aspect Ratio"
