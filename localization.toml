@@ -1,3 +1,22 @@
+[options.gauge]
+title.en = "Gauge"
+title.ko = "게이지"
+title.fr = "Jauge"
+description.en = "Life gauge type. Heavy and Ultima gauges are harder to pass."
+description.ko = "라이프 게이지 종류입니다. Heavy와 Ultima 게이지는 클리어하기 더 어렵습니다."
+description.fr = "Type de jauge de vie. Les jauges Heavy et Ultima rendent la réussite plus difficile."
+
+[options.gauge.values]
+standard.en = "Standard"
+standard.ko = "기본"
+standard.fr = "Standard"
+heavy.en = "Heavy"
+heavy.ko = "헤비"
+heavy.fr = "Heavy"
+ultima.en = "Ultima"
+ultima.ko = "울티마"
+ultima.fr = "Ultima"
+
 [options.vibrate_mode]
 title.en = "Vibration Mode"
 title.ko = "진동 모드"
@@ -253,44 +272,6 @@ title.fr = "Fever Chance Forcée"
 description.en = "Enables Fever Chance even in solo play."
 description.ko = "솔로 플레이에서도 피버 찬스를 활성화합니다."
 description.fr = "Active la Fever Chance même en solo."
-
-[options.skill_mode]
-title.en = "Skill Mode"
-title.ko = "스킬 모드"
-title.fr = "Mode de Compétence"
-
-[options.skill_mode.values]
-level_default.en = "Level Default"
-level_default.ko = "레벨 기본값"
-level_default.fr = "Par Défaut du Niveau"
-score_up.en = "Score Up"
-score_up.ko = "스코어 UP"
-score_up.fr = "Augmentation du Score"
-life_up.en = "Life Up"
-life_up.ko = "라이프 회복"
-life_up.fr = "Récupération de Vie"
-accuracy_up.en = "Accuracy Up"
-accuracy_up.ko = "판정 강화"
-accuracy_up.fr = "Amélioration du Jugement"
-
-[options.score_mode]
-title.en = "Score Mode"
-title.ko = "점수 모드"
-title.fr = "Mode de Score"
-
-[options.score_mode.values]
-weighted_flat.en = "Weighted Flat"
-weighted_flat.ko = "가중치 적용 · 고정 배점"
-weighted_flat.fr = "Pondéré · Fixe"
-weighted_combo.en = "Weighted Combo (Sekai Standard)"
-weighted_combo.ko = "가중치 적용 · 콤보 보너스 (세카이 표준)"
-weighted_combo.fr = "Pondéré · Combo (Standard Sekai)"
-unweighted_flat.en = "Unweighted Flat (Sekai Ranked Match)"
-unweighted_flat.ko = "균등 가중치 · 고정 배점 (세카이 랭크 매치)"
-unweighted_flat.fr = "Non Pondéré · Fixe (Match Classé Sekai)"
-unweighted_combo.en = "Unweighted Combo"
-unweighted_combo.ko = "균등 가중치 · 콤보 보너스"
-unweighted_combo.fr = "Non Pondéré · Combo"
 
 [options.show_hitboxes]
 title.en = "Show Hitboxes"
