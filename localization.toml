@@ -22,13 +22,13 @@ miss_and_good.ru = "На Miss и Good"
 title.en = "Slide Alpha"
 title.ko = "롱 노트 불투명도"
 title.fr = "Opacité des Slides"
-title.ru = "Альфа слайда"
+title.ru = "Прозрачность слайда"
 
 [options.guide_alpha]
 title.en = "Guide Alpha"
 title.ko = "가이드 불투명도"
 title.fr = "Opacité des Guides"
-title.ru = "Альфа гайда"
+title.ru = "Прозрачность гайда"
 
 [options.background_alpha]
 title.en = "Background Brightness"
@@ -240,7 +240,7 @@ all.ru = "Всё"
 
 [options.slide_quality]
 title.en = "Slide Quality"
-title.ko = "슬라이드 품질"
+title.ko = "롱 노트 품질"
 title.fr = "Qualité des Slides"
 title.ru = "Качество слайда"
 
@@ -254,7 +254,7 @@ title.ru = "Качество гайда"
 title.en = "Note Margin"
 title.ko = "노트 여백"
 title.fr = "Marge des Notes"
-title.ru = "Допуск ноты"
+title.ru = "Сужение ноты"
 description.en = "Shrinks the drawn width of notes to make adjacent notes easier to read."
 description.ko = "인접한 노트를 쉽게 구분할 수 있도록 표시되는 노트의 너비를 줄입니다."
 description.fr = "Réduit la largeur affichée des notes pour mieux distinguer celles qui sont adjacentes."
@@ -294,7 +294,7 @@ title.ru = "Альтернативный подход изгиба"
 
 [options.disable_timescale]
 title.en = "Disable Timescale"
-title.ko = "시간배율 비활성화"
+title.ko = "시간 배율 비활성화"
 title.fr = "Désactiver l'Échelle de Temps"
 title.ru = "Отключить таймскейл"
 
@@ -402,4 +402,4 @@ title.ru = "Протестировать соотношение сторон"
 description.en = "Draws reference boxes for 21:9, 16:9, and 4:3 screens."
 description.ko = "21:9, 16:9, 4:3 화면의 기준 상자를 표시합니다."
 description.fr = "Affiche des repères pour les écrans 21:9, 16:9 et 4:3."
-description.ru = "Рисует референс 'коробки' для экранов на 21:9, 16:9 и 4:3."
+description.ru = "Рисует референсные 'коробки' для экранов на 21:9, 16:9 и 4:3."
