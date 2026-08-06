@@ -465,7 +465,10 @@ class BaseNote(PlayArchetype):
                 head @= attach_head.tick_head_ref
                 tail @= attach_head.tick_tail_ref
             return (
-                head.index > 0 and time() >= self.input_interval.start and head.get().active_connector_info.is_active
+                head.index > 0
+                and time() >= self.input_interval.start
+                and offset_adjusted_time() >= self.target_time
+                and head.get().active_connector_info.is_active
             ) or (tail.index > 0 and (tail.get().is_despawned or tail.get().pending_despawn))
         return False
 
@@ -721,7 +724,11 @@ class BaseNote(PlayArchetype):
                 if not self.hitbox.bounds.contains_point(touch.position):
                     continue
                 input_manager.disallow_empty(touch)
-                self.complete()
+                if offset_adjusted_time() < self.target_time:
+                    self.best_touch_time = self.target_time
+                    self.best_touch_matches_direction = True
+                else:
+                    self.complete()
                 return
         else:
             has_touch = False
