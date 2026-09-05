@@ -79,6 +79,7 @@ class PreviewDisplayMode(IntEnum):
 
 @localized_options
 class Options:
+    kizu = OptionCategory(title="kizu")
     gameplay = OptionCategory(title=StandardText.GAMEPLAY)
     graphics = OptionCategory(title=StandardText.GRAPHICS)
     ui = OptionCategory(title=StandardText.UI)
@@ -98,6 +99,7 @@ class Options:
     )
     gauge: GaugeMode = select_option(
         name="Gauge",
+        category=kizu,
         standard=True,
         scope="Rush",
         default=GaugeMode.STANDARD,
