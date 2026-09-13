@@ -71,6 +71,7 @@ class PreviewStageTransformChange(PreviewArchetype, BaseEvent):
     rotate: float = imported()
     x_lane_translate: float = imported(name="xLaneTranslate")
     y_lane_translate: float = imported(name="yLaneTranslate")
+    elevation: float = imported()
     anchor: StageTransformAnchor = imported(name="anchor")
     ease: EaseType = imported()
     next_ref: EntityRef[PreviewStageTransformChange] = imported(name="next")

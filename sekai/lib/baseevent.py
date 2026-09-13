@@ -20,7 +20,6 @@ class BaseEvent(_BaseEventBase):
 
 
 def get_event_as[T](ref: EntityRef, archetype: type[T]) -> T:
-    """Typed wrapper around EntityRef.get_as that preserves the archetype's type (including Protocol types)."""
     return cast(T, ref.with_archetype(cast(Any, archetype)).get())
 
 
@@ -38,9 +37,10 @@ def init_event_list[T: BaseEvent](first_ref: EntityRef[T]):  # pyright: ignore[r
         current = current_ref.get()
         current.prev_ref.index = last_refs[0].index
         for j in range(len(last_refs)):
-            if i % (2**j) == 0:
-                get_event_as(last_refs[j], first_ref.archetype()).skip_refs[j].index = current_ref.index
-                last_refs[j].index = current_ref.index
+            if i % (2**j) != 0:
+                break
+            get_event_as(last_refs[j], first_ref.archetype()).skip_refs[j].index = current_ref.index
+            last_refs[j].index = current_ref.index
         current_ref.index = current.next_ref.index
         i += 1
 

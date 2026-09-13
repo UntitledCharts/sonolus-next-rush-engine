@@ -84,7 +84,7 @@ def is_allowed_release(touch: Touch, target_time: float) -> bool:
 class InputManager(PlayArchetype):
     name = archetype_names.INPUT_MANAGER
 
-    @callback(order=-3)
+    @callback(order=-4)
     def update_sequential(self):
         preprocess_touches()
         note.NoteMemory.active_tap_input_notes.clear()

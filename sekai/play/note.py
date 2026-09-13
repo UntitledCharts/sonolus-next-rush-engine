@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import pi
+from math import inf, pi
 from typing import assert_never, cast
 
 from sonolus.script.archetype import (
@@ -35,6 +35,7 @@ from sekai.lib.connector import (
 )
 from sekai.lib.ease import EaseType
 from sekai.lib.layout import (
+    IDENTITY_STAGE_SCREEN_TRANSFORM,
     DynamicLayout,
     FlickDirection,
     Hitbox,
@@ -46,7 +47,6 @@ from sekai.lib.layout import (
     compute_hitbox_at_time,
     compute_stage_transform,
     identity_stage_transform,
-    progress_to,
 )
 from sekai.lib.note import (
     NoteEffectKind,
@@ -62,7 +62,6 @@ from sekai.lib.note import (
     get_note_effect_kind,
     get_note_haptic_feedback,
     get_note_window,
-    get_visual_spawn_time,
     has_release_input,
     has_tap_input,
     hitbox_draw_alpha,
@@ -76,20 +75,30 @@ from sekai.lib.note import (
 from sekai.lib.options import Options
 from sekai.lib.stage import (
     DivisionParity,
+    InputGeometry,
+    InputGeometryContext,
     JudgeLineStyle,
     VisualMask,
+    get_stage_pivot_lane,
     get_stage_props,
+    get_stage_y_offset,
     interpolate_visual_masks,
     masked_note_extents_by_limits,
     resolve_judge_line_style,
 )
 from sekai.lib.timescale import (
-    CompositeTime,
-    group_force_note_speed,
+    TargetPosition,
+    TrajectoryCache,
     group_hide_notes,
-    group_scaled_time,
-    group_time_to_scaled_time,
-    update_timescale_group,
+    locate_target,
+)
+from sekai.lib.timescale_consumer import (
+    note_progress,
+    note_visibility_end,
+    note_visibility_start,
+    note_visual_spawn_time,
+    prepare_note_trajectories,
+    register_note_group_window,
 )
 from sekai.play import input_manager
 from sekai.play.common import PlayLevelMemory
@@ -123,16 +132,23 @@ class BaseNote(PlayArchetype):
     effect_kind: NoteEffectKind = imported(name="effectKind")
 
     kind: NoteKind = entity_data()
-    data_init_done: bool = entity_data()
+    # 0: untouched, 1: initialized for score sorting, 2: stage/timeline geometry ready.
+    data_init_done: int = entity_data()
+    preprocess_done: bool = entity_data()
     rel_lane: float = entity_data()
     target_time: float = entity_data()
-    visual_start_time: float = entity_data()
+    visual_start_time: float = entity_memory()
+    visual_end_time: float = entity_memory()
     start_time: float = entity_data()
-    target_scaled_time: CompositeTime = entity_data()
+    scheduled_spawn_time: float = shared_memory()
+    target_position: TargetPosition = entity_data()
     target_y_offset: float = entity_data()
+
+    trajectory_first: TrajectoryCache = entity_memory()
+    trajectory_second: TrajectoryCache = entity_memory()
     attach_eased_frac: float = entity_data()
 
-    perfect_window_end: float = entity_data()
+    perfect_window_end: float = entity_memory()
     damage_tick_input_start_time: float = entity_data()
 
     # The id of the tap that activated this note, for tap notes and flicks or released the note, for release notes.
@@ -188,45 +204,52 @@ class BaseNote(PlayArchetype):
     def init_data(self):
         if self.data_init_done:
             return
+        self.start_time = inf
 
         self.kind = map_note_kind(cast(NoteKind, self.key))
         self.effect_kind = get_note_effect_kind(self.kind, self.effect_kind)
-
-        self.data_init_done = True
 
         if Options.mirror:
             self.lane *= -1
             self.direction = mirror_flick_direction(self.direction)
 
         self.target_time = beat_to_time(self.beat)
-        window = get_note_window(self.kind, self.active_head_ref.index > 0 or self.is_attached)
-        self.perfect_window_end = window.perfect.end
 
+        if self.next_ref.index > 0:
+            self.next_ref.get().prev_ref = self.ref()
+
+        self.data_init_done = 1
+
+    def init_geometry(self):
+        # Initialization sorts notes before the stage and timescale groups preprocess.
+        # Resolve geometry afterward, including anchors whose own callback runs later.
+        if self.data_init_done == 2:
+            return
+        self.target_position = locate_target(self.timescale_group, self.target_time)
+
+        if self.stage_ref.index > 0:
+            self.rel_lane = self.lane
+            self.lane += get_stage_pivot_lane(self.stage_ref.get(), self.target_time)
+            self.target_y_offset = self._basic_y_offset_at(self.target_time, left_limit=True)
+
+        self.data_init_done = 2
+
+    def preprocess(self):
+        self.start_time = inf
+        self.scheduled_spawn_time = inf
+        self.visual_start_time = inf
+        if DISABLE_NOTES:
+            return
+        self.visual_end_time = self.target_time
+
+        self.perfect_window_end = self.judgment_window.perfect.end
         if self.kind == NoteKind.HIDE_DAMAGE_TICK:
             window_start_beat = damage_tick_input_start_beat(self.beat)
             if self.active_head_ref.index > 0:
                 window_start_beat = max(window_start_beat, self.active_head_ref.get().beat)
             self.damage_tick_input_start_time = beat_to_time(window_start_beat)
 
-        if not self.is_attached:
-            self.target_scaled_time = group_time_to_scaled_time(self.timescale_group, self.target_time)
-            self.visual_start_time = get_visual_spawn_time(self.timescale_group, self.target_scaled_time)
-            self.start_time = min(self.visual_start_time, self.input_interval.start)
-
-        if self.stage_ref.index > 0:
-            stage_props = get_stage_props(self.stage_ref.get(), self.target_time)
-            self.rel_lane = self.lane
-            self.lane += stage_props.pivot_lane
-            self.target_y_offset = self._basic_y_offset_at(self.target_time, left_limit=True)
-
-        if self.next_ref.index > 0:
-            self.next_ref.get().prev_ref = self.ref()
-
-    def preprocess(self):
-        if DISABLE_NOTES:
-            return
-        # self.init_data()
-
+        self.init_geometry()
         self.result.bucket = get_note_bucket(self.kind)
 
         self.best_touch_time = DEFAULT_BEST_TOUCH_TIME
@@ -236,8 +259,8 @@ class BaseNote(PlayArchetype):
         if self.is_attached:
             attach_head = self.attach_head_ref.get()
             attach_tail = self.attach_tail_ref.get()
-            # attach_head.init_data()
-            # attach_tail.init_data()
+            attach_head.init_geometry()
+            attach_tail.init_geometry()
             self.connector_ease = attach_head.connector_ease
             self.attach_eased_frac = get_attach_eased_frac(
                 self.connector_ease, attach_head.target_time, attach_tail.target_time, self.target_time
@@ -254,13 +277,25 @@ class BaseNote(PlayArchetype):
             )
             self.lane = lane
             self.size = size
-            self.visual_start_time = min(attach_head.visual_start_time, attach_tail.visual_start_time)
-            self.start_time = min(self.visual_start_time, self.input_interval.start)
             self.target_y_offset = lerp(
                 attach_head._basic_y_offset_at(self.target_time, left_limit=True),
                 attach_tail._basic_y_offset_at(self.target_time, left_limit=True),
                 get_attach_frac(attach_head.target_time, attach_tail.target_time, self.target_time),
             )
+
+        end_time = max(self.target_time, self.input_interval.end) if self.is_scored else self.target_time
+        if not self.is_scored:
+            self.visual_end_time = min(self.target_time, note_visibility_end(self))
+            end_time = self.visual_end_time
+        self.visual_start_time = note_visibility_start(self, note_visual_spawn_time(self, end_time))
+        if not self.is_scored and self.visual_start_time >= self.visual_end_time:
+            self.visual_start_time = inf
+        start_time = (
+            min(self.visual_start_time, self.input_interval.start) if self.is_scored else self.visual_start_time
+        )
+        if self.is_scored and Options.allow_debug_options_in_play_mode and Options.show_hitboxes:
+            hitbox_start = hitbox_draw_start(self.kind, self.unadjusted_input_interval.start, self.target_time)
+            start_time = min(start_time, hitbox_start + input_offset())
 
         if self.is_scored:
             schedule_note_auto_sfx(self.effect_kind, self.target_time)
@@ -271,11 +306,17 @@ class BaseNote(PlayArchetype):
                 get_leniency(self.kind),
                 self.target_time,
                 self.target_y_offset,
-                stage_transform=self.stage_transform_at(self.target_time, left_limit=True).transform(),
+                stage_transform=self.stage_transform_at(self.target_time, left_limit=True).to_screen_transform(),
                 left_limit=True,
             )
 
-        self.extend_stage_windows(self.start_time - 1.0, max(self.target_time, self.input_interval.end) + 1.0)
+        if start_time < inf:
+            self.extend_stage_windows(start_time - 1.0, end_time + 1.0)
+        if self.kind != NoteKind.ANCHOR:
+            register_note_group_window(self, start_time, end_time)
+        self.start_time = start_time
+        self.scheduled_spawn_time = start_time
+        self.preprocess_done = True
 
     def _basic_extend_stage_window(self, start_time: float, end_time: float):
         if self.stage_ref.index > 0:
@@ -292,12 +333,12 @@ class BaseNote(PlayArchetype):
     def spawn_order(self) -> float:
         if DISABLE_NOTES or self.kind == NoteKind.ANCHOR:
             return 1e8
-        return self.start_time
+        return self.scheduled_spawn_time
 
     def should_spawn(self) -> bool:
         if DISABLE_NOTES or self.kind == NoteKind.ANCHOR:
             return False
-        return time() >= self.start_time
+        return time() >= self.scheduled_spawn_time
 
     @property
     def calc_time(self) -> float:
@@ -308,8 +349,6 @@ class BaseNote(PlayArchetype):
             return
         if self.pending_despawn:
             return
-
-        update_timescale_group(self.timescale_group)
 
         if self.pending_post_judge:
             self.pending_post_judge = False
@@ -422,8 +461,11 @@ class BaseNote(PlayArchetype):
         if self.pending_despawn:
             self.managing_despawn = True
             return
-        if not self.is_scored and time() >= self.target_time:
+        if not self.is_scored and time() >= self.visual_end_time:
             self.despawn = True
+            return
+        if self.is_scored and time() > self.input_interval.end:
+            self.handle_late_miss()
             return
         self.draw_hitbox()
         if time() < self.visual_start_time:
@@ -440,26 +482,38 @@ class BaseNote(PlayArchetype):
             return
         if Options.disable_fake_notes and not self.is_scored:
             return
-        if self.kind == NoteKind.HIDE_TICK:
+        note_alpha = self.visual_note_alpha
+        if self.kind == NoteKind.HIDE_TICK or note_alpha <= 0:
             return
         render_lane, render_size = self.visual_extents
         if render_size <= 0:
             return
-        stage_transform = +StageTransform
+        prepare_note_trajectories(self, self.trajectory_first, self.trajectory_second, time())
+        visual_progress = self.visual_progress
+        if not DynamicLayout.progress_start <= visual_progress <= DynamicLayout.progress_cutoff:
+            return
         if self.has_stage_transform():
-            stage_transform @= self.visual_stage_transform()
+            draw_note(
+                self.kind,
+                render_lane,
+                render_size,
+                visual_progress,
+                self.direction,
+                self.target_time,
+                transform=self.visual_stage_transform().to_screen_transform(),
+                note_alpha=note_alpha,
+            )
         else:
-            stage_transform @= identity_stage_transform()
-        draw_note(
-            self.kind,
-            render_lane,
-            render_size,
-            self.visual_progress,
-            self.direction,
-            self.target_time,
-            transform=stage_transform.transform(),
-            note_alpha=self.visual_note_alpha,
-        )
+            draw_note(
+                self.kind,
+                render_lane,
+                render_size,
+                visual_progress,
+                self.direction,
+                self.target_time,
+                transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
+                note_alpha=note_alpha,
+            )
 
     def draw_hitbox(self):
         if not Options.allow_debug_options_in_play_mode or not Options.show_hitboxes or not self.is_scored:
@@ -608,7 +662,7 @@ class BaseNote(PlayArchetype):
                 slot_effect_group_id=self.index,
                 single_line=self.visual_single_line,
                 lane_particles=self.visual_lane_particles,
-                transform=self.visual_stage_transform().transform(),
+                transform=self.visual_stage_transform().to_screen_transform(),
             )
         if self.is_scored:
             self.result.haptic = get_note_haptic_feedback(self.kind, self.result.judgment)
@@ -730,8 +784,10 @@ class BaseNote(PlayArchetype):
                 else:
                     self.judge(offset_adjusted_time())
                 return
-
-        # Either pre-target, or post-target within perfect window with wrong direction
+            elif offset_adjusted_time() > self.target_time + self.judgment_window.perfect.end:
+                self.judge_wrong_way(offset_adjusted_time())
+                return
+        # The touch is either before the target time or has the wrong direction within the perfect window.
         current_abs_error = abs(self.best_touch_time - self.target_time)
         if not self.best_touch_matches_direction:
             current_abs_error = max(current_abs_error, self.perfect_window_end)
@@ -1013,50 +1069,49 @@ class BaseNote(PlayArchetype):
 
     @property
     def progress(self) -> float:
-        if self.is_attached:
-            current_time = time()
-            attach_head = self.attach_head_ref.get()
-            attach_tail = self.attach_tail_ref.get()
-            head_progress = (
-                progress_to(
-                    attach_head.target_scaled_time,
-                    group_scaled_time(attach_head.timescale_group),
-                    group_force_note_speed(attach_head.timescale_group),
-                )
-                if current_time < attach_head.target_time
-                else 1.0
-            )
-            tail_progress = progress_to(
-                attach_tail.target_scaled_time,
-                group_scaled_time(attach_tail.timescale_group),
-                group_force_note_speed(attach_tail.timescale_group),
-            )
-            head_frac = (
-                0.0
-                if current_time < attach_head.target_time
-                else get_attach_frac(attach_head.target_time, attach_tail.target_time, current_time)
-            )
-            tail_frac = 1.0
-            frac = get_attach_frac(attach_head.target_time, attach_tail.target_time, self.target_time)
-            return lerp(head_progress, tail_progress, get_attach_frac(head_frac, tail_frac, frac))
-        else:
-            return progress_to(
-                self.target_scaled_time,
-                group_scaled_time(self.timescale_group),
-                group_force_note_speed(self.timescale_group),
-            )
+        return note_progress(self, self.trajectory_first, self.trajectory_second, time())
 
     @property
     def visual_progress(self) -> float:
         return self.progress - self.visual_y_offset
 
+    def _basic_input_geometry(self, context: InputGeometryContext) -> InputGeometry:
+        result = +InputGeometry
+        if self.stage_ref.index > 0:
+            result @= context.stage_geometry(self.stage_ref.get())
+            result.lane += self.rel_lane
+        else:
+            result.lane = self.lane
+            result.transform @= identity_stage_transform()
+        return result
+
+    def input_geometry(self, context: InputGeometryContext) -> InputGeometry:
+        result = +InputGeometry
+        if self.is_attached:
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            head_geometry = head._basic_input_geometry(context)
+            tail_geometry = tail._basic_input_geometry(context)
+            result.lane = lerp(head_geometry.lane, tail_geometry.lane, self.attach_eased_frac)
+            result.mask @= interpolate_visual_masks(head_geometry.mask, tail_geometry.mask, self.attach_eased_frac)
+            result.y_offset = lerp(
+                head_geometry.y_offset,
+                tail_geometry.y_offset,
+                get_attach_frac(head.target_time, tail.target_time, self.target_time),
+            )
+            result.transform @= blend_stage_transform(
+                head_geometry.transform,
+                tail_geometry.transform,
+                get_attach_eased_frac(self.connector_ease, head.target_time, tail.target_time, self.target_time),
+            )
+        else:
+            result @= self._basic_input_geometry(context)
+        return result
+
     def _basic_visual_lane_at(self, t: float) -> float:
         if self.stage_ref.index <= 0:
             return self.lane
-        stage = self.stage_ref.get()
-        if t == time():
-            return stage.props.pivot_lane + self.rel_lane
-        return get_stage_props(stage, t).pivot_lane + self.rel_lane
+        return get_stage_pivot_lane(self.stage_ref.get(), t) + self.rel_lane
 
     def visual_lane_at(self, t: float) -> float:
         if self.is_attached:
@@ -1066,8 +1121,20 @@ class BaseNote(PlayArchetype):
         return self._basic_visual_lane_at(t)
 
     @property
+    def _basic_visual_lane(self) -> float:
+        if self.stage_ref.index <= 0:
+            return self.lane
+        return self.stage_ref.get().props.pivot_lane + self.rel_lane
+
+    @property
     def visual_lane(self) -> float:
-        return self.visual_lane_at(time())
+        if self.is_attached:
+            return lerp(
+                self.attach_head_ref.get()._basic_visual_lane,
+                self.attach_tail_ref.get()._basic_visual_lane,
+                self.attach_eased_frac,
+            )
+        return self._basic_visual_lane
 
     @property
     def _basic_visual_mask(self) -> VisualMask:
@@ -1167,7 +1234,7 @@ class BaseNote(PlayArchetype):
     def _basic_y_offset_at(self, t: float, left_limit: bool = False) -> float:
         if self.stage_ref.index <= 0:
             return 0.0
-        return get_stage_props(self.stage_ref.get(), t, left_limit=left_limit).y_offset
+        return get_stage_y_offset(self.stage_ref.get(), t, left_limit=left_limit)
 
     def y_offset_at(self, t: float, left_limit: bool = False) -> float:
         if self.is_attached:
@@ -1242,6 +1309,7 @@ class BaseNote(PlayArchetype):
                 props.y_lane_translate,
                 props.lane,
                 props.center_weight,
+                props.elevation,
             )
         else:
             result @= identity_stage_transform()
@@ -1336,11 +1404,15 @@ def compute_slide_input_bounds(ease_type: EaseType, head: BaseNote, tail: BaseNo
         tail.tail_ease_frac,
         t,
     )
-    input_lane = lerp(head.visual_lane_at(t), tail.visual_lane_at(t), input_interp_frac)
+    # Account for input offset by querying camera and stage geometry at the input timestamp.
+    context = InputGeometryContext.at(t)
+    head_geometry = head.input_geometry(context)
+    tail_geometry = tail.input_geometry(context)
+    input_lane = lerp(head_geometry.lane, tail_geometry.lane, input_interp_frac)
     input_size = lerp(head.size, tail.size, input_interp_frac)
     input_mask = interpolate_visual_masks(
-        head.visual_mask_at(t, left_limit=True),
-        tail.visual_mask_at(t, left_limit=True),
+        head_geometry.mask,
+        tail_geometry.mask,
         input_interp_frac,
     )
     input_lane, input_size = masked_note_extents_by_limits(
@@ -1351,25 +1423,22 @@ def compute_slide_input_bounds(ease_type: EaseType, head: BaseNote, tail: BaseNo
         input_mask.enabled,
     )
     input_y_offset = lerp(
-        head.y_offset_at(t, left_limit=True),
-        tail.y_offset_at(t, left_limit=True),
+        head_geometry.y_offset,
+        tail_geometry.y_offset,
         input_frac,
     )
-    # Input arrives one input offset late, so the whole view state (stage transforms and layout)
-    # is queried at t, looking back by the offset rather than using the current frame. Use the
-    # left limit consistently with fixed-note judgment geometry at an event on the same timestamp.
     input_transform = blend_stage_transform(
-        head.stage_transform_at(t, left_limit=True),
-        tail.stage_transform_at(t, left_limit=True),
+        head_geometry.transform,
+        tail_geometry.transform,
         input_interp_frac,
     )
     return compute_hitbox(
-        camera_layout_transform_at_time(t, left_limit=True),
+        context.layout,
         input_lane,
         input_size,
         leniency,
         input_y_offset,
-        stage_transform=input_transform.transform(),
+        stage_transform=input_transform.to_screen_transform(),
     ).bounds
 
 
@@ -1631,5 +1700,5 @@ NOTE_ARCHETYPES = (
 
 
 def derive_note_archetypes[T: type[AnyArchetype]](base: T) -> tuple[T, ...]:
-    """Helper function to derive all note archetypes from a given base archetype for used in watch and preview."""
+    """Derive note archetypes from the given base for Watch or Preview."""
     return tuple(base.derive(str(a.name), is_scored=a.is_scored, key=a.key) for a in NOTE_ARCHETYPES)

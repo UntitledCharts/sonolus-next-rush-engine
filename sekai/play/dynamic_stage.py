@@ -11,7 +11,7 @@ from sonolus.script.archetype import (
     imported,
     shared_memory,
 )
-from sonolus.script.interval import clamp
+from sonolus.script.interval import Interval, clamp
 from sonolus.script.runtime import time
 from sonolus.script.timing import beat_to_bpm, beat_to_time
 
@@ -42,6 +42,8 @@ from sekai.lib.stage import (
     get_stage_props,
     get_start_time,
     play_lane_hit_effects,
+    stage_note_visibility_end,
+    stage_y_offset_bounds,
 )
 from sekai.play import input_manager
 from sekai.play.common import PlayLevelMemory
@@ -66,7 +68,7 @@ class CameraChange(PlayArchetype, BaseEvent):
 
     time: float = entity_data()
 
-    @callback(order=-2)
+    @callback(order=-4)
     def preprocess(self):
         LevelConfig.dynamic_stages = True
         self.time = beat_to_time(self.beat)
@@ -93,13 +95,14 @@ class StageTransformChange(PlayArchetype, BaseEvent):
     rotate: float = imported()
     x_lane_translate: float = imported(name="xLaneTranslate")
     y_lane_translate: float = imported(name="yLaneTranslate")
+    elevation: float = imported()
     anchor: StageTransformAnchor = imported(name="anchor")
     ease: EaseType = imported()
     next_ref: EntityRef[StageTransformChange] = imported(name="next")
 
     time: float = entity_data()
 
-    @callback(order=-3)
+    @callback(order=-4)
     def preprocess(self):
         LevelConfig.dynamic_stages = True
         LevelConfig.has_stage_transforms = True
@@ -130,6 +133,8 @@ class DynamicStage(PlayArchetype):
     end_time: float = entity_data()
     draw_start_time: float = entity_data()
     draw_end_time: float = entity_data()
+    y_offset_bounds: Interval = entity_data()
+    note_visibility_end: float = entity_data()
 
     props: StageProps = shared_memory()
 
@@ -141,6 +146,13 @@ class DynamicStage(PlayArchetype):
         init_event_list(self.first_pivot_change_ref)
         init_event_list(self.first_style_change_ref)
         init_event_list(self.first_transform_change_ref)
+        pivot_ref = +self.first_pivot_change_ref
+        while pivot_ref.index > 0:
+            pivot = pivot_ref.get()
+            pivot.y_offset = pivot.abs_y_offset + pivot.y_beat_offset * 60 / beat_to_bpm(pivot.beat) / preempt_time()
+            pivot_ref.index = pivot.next_ref.index
+        self.y_offset_bounds = stage_y_offset_bounds(self)
+        self.note_visibility_end = stage_note_visibility_end(self)
         self.start_time = get_start_time(self)
         self.end_time = get_end_time(self)
         self.draw_start_time = get_draw_start_time(self)
@@ -152,7 +164,7 @@ class DynamicStage(PlayArchetype):
     def should_spawn(self) -> bool:
         return time() >= self.start_time
 
-    @callback(order=-1)
+    @callback(order=-2)
     def update_sequential(self):
         self.props @= get_stage_props(self)
         if time() >= self.end_time:
@@ -169,7 +181,7 @@ class DynamicStage(PlayArchetype):
                 stage_transform @= self.props.stage_transform()
             else:
                 stage_transform @= identity_stage_transform()
-            transform = stage_transform.transform()
+            transform = stage_transform.to_screen_transform()
 
             if l < Fever.min_l:
                 Fever.min_l = l
@@ -215,8 +227,8 @@ class DynamicStage(PlayArchetype):
             transform @= p.stage_transform()
         else:
             transform @= identity_stage_transform()
-        transform_mat = transform.transform()
-        total_hitbox = transform_mat.transform_quad(layout_lane_area(leftmost - 1.5, rightmost + 1.5))
+        screen_transform = transform.to_screen_transform()
+        total_hitbox = screen_transform.transform_quad(layout_lane_area(leftmost - 1.5, rightmost + 1.5))
         empty_lanes = StageMemory.empty_lanes
         empty_triggered = False
         for touch in input_manager.processed_touches():
@@ -224,7 +236,7 @@ class DynamicStage(PlayArchetype):
                 continue
             if not input_manager.is_allowed_empty(touch):
                 continue
-            lane = touch_to_lane(touch.position, transform_mat)
+            lane = touch_to_lane(touch.position, screen_transform)
             rel = lane - p.pivot_lane
             if half_offset:
                 rounded_lane = clamp(p.pivot_lane + round(rel), lo, hi)
@@ -232,13 +244,14 @@ class DynamicStage(PlayArchetype):
                 rounded_lane = clamp(p.pivot_lane + round(rel - 0.5) + 0.5, lo, hi)
             if touch.started:
                 play_lane_hit_effects(
-                    rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6, transform=transform_mat
+                    rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6, transform=screen_transform
                 )
                 empty_triggered = True
                 if not empty_lanes.is_full():
                     empty_lanes.append(rounded_lane)
+                    StageMemory.empty_lane_stages.append(self.index)
             else:
-                prev_lane = touch_to_lane(touch.prev_position, transform_mat)
+                prev_lane = touch_to_lane(touch.prev_position, screen_transform)
                 prev_rel = prev_lane - p.pivot_lane
                 if half_offset:
                     prev_rounded_lane = clamp(p.pivot_lane + round(prev_rel), lo, hi)
@@ -246,11 +259,12 @@ class DynamicStage(PlayArchetype):
                     prev_rounded_lane = clamp(p.pivot_lane + round(prev_rel - 0.5) + 0.5, lo, hi)
                 if rounded_lane != prev_rounded_lane:
                     play_lane_hit_effects(
-                        rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6, transform=transform_mat
+                        rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6, transform=screen_transform
                     )
                     empty_triggered = True
                     if not empty_lanes.is_full():
                         empty_lanes.append(rounded_lane)
+                        StageMemory.empty_lane_stages.append(self.index)
         if empty_triggered:
             input_manager.release_all_empty_disallows()
 
@@ -258,7 +272,7 @@ class DynamicStage(PlayArchetype):
         t = time()
         if t < self.draw_start_time or t > self.draw_end_time:
             return
-        self.props.draw()
+        self.props.draw(self.index)
         if SkillActive.judgment:
             elapsed = t - SkillActive.start_time
             if elapsed < SkillActive.duration:
@@ -276,7 +290,7 @@ class DynamicStage(PlayArchetype):
                     self.props.judge_line_alpha,
                     self.props.y_offset,
                     duration=SkillActive.duration,
-                    transform=stage_transform.transform(),
+                    transform=stage_transform.to_screen_transform(),
                 )
 
 
@@ -293,7 +307,7 @@ class StageMaskChange(PlayArchetype, BaseEvent):
 
     time: float = entity_data()
 
-    @callback(order=-3)
+    @callback(order=-4)
     def preprocess(self):
         LevelConfig.dynamic_stages = True
         self.time = beat_to_time(self.beat)
@@ -323,11 +337,10 @@ class StagePivotChange(PlayArchetype, BaseEvent):
     y_offset: float = entity_data()
     time: float = entity_data()
 
-    @callback(order=-3)
+    @callback(order=-4)
     def preprocess(self):
         LevelConfig.dynamic_stages = True
         self.time = beat_to_time(self.beat)
-        self.y_offset = self.abs_y_offset + self.y_beat_offset * 60 / beat_to_bpm(self.beat) / preempt_time()
         if Options.mirror:
             self.lane *= -1
 
@@ -358,7 +371,7 @@ class StageStyleChange(PlayArchetype, BaseEvent):
 
     time: float = shared_memory()
 
-    @callback(order=-3)
+    @callback(order=-4)
     def preprocess(self):
         LevelConfig.dynamic_stages = True
         self.time = beat_to_time(self.beat)

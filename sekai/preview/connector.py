@@ -130,6 +130,8 @@ def draw_connector(
 
     if ease_type == EaseType.NONE:
         tail_size = head_size
+    if head_size <= 0 and tail_size <= 0:
+        return
 
     normal_sprite = Sprite(-1)
     match kind:
@@ -204,8 +206,8 @@ def draw_connector(
     head = head_ref.get()
     tail = tail_ref.get()
 
-    # The note at the head uses the left limit, but the connector occupies the interval after it.
-    # Start from the right limit so a style change at the head is not smeared across the first slice.
+    # The head note uses the stage settings just before its target time. The connector starts just after it,
+    # so use the new settings immediately instead of blending them across the first slice.
     last_sample = connector_sample_at(
         head,
         tail,
@@ -226,7 +228,7 @@ def draw_connector(
     for i in range(1, segment_count + 1):
         interval_end_time = lerp(head_target_time, tail_target_time, i / segment_count)
         while last_target_time < interval_end_time:
-            # End a slice on the left side of every stage event, then restart at the same time on its right side.
+            # Split at each stage event so each slice uses the settings on its own side of the event.
             next_event_time = min(
                 head.next_visual_mask_event_time(last_target_time),
                 tail.next_visual_mask_event_time(last_target_time),
@@ -406,8 +408,8 @@ def draw_masked_preview_connector_sample_span(
     end_axis: float,
     alpha: float,
 ):
-    # Split wherever a raw connector edge crosses a moving mask edge. This preserves a visible interior even when
-    # both ends of the original sample are fully outside opposite sides of the mask.
+    # Split at each crossing between a connector edge and a mask edge. A connector can cross the visible area
+    # even when both ends of the sample are outside the mask.
     split_fracs = VarArray[float, Dim[5]].new()
     split_fracs.append(1.0)
     append_connector_mask_crossing(

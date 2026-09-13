@@ -5,7 +5,7 @@ from sonolus.script.bucket import Judgment
 from sonolus.script.runtime import is_skip
 
 from sekai.lib import archetype_names
-from sekai.lib.layout import AffineTransform2d, FlickDirection
+from sekai.lib.layout import FlickDirection, StageScreenTransform
 from sekai.lib.note import NoteEffectKind, NoteKind, handle_note_particles
 from sekai.lib.particle_manager import clear_particles
 
@@ -24,7 +24,8 @@ class ParticleManager(WatchArchetype):
     half_offset: bool = entity_memory()
     target_time: float = entity_memory()
     group_id: float = entity_memory()
-    transform: AffineTransform2d = entity_memory()
+    lane_particles: bool = entity_memory()
+    transform: StageScreenTransform = entity_memory()
     check: bool = entity_memory()
 
     def spawn_time(self) -> float:
@@ -48,6 +49,7 @@ class ParticleManager(WatchArchetype):
             pivot_lane=self.pivot_lane,
             half_offset=self.half_offset,
             group_id=self.group_id,
+            lane_particles=self.lane_particles,
             transform=self.transform,
         )
         if is_skip():

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from math import inf
 from typing import assert_never
 
 from sonolus.script.archetype import EntityRef, PlayArchetype, callback, entity_data, entity_memory, imported
@@ -27,6 +28,7 @@ from sekai.lib.connector import (
     destroy_looped_sfx,
     draw_connector,
     draw_connector_slot_glow_effect,
+    get_connector_alpha_option,
     get_connector_fractions,
     get_connector_input_leniency,
     get_connector_interp_frac,
@@ -42,23 +44,29 @@ from sekai.lib.connector import (
 )
 from sekai.lib.ease import EaseType, safe_unlerp_clamped
 from sekai.lib.layout import StageTransform, blend_stage_transform
-from sekai.lib.note import draw_connector_hitbox_overlay, draw_slide_note_head, get_attach_params
+from sekai.lib.note import NoteKind, draw_connector_hitbox_overlay, draw_slide_note_head, get_attach_params
 from sekai.lib.options import Options
 from sekai.lib.stage import VisualMask, get_stage_props, masked_note_extents_by_limits
 from sekai.lib.streams import Streams
 from sekai.lib.timescale import (
+    MIN_START_TIME,
+    TrajectoryCache,
     group_hide_notes,
-    group_scaled_time_to_first_time,
-    group_time_to_scaled_time,
-    update_timescale_group,
+    group_visibility_end,
+    register_group_window,
+)
+from sekai.lib.timescale_consumer import (
+    extend_note_chain_stage_windows,
+    legacy_connector_spawn_time,
+    note_stage_visibility_end,
+    note_visual_progress,
+    prepare_note_trajectories,
+    register_note_group_window,
+    segment_visual_spawn_time,
 )
 from sekai.play import input_manager, note
 
 START_LENIENCY_BEATS = 0.5
-
-
-def legacy_note_duration() -> float:
-    return lerp(0.35, 4, safe_unlerp_clamped(12, 1, Options.note_speed) ** 1.31)
 
 
 class Connector(PlayArchetype):
@@ -74,9 +82,16 @@ class Connector(PlayArchetype):
 
     kind: ConnectorKind = entity_data()
     ease_type: EaseType = entity_data()
+    shared_stage_transform: bool = entity_data()
     start_time: float = entity_data()
+    scheduled_spawn_time: float = entity_data()
     end_time: float = entity_data()
     visual_active_interval: Interval = entity_data()
+
+    head_trajectory_first: TrajectoryCache = entity_memory()
+    head_trajectory_second: TrajectoryCache = entity_memory()
+    tail_trajectory_first: TrajectoryCache = entity_memory()
+    tail_trajectory_second: TrajectoryCache = entity_memory()
     input_active_interval: Interval = entity_data()
 
     last_visual_state: ConnectorVisualState = entity_memory()
@@ -88,38 +103,34 @@ class Connector(PlayArchetype):
     sfx_act_next: EntityRef[Connector] = entity_data()
     sfx_deact_next: EntityRef[Connector] = entity_data()
 
-    @callback(order=1)  # After note preprocessing is done
+    @callback(order=1)
     def preprocess(self):
+        self.start_time = inf
+        self.scheduled_spawn_time = inf
         if DISABLE_NOTES:
             return
         head = self.head
         tail = self.tail
+        if not head.preprocess_done or not tail.preprocess_done:
+            return
+        if not self.segment_head.preprocess_done or not self.segment_tail.preprocess_done:
+            return
+        if self.active_head_ref.index > 0 and not self.active_head.preprocess_done:
+            return
+        if self.active_tail_ref.index > 0 and not self.active_tail.preprocess_done:
+            return
+        self.shared_stage_transform = (
+            not head.is_attached and not tail.is_attached and head.stage_ref.index == tail.stage_ref.index
+        )
         self.kind = self.segment_head.segment_kind
         self.ease_type = head.connector_ease
         self.visual_active_interval.start = min(head.target_time, tail.target_time)
         self.visual_active_interval.end = max(head.target_time, tail.target_time)
         if self.legacy_hidden_pop:
-            head_scaled_time = group_time_to_scaled_time(
-                self.segment_head.timescale_group,
-                self.segment_head.target_time,
-            ).total
-            self.visual_active_interval.start = group_scaled_time_to_first_time(
-                self.segment_head.timescale_group,
-                head_scaled_time - legacy_note_duration(),
-            )
+            self.visual_active_interval.start = legacy_connector_spawn_time(self.segment_head)
             self.visual_active_interval.end = tail.target_time
         self.input_active_interval = self.visual_active_interval + input_offset()
-        if self.legacy_hidden_pop:
-            self.start_time = self.visual_active_interval.start
-            self.end_time = self.visual_active_interval.end
-        else:
-            self.start_time = min(
-                self.visual_active_interval.start,
-                self.input_active_interval.start,
-                head.start_time,
-                tail.start_time,
-            )
-            self.end_time = max(self.visual_active_interval.end, self.input_active_interval.end)
+        self.end_time = max(self.visual_active_interval.end, self.input_active_interval.end)
         if self.segment_head.segment_through_judge_line:
             self.end_time += CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY
         self.last_visual_state = ConnectorVisualState.WAITING
@@ -129,36 +140,65 @@ class Connector(PlayArchetype):
         if self.active_tail_ref.index > 0:
             head.tick_tail_ref = self.active_tail_ref
 
-        head.extend_stage_windows(self.start_time - 1.0, self.end_time + 1.0)
-        tail.extend_stage_windows(self.start_time - 1.0, self.end_time + 1.0)
+        visibility_end = inf
+        # Active sections must keep recording replay state after the connector body is hidden.
+        # Input offsets and replay options can make those later states visible.
+        if self.active_head_ref.index <= 0:
+            visibility_end = min(
+                group_visibility_end(self.segment_head.timescale_group),
+                max(note_stage_visibility_end(head), note_stage_visibility_end(tail)),
+            )
+        self.end_time = min(self.end_time, visibility_end)
+        if visibility_end <= MIN_START_TIME:
+            return
+        start_time = min(
+            self.visual_active_interval.start,
+            self.input_active_interval.start,
+            head.start_time,
+            tail.start_time,
+            segment_visual_spawn_time(head, tail, min(self.visual_active_interval.end, visibility_end)),
+        )
+        if self.legacy_hidden_pop:
+            start_time = self.visual_active_interval.start
+        if start_time >= visibility_end:
+            return
+
+        head.extend_stage_windows(start_time - 1.0, self.end_time + 1.0)
+        tail.extend_stage_windows(start_time - 1.0, self.end_time + 1.0)
+        if self.head_ref.index == self.active_head_ref.index:
+            extend_note_chain_stage_windows(
+                self.active_head, self.active_head.target_time, self.active_tail.target_time
+            )
+
+        register_note_group_window(head, start_time, self.end_time)
+        register_note_group_window(tail, start_time, self.end_time)
+        register_group_window(self.segment_head.timescale_group, start_time, self.end_time)
+        self.start_time = start_time
+        self.scheduled_spawn_time = start_time
 
     def initialize(self):
         if self.head_ref.index == self.active_head_ref.index:
-            # This is the first connector, so it's in charge of spawning the SlideManager.
             SlideManager.spawn(active_head_ref=self.active_head_ref, active_tail_ref=self.active_tail_ref)
         Streams.connector_visual_states[self.index][-2] = ConnectorVisualState.WAITING
 
     def spawn_order(self) -> float:
         if DISABLE_NOTES:
             return 1e8
-        return self.start_time
+        return self.scheduled_spawn_time
 
     def should_spawn(self) -> bool:
         if DISABLE_NOTES:
             return False
-        return time() >= self.start_time
+        return time() >= self.scheduled_spawn_time
 
     @callback(order=-1)
     def update_sequential(self):
         current_time = time()
-
-        if current_time >= self.end_time:
+        if time() < self.start_time:
+            return
+        if time() >= self.end_time:
             self.despawn = True
             return
-
-        update_timescale_group(self.head.timescale_group)
-        update_timescale_group(self.tail.timescale_group)
-        update_timescale_group(self.segment_head.timescale_group)
 
         if self.active_head_ref.index > 0:
             tail_processed = self.active_tail_ref.index > 0 and self.active_tail.is_despawned
@@ -190,17 +230,9 @@ class Connector(PlayArchetype):
                             self.can_consume_empty = True
                         else:
                             self.delay = True
-            if current_time in self.visual_active_interval:
-                visual_lane, visual_size = self.current_visual_head_extents(current_time)
-                head = self.head
-                tail = self.tail
-                self.active_connector_info.visual_lane = visual_lane
-                self.active_connector_info.visual_size = visual_size
-                self.active_connector_info.visual_y_offset = lerp(
-                    head.visual_y_offset,
-                    tail.visual_y_offset,
-                    safe_unlerp_clamped(head.target_time, tail.target_time, current_time),
-                )
+            if time() in self.visual_active_interval:
+                self.active_connector_info.visual_connector_index = self.index + 1
+                self.active_connector_info.visual_update_time = time()
                 self.active_connector_info.connector_kind = self.kind
             if group_hide_notes(self.segment_head.timescale_group) and self.active_head_ref.index > 0:
                 self.active_connector_info.connector_kind = ConnectorKind.NONE
@@ -227,6 +259,10 @@ class Connector(PlayArchetype):
                     self.can_consume_empty = False
 
     def update_parallel(self):
+        if time() < self.start_time:
+            return
+        if self.despawn:
+            return
         self.draw_hitbox()
         current_time = time()
         adj_time = offset_adjusted_time()
@@ -239,7 +275,7 @@ class Connector(PlayArchetype):
             if self.active_head_ref.index > 0:
                 active_head = self.active_head
                 if self.kind == ConnectorKind.DAMAGE:
-                    # No 'leniency' to be active at the start
+                    # Damage connectors do not get the initial grace period for staying active.
                     if self.active_connector_info.is_active:
                         visual_state = ConnectorVisualState.ACTIVE
                     else:
@@ -261,25 +297,42 @@ class Connector(PlayArchetype):
                 Streams.connector_visual_states[self.index][adj_time] = visual_state
             if group_hide_notes(segment_head.timescale_group):
                 return
-            if self.active_tail_ref.index > 0 and self.active_tail.is_despawned:
-                self.despawn = True
+            if self.active_tail_ref.index > 0:
+                active_tail = self.active_tail
+                # A hidden fake tail can despawn while its connector is still visible.
+                if (active_tail.is_scored and active_tail.is_despawned) or (
+                    not active_tail.is_scored
+                    and active_tail.kind != NoteKind.ANCHOR
+                    and time() >= active_tail.target_time
+                ):
+                    return
+            if get_connector_alpha_option(self.kind) <= 0:
                 return
+            head_note_alpha = head.visual_note_alpha
+            tail_note_alpha = tail.visual_note_alpha
+            if head_note_alpha <= 0 and tail_note_alpha <= 0:
+                return
+            prepare_note_trajectories(tail, self.tail_trajectory_first, self.tail_trajectory_second, time())
             head_transform = +StageTransform
             tail_transform = +StageTransform
             tail_transform @= tail.visual_stage_transform()
+            shared_stage_transform = self.shared_stage_transform
+            if shared_stage_transform:
+                head_transform @= tail_transform
+            else:
+                head_transform @= head.visual_stage_transform()
             head_mask = +VisualMask
             head_mask @= head.visual_mask
             tail_mask = tail.visual_mask
             if current_time >= head.target_time and not segment_head.segment_through_judge_line:
                 head_frac = safe_unlerp_clamped(head.target_time, tail.target_time, current_time)
                 head_visual_progress = 1.0 - lerp(head.visual_y_offset, tail.visual_y_offset, head_frac)
-                head_target_time = current_time
-                head_note_alpha = lerp(head.visual_note_alpha, tail.visual_note_alpha, head_frac)
+                head_target_time = time()
+                head_note_alpha = lerp(head_note_alpha, tail_note_alpha, head_frac)
                 if self.ease_type == EaseType.NONE:
                     head_lane = head.visual_lane
                     head_size = head.size
                     head_ease_frac = head.head_ease_frac
-                    head_transform @= head.visual_stage_transform()
                 else:
                     head_ease_frac = lerp(head.head_ease_frac, tail.tail_ease_frac, head_frac)
                     head_interp_frac = get_connector_interp_frac(
@@ -294,18 +347,18 @@ class Connector(PlayArchetype):
                     if head_mask.enabled and tail_mask.enabled:
                         head_mask.left = lerp(head_mask.left, tail_mask.left, head_interp_frac)
                         head_mask.right = lerp(head_mask.right, tail_mask.right, head_interp_frac)
-                    # Head has crossed the judge line, so its transform is the connector's blend at that point.
-                    head_transform @= blend_stage_transform(
-                        head.visual_stage_transform(), tail.visual_stage_transform(), head_interp_frac
-                    )
+                    # The head has passed the judge line. Blend distinct endpoint transforms at its current position.
+                    if not shared_stage_transform:
+                        head_transform @= blend_stage_transform(head_transform, tail_transform, head_interp_frac)
             else:
+                prepare_note_trajectories(head, self.head_trajectory_first, self.head_trajectory_second, time())
                 head_lane = head.visual_lane
                 head_size = head.size
-                head_visual_progress = head.visual_progress
+                head_visual_progress = note_visual_progress(
+                    head, self.head_trajectory_first, self.head_trajectory_second, time()
+                )
                 head_target_time = head.target_time
                 head_ease_frac = head.head_ease_frac
-                head_note_alpha = head.visual_note_alpha
-                head_transform @= head.visual_stage_transform()
             draw_connector(
                 kind=self.kind,
                 visual_state=visual_state,
@@ -317,7 +370,9 @@ class Connector(PlayArchetype):
                 head_ease_frac=head_ease_frac,
                 tail_lane=tail.visual_lane,
                 tail_size=tail.size,
-                tail_visual_progress=tail.visual_progress,
+                tail_visual_progress=note_visual_progress(
+                    tail, self.tail_trajectory_first, self.tail_trajectory_second, time()
+                ),
                 tail_target_time=tail.target_time,
                 tail_ease_frac=tail.tail_ease_frac,
                 segment_head_target_time=segment_head.target_time,
@@ -330,8 +385,9 @@ class Connector(PlayArchetype):
                 bypass_tail_target_time_check=segment_head.segment_through_judge_line,
                 head_transform=head_transform,
                 tail_transform=tail_transform,
+                shared_transform=shared_stage_transform,
                 head_note_alpha=head_note_alpha,
-                tail_note_alpha=tail.visual_note_alpha,
+                tail_note_alpha=tail_note_alpha,
                 head_mask=head_mask,
                 tail_mask=tail_mask,
             )
@@ -431,6 +487,12 @@ class SlideManager(PlayArchetype):
     active_head_ref: EntityRef[note.BaseNote] = entity_memory()
     active_tail_ref: EntityRef[note.BaseNote] = entity_memory()
 
+    visual_lane: float = entity_memory()
+    visual_size: float = entity_memory()
+    visual_y_offset: float = entity_memory()
+    segment_head_ref: EntityRef[note.BaseNote] = entity_memory()
+    segment_cursor_time: float = entity_memory()
+
     last_kind: ConnectorKind = entity_memory()
     circular_particle: ParticleHandle = entity_memory()
     linear_particle: ParticleHandle = entity_memory()
@@ -439,9 +501,13 @@ class SlideManager(PlayArchetype):
     last_effect_kind: ConnectorKind = entity_memory()
     sfx_active: bool = entity_memory()
     sfx_kind: ConnectorKind = entity_memory()
-    seg_cursor_ref: EntityRef[note.BaseNote] = entity_memory()
+
+    cleanup_time: float = entity_memory()
 
     def initialize(self):
+        self.cleanup_time = self.active_tail.target_time
+        self.segment_head_ref @= self.active_head_ref
+        self.segment_cursor_time = -1e8
         self.next_trail_spawn_time = -1e8
         self.next_slot_spawn_time = -1e8
         Streams.connector_effect_kinds[self.active_head.index][-2] = ConnectorKind.NONE
@@ -485,18 +551,28 @@ class SlideManager(PlayArchetype):
         adj_time = offset_adjusted_time()
 
         connector_effect_kind_stream = Streams.connector_effect_kinds[self.active_head.index]
-        if current_time >= self.active_tail.target_time or self.active_tail.is_despawned:
+        if time() >= self.cleanup_time or (self.active_tail.is_scored and self.active_tail.is_despawned):
             destroy_looped_particle(self.circular_particle)
             destroy_looped_particle(self.linear_particle)
             connector_effect_kind_stream[adj_time] = ConnectorKind.NONE
             self.last_effect_kind = ConnectorKind.NONE
             self.despawn = True
             return
-        if current_time < self.active_head.target_time:
-            return
         info = self.active_head.active_connector_info
+        if info.visual_connector_index > 0 and info.visual_update_time == time():
+            connector = EntityRef[Connector](index=info.visual_connector_index - 1).get()
+            visual_lane, visual_size = connector.current_visual_head_extents(time())
+            self.visual_lane = visual_lane
+            self.visual_size = visual_size
+            self.visual_y_offset = lerp(
+                connector.head.visual_y_offset,
+                connector.tail.visual_y_offset,
+                safe_unlerp_clamped(connector.head.target_time, connector.tail.target_time, time()),
+            )
+        if time() < self.active_head.target_time:
+            return
         segment_transform, segment_note_alpha = self.active_segment_transform_and_note_alpha()
-        head_transform = segment_transform.transform()
+        head_transform = segment_transform.to_screen_transform()
         match info.connector_kind:
             case (
                 ConnectorKind.ACTIVE_NORMAL
@@ -516,17 +592,17 @@ class SlideManager(PlayArchetype):
                     update_circular_connector_particle(
                         self.circular_particle,
                         info.connector_kind,
-                        info.visual_lane,
+                        self.visual_lane,
                         replace,
-                        info.visual_y_offset,
+                        self.visual_y_offset,
                         transform=head_transform,
                     )
                     update_linear_connector_particle(
                         self.linear_particle,
                         info.connector_kind,
-                        info.visual_lane,
+                        self.visual_lane,
                         replace,
-                        info.visual_y_offset,
+                        self.visual_y_offset,
                         transform=head_transform,
                     )
                     if self.last_effect_kind != info.connector_kind:
@@ -539,9 +615,9 @@ class SlideManager(PlayArchetype):
                             current_time + trail_period / 2,
                         )
                         spawn_linear_connector_trail_particle(
-                            info.connector_kind, info.visual_lane, info.visual_y_offset, transform=head_transform
+                            info.connector_kind, self.visual_lane, self.visual_y_offset, transform=head_transform
                         )
-                    if info.visual_size > 0:
+                    if self.visual_size > 0:
                         slot_period = CONNECTOR_SLOT_SPAWN_PERIOD / Options.effect_animation_speed
                         if current_time >= self.next_slot_spawn_time:
                             self.next_slot_spawn_time = max(
@@ -550,17 +626,17 @@ class SlideManager(PlayArchetype):
                             )
                             spawn_connector_slot_particles(
                                 info.connector_kind,
-                                info.visual_lane,
-                                info.visual_size,
-                                info.visual_y_offset,
+                                self.visual_lane,
+                                self.visual_size,
+                                self.visual_y_offset,
                                 transform=head_transform,
                             )
                         draw_connector_slot_glow_effect(
                             info.connector_kind,
                             info.active_start_time,
-                            info.visual_lane,
-                            info.visual_size,
-                            info.visual_y_offset,
+                            self.visual_lane,
+                            self.visual_size,
+                            self.visual_y_offset,
                             transform=head_transform,
                         )
             case _:
@@ -576,14 +652,14 @@ class SlideManager(PlayArchetype):
                 | ConnectorKind.ACTIVE_FAKE_NORMAL
                 | ConnectorKind.ACTIVE_FAKE_CRITICAL
                 | ConnectorKind.DAMAGE
-            ) if info.visual_size > 0:
+            ) if self.visual_size > 0:
                 draw_slide_note_head(
                     self.active_head.kind,
                     info.connector_kind,
-                    info.visual_lane,
-                    info.visual_size,
+                    self.visual_lane,
+                    self.visual_size,
                     self.active_head.target_time,
-                    1.0 - info.visual_y_offset,
+                    1.0 - self.visual_y_offset,
                     transform=head_transform,
                     note_alpha=segment_note_alpha,
                 )
@@ -674,14 +750,16 @@ class SlideManager(PlayArchetype):
 
     def active_segment_transform_and_note_alpha(self) -> tuple[StageTransform, float]:
         result = +StageTransform
-        head_ref = +self.active_head_ref
-        if self.seg_cursor_ref.index > 0 and self.seg_cursor_ref.get().target_time <= time():
-            head_ref.index = self.seg_cursor_ref.index
+        # The cached segment is valid only while playback moves forward.
+        if time() < self.segment_cursor_time:
+            self.segment_head_ref @= self.active_head_ref
+        head_ref = +self.segment_head_ref
         next_ref = +head_ref.get().next_ref
         while next_ref.index > 0 and time() >= next_ref.get().target_time:
             head_ref.index = next_ref.index
             next_ref.index = head_ref.get().next_ref.index
-        self.seg_cursor_ref.index = head_ref.index
+        self.segment_head_ref @= head_ref
+        self.segment_cursor_time = time()
         seg_head = head_ref.get()
         note_alpha = seg_head.visual_note_alpha
         if next_ref.index > 0:

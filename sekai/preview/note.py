@@ -9,10 +9,7 @@ from sonolus.script.timing import beat_to_time
 
 from sekai.lib.connector import ConnectorKind, ConnectorLayer, SegmentPresentation
 from sekai.lib.ease import EaseType
-from sekai.lib.layer import (
-    LAYER_NOTE_TICK,
-    get_z,
-)
+from sekai.lib.layer import get_z, layers
 from sekai.lib.layout import FlickDirection
 from sekai.lib.note import (
     NoteKind,
@@ -251,8 +248,7 @@ def draw_note(
 def draw_note_body(
     sprites: BodySpriteSet, kind: NoteKind, lane: float, size: float, col: int, y: float, adjusted_time: float
 ):
-    layer = get_note_body_layer(kind)
-    z = get_z(layer, time=adjusted_time, lane=lane)
+    z = get_z(get_note_body_layer(kind), time=adjusted_time, lane=lane)
     match sprites.render_type:
         case BodyRenderType.NORMAL:
             left_layout, middle_layout, right_layout = layout_preview_regular_note_body(lane, size, col, y)
@@ -298,7 +294,7 @@ def draw_note_arrow(
 
 
 def draw_note_tick(sprite: Sprite, lane: float, col: int, y: float, adjusted_time: float):
-    z = get_z(LAYER_NOTE_TICK, time=adjusted_time, lane=lane)
+    z = get_z(layers.note_tick, time=adjusted_time, lane=lane)
     layout = layout_preview_tick(lane, col, y)
     sprite.draw(layout, z=z.tuple)
 

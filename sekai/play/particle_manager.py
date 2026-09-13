@@ -7,7 +7,7 @@ from sonolus.script.archetype import (
 from sonolus.script.bucket import Judgment
 
 from sekai.lib import archetype_names
-from sekai.lib.layout import AffineTransform2d, FlickDirection
+from sekai.lib.layout import FlickDirection, StageScreenTransform
 from sekai.lib.note import NoteEffectKind, NoteKind, handle_note_particles
 
 
@@ -25,7 +25,8 @@ class ParticleManager(PlayArchetype):
     half_offset: bool = entity_memory()
     target_time: float = entity_memory()
     group_id: float = entity_memory()
-    transform: AffineTransform2d = entity_memory()
+    lane_particles: bool = entity_memory()
+    transform: StageScreenTransform = entity_memory()
 
     def update_sequential(self):
         if self.despawn:
@@ -41,6 +42,7 @@ class ParticleManager(PlayArchetype):
             pivot_lane=self.pivot_lane,
             half_offset=self.half_offset,
             group_id=self.group_id,
+            lane_particles=self.lane_particles,
             transform=self.transform,
         )
 

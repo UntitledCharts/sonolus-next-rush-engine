@@ -1,0 +1,72 @@
+"""Regression coverage for RUSH features integrated with upstream elevation."""
+
+import unittest
+from math import isclose
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from sonolus.script.quad import Rect
+from sonolus.script.vec import Vec2
+
+from sekai.lib import layer, layout
+from sekai.lib.options import HitboxRange, StageCoverNoteSpeedCompensation
+
+
+class ElevationCompatibilityTests(unittest.TestCase):
+    def setUp(self):
+        self.options = SimpleNamespace(
+            hitbox_range=HitboxRange.DEFAULT,
+            stage_cover_scroll_speed_compensation=StageCoverNoteSpeedCompensation.OFF,
+            alternative_approach_curve=False,
+        )
+        for name, value in (
+            ("Options", self.options),
+            ("LevelConfig", SimpleNamespace(dynamic_stages=True)),
+            ("Layout", SimpleNamespace(approach_start=0)),
+        ):
+            patcher = patch.object(layout, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        patcher = patch.object(layout, "screen", return_value=Rect(l=-1, r=1, b=-1, t=1))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.camera = layout.LayoutTransform(
+            t=0, w_scale=0.1, h_scale=-0.5, x_translate=0, rotate=0, stage_tilt=1, size_zoom=1
+        )
+
+    def test_flattened_stage_keeps_input_height_and_leniency(self):
+        stage = layout.StageScreenTransform(a00=1, a01=0, a02=0, a10=0, a11=0, a12=0.4, elevation=1)
+        for mode in HitboxRange:
+            with self.subTest(mode=mode):
+                self.options.hitbox_range = mode
+                hitbox = layout.compute_hitbox(self.camera, 0, 1, 0.5, stage_transform=stage)
+                assert isclose(hitbox.bounds.tl.y - hitbox.bounds.bl.y, 0.5)
+                assert isclose(hitbox.bounds.br.x - hitbox.bounds.bl.x, 0.3)
+                assert hitbox.bounds.contains_point(Vec2(0, 0.4))
+
+    def test_full_height_modes_reach_screen_bottom(self):
+        for mode in (HitboxRange.FULL_VERTICAL, HitboxRange.FULL_ADAPTIVE):
+            with self.subTest(mode=mode):
+                self.options.hitbox_range = mode
+                hitbox = layout.compute_hitbox(
+                    self.camera, 0, 1, 0.5, stage_transform=layout.IDENTITY_STAGE_SCREEN_TRANSFORM
+                )
+                assert isclose(hitbox.bounds.bl.y, -1)
+                assert isclose(hitbox.bounds.br.y, -1)
+                assert hitbox.bounds.contains_point(Vec2(0, -0.9))
+
+    def test_custom_layers_follow_elevation_order(self):
+        with (
+            patch.object(layer.runtime, "is_preview", return_value=False),
+            patch.object(layer.runtime, "time", return_value=0),
+        ):
+            normal = layer.get_z(layer.LAYER_NOTE_ARROW)
+            critical = layer.get_z(layer.LAYER_NOTE_ARROW_CRITICAL)
+            raised = layer.get_z(layer.layers.note_body, elevation=1)
+            assert normal.tuple < critical.tuple
+            assert critical.tuple < raised.tuple
+            assert layer.get_z(layer.LAYER_COVER).tuple < layer.get_z(layer.layers.note_body).tuple
+
+
+if __name__ == "__main__":
+    unittest.main()

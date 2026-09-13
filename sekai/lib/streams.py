@@ -12,3 +12,5 @@ class Streams:
     connector_effect_kinds: StreamGroup[ConnectorKind, Dim[1_000_000]]
     connector_normal_sfx_times: StreamGroup[ConnectorSfxTimes, Dim[1_000_000]]
     connector_critical_sfx_times: StreamGroup[ConnectorSfxTimes, Dim[1_000_000]]
+
+    empty_input_stages: Stream[VarArray[int, Dim[16]]]

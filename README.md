@@ -4,6 +4,8 @@ Perspective-lane rhythm game for [Sonolus](https://sonolus.com).
 
 ## Quick Dev Setup
 
+Requires Python 3.14 or newer.
+
 1. Install [uv](https://docs.astral.sh/uv/).
 2. Run `uv sync`.
 3. Add resources (full exported scp files) such as skins and levels to the `/resources` folder.

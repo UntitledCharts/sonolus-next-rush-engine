@@ -4,7 +4,9 @@ from math import ceil, floor
 from typing import Literal, assert_never, cast
 
 from sonolus.script.archetype import EntityRef, HapticType, PlayArchetype, WatchArchetype, get_archetype_by_name
+from sonolus.script.array import Dim
 from sonolus.script.bucket import Bucket, Judgment
+from sonolus.script.containers import VarArray
 from sonolus.script.easing import ease_in_cubic
 from sonolus.script.effect import Effect
 from sonolus.script.interval import clamp, lerp, unlerp_clamped
@@ -40,21 +42,17 @@ from sekai.lib.effect import EMPTY_EFFECT, SFX_DISTANCE, Effects, first_availabl
 from sekai.lib.layer import (
     LAYER_NOTE_ARROW,
     LAYER_NOTE_ARROW_CRITICAL,
-    LAYER_NOTE_BODY,
-    LAYER_NOTE_FLICK_BODY,
-    LAYER_NOTE_SLIM_BODY,
-    LAYER_NOTE_TICK,
-    LAYER_OVERLAY,
+    Layer,
     ZIndexes,
     get_z,
     get_z_alt,
+    layers,
 )
 from sekai.lib.layout import (
-    IDENTITY_AFFINE_TRANSFORM,
-    AffineTransform2d,
-    DynamicLayout,
+    IDENTITY_STAGE_SCREEN_TRANSFORM,
     FlickDirection,
     Hitbox,
+    StageScreenTransform,
     approach,
     get_alpha,
     get_perspective_y,
@@ -73,9 +71,9 @@ from sekai.lib.layout import (
     layout_tick,
     layout_tick_effect,
     preempt_time,
-    progress_to,
     quad_touches_screen,
     tilt_depth,
+    transformed_vec_at,
     visible_lane_range_at,
 )
 from sekai.lib.level_config import LevelConfig
@@ -105,12 +103,8 @@ from sekai.lib.slot_effect import (
     draw_slot_effect,
     draw_slot_glow_effect,
 )
-from sekai.lib.timescale import (
-    CompositeTime,
-    group_force_note_speed,
-    group_scaled_time_to_first_time,
-    group_scaled_time_to_first_time_2,
-)
+from sekai.lib.timescale import group_force_note_speed
+from sekai.lib.timescale_visibility import VisibilitySource, get_sources_visual_spawn_time, group_index
 
 
 class NoteKind(IntEnum):
@@ -307,16 +301,18 @@ def mirror_flick_direction(direction: FlickDirection) -> FlickDirection:
 
 def get_visual_spawn_time(
     timescale_group: int | EntityRef,
-    target_scaled_time: CompositeTime | float,
+    target_time: float,
+    offset_min: float = 0.0,
+    offset_max: float = 0.0,
 ):
-    if isinstance(target_scaled_time, CompositeTime):
-        target_scaled_time = target_scaled_time.total
     force_speed = group_force_note_speed(timescale_group)
-    return min(
-        group_scaled_time_to_first_time(timescale_group, target_scaled_time - preempt_time(force_speed) * 3),
-        group_scaled_time_to_first_time_2(timescale_group, target_scaled_time + preempt_time(force_speed) * 3),
-        -2 if -3 <= progress_to(target_scaled_time, -2, force_speed) <= 6 else 1e8,
+    sources = VarArray[VisibilitySource, Dim[4]].new()
+    sources.append(
+        VisibilitySource(
+            group_index(timescale_group), target_time, preempt_time(force_speed), offset_min, offset_max, False
+        )
     )
+    return get_sources_visual_spawn_time(sources, target_time)
 
 
 def get_attach_frac(
@@ -359,13 +355,9 @@ def draw_note(
     visual_progress: float,
     direction: FlickDirection,
     target_time: float,
-    transform: AffineTransform2d,
+    transform: StageScreenTransform,
     note_alpha: float,
 ):
-    if not DynamicLayout.progress_start <= visual_progress <= DynamicLayout.progress_cutoff:
-        return
-    if note_alpha <= 0:
-        return
     travel = approach(visual_progress)
     sprite_set = get_note_sprite_set(kind, direction)
     draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha)
@@ -381,7 +373,7 @@ def draw_slide_note_head(
     target_time: float,
     visual_progress: float = 1.0,
     *,
-    transform: AffineTransform2d,
+    transform: StageScreenTransform,
     note_alpha: float,
 ):
     if hidden_amount() > 0:
@@ -540,7 +532,8 @@ def get_note_sprite_set(kind: NoteKind, direction: FlickDirection) -> NoteSprite
     return result
 
 
-def get_note_body_layer(kind: NoteKind) -> int:
+def get_note_body_layer(kind: NoteKind) -> Layer:
+    result = +Layer
     match kind:
         case (
             NoteKind.NORM_FLICK
@@ -550,7 +543,7 @@ def get_note_body_layer(kind: NoteKind) -> int:
             | NoteKind.NORM_TAIL_FLICK
             | NoteKind.CRIT_TAIL_FLICK
         ):
-            return LAYER_NOTE_FLICK_BODY
+            result @= layers.note_flick_body
         case (
             NoteKind.NORM_TRACE
             | NoteKind.CRIT_TRACE
@@ -566,9 +559,10 @@ def get_note_body_layer(kind: NoteKind) -> int:
             | NoteKind.CRIT_TAIL_TRACE_FLICK
             | NoteKind.DAMAGE
         ):
-            return LAYER_NOTE_SLIM_BODY
+            result @= layers.note_slim_body
         case _:
-            return LAYER_NOTE_BODY
+            result @= layers.note_body
+    return result
 
 
 def draw_note_body(
@@ -578,13 +572,12 @@ def draw_note_body(
     size: float,
     travel: float,
     target_time: float,
-    transform: AffineTransform2d,
+    transform: StageScreenTransform,
     note_alpha: float,
     etc: int = 0,
 ):
-    layer = get_note_body_layer(kind)
     a = min(get_alpha(target_time) * note_alpha, 1.0)
-    z = get_z(layer, time=target_time, lane=lane, etc=etc)
+    z = get_z(get_note_body_layer(kind), time=target_time, lane=lane, etc=etc, elevation=transform.elevation)
 
     def place(q):
         return transform.transform_quad(q)
@@ -613,15 +606,15 @@ def draw_note_tick(
     lane: float,
     travel: float,
     target_time: float,
-    transform: AffineTransform2d,
+    transform: StageScreenTransform,
     note_alpha: float,
     etc: int = 0,
 ):
     if not sprite.is_available:
         return
     a = min(get_alpha(target_time) * note_alpha, 1.0)
-    z = get_z(LAYER_NOTE_TICK, time=target_time, lane=lane, etc=etc)
-    layout = transform.transform_quad(layout_tick(lane, travel))
+    z = get_z(layers.note_tick, time=target_time, lane=lane, etc=etc, elevation=transform.elevation)
+    layout = transform.transform_billboard(layout_tick(lane, travel), transformed_vec_at(lane, travel))
     sprite.draw(layout, z=z.tuple, a=a)
 
 
@@ -633,7 +626,7 @@ def draw_note_arrow(
     travel: float,
     target_time: float,
     direction: FlickDirection,
-    transform: AffineTransform2d,
+    transform: StageScreenTransform,
     note_alpha: float,
 ):
     arrow_sprite = sprites.get_sprite(size, direction)
@@ -651,14 +644,23 @@ def draw_note_arrow(
             assert_never(direction)
     animation_alpha = (1 - ease_in_cubic(animation_progress)) if Options.marker_animation else 1
     a = min(get_alpha(target_time) * animation_alpha * note_alpha, 1.0)
-    z = get_z(get_flick_layer(kind), time=target_time, lane=lane)
+    z = get_z(
+        get_flick_layer(kind),
+        time=target_time,
+        lane=lane,
+        etc=direction + 6 * (not is_critical(kind)),
+        elevation=transform.elevation,
+    )
+    anchor = transformed_vec_at(lane, travel)
     match sprites.render_type:
         case ArrowRenderType.NORMAL:
-            layout = transform.transform_quad(layout_flick_arrow(lane, size, direction, travel, animation_progress))
+            layout = transform.transform_billboard(
+                layout_flick_arrow(lane, size, direction, travel, animation_progress), anchor
+            )
             arrow_sprite.draw(layout, z=z.tuple, a=a)
         case ArrowRenderType.FALLBACK:
-            layout = transform.transform_quad(
-                layout_flick_arrow_fallback(lane, size, direction, travel, animation_progress)
+            layout = transform.transform_billboard(
+                layout_flick_arrow_fallback(lane, size, direction, travel, animation_progress), anchor
             )
             arrow_sprite.draw(layout, z=z.tuple, a=a)
 
@@ -892,7 +894,7 @@ def play_note_hit_effects(
     single_line: bool = False,
     lane_particles: bool = True,
     *,
-    transform: AffineTransform2d,
+    transform: StageScreenTransform,
 ):
     # Damage with overridden sfx can play, so this goes before the damage check
     sfx = get_note_effect(effect_kind, judgment)
@@ -913,6 +915,7 @@ def play_note_hit_effects(
                 pivot_lane=pivot_lane,
                 half_offset=half_offset,
                 managed=False,
+                lane_particles=lane_particles,
                 transform=transform,
             )
         elif not is_watch():
@@ -928,6 +931,7 @@ def play_note_hit_effects(
                 pivot_lane=pivot_lane,
                 half_offset=half_offset,
                 group_id=slot_effect_group_id,
+                lane_particles=lane_particles,
                 transform=transform,
             )
     if Options.slot_effect_enabled and not is_watch():
@@ -959,8 +963,9 @@ def schedule_note_particles(
     pivot_lane: float = 0.0,
     half_offset: bool = False,
     group_id: float = 0.0,
+    lane_particles: bool = True,
     *,
-    transform: AffineTransform2d,
+    transform: StageScreenTransform,
 ):
     if is_tutorial():
         return
@@ -978,6 +983,7 @@ def schedule_note_particles(
         half_offset=half_offset,
         target_time=target_time,
         group_id=group_id,
+        lane_particles=lane_particles,
         transform=transform,
     )
 
@@ -994,7 +1000,8 @@ def handle_note_particles(
     half_offset: bool = False,
     managed: bool = True,
     group_id: float = 0.0,
-    transform: AffineTransform2d = IDENTITY_AFFINE_TRANSFORM,
+    lane_particles: bool = True,
+    transform: StageScreenTransform = IDENTITY_STAGE_SCREEN_TRANSFORM,
 ):
     def place(q):
         return transform.transform_quad(q)
@@ -1002,6 +1009,10 @@ def handle_note_particles(
     if kind == NoteKind.DAMAGE and judgment == Judgment.PERFECT:
         # An avoided damage note (perfect) plays no particles.
         return
+
+    def billboard(q, anchor_lane: float = lane, anchor_offset: float = y_offset):
+        return transform.transform_billboard(q, transformed_vec_at(anchor_lane, approach(1 - anchor_offset)))
+
     particles = get_note_particles(kind, direction)
     speed = Options.effect_animation_speed
     if Options.note_effect_enabled:
@@ -1010,7 +1021,7 @@ def handle_note_particles(
             if linear_particle == particles.linear_good:
                 chunk = begin_particle_chunk(linear_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
                 for slot_lane in _iter_bundled_slot_lanes(lane, size):
-                    layout = place(layout_linear_effect(slot_lane, shear=0))
+                    layout = billboard(layout_linear_effect(slot_lane, shear=0), slot_lane, 0)
                     if not quad_touches_screen(layout):
                         continue
                     emit_particle(
@@ -1026,7 +1037,7 @@ def handle_note_particles(
                 chunk = begin_particle_chunk(linear_particle, group_id, ParticleManageKind.REST) if managed else 0.0
                 emit_particle(
                     linear_particle,
-                    place(layout_linear_effect(lane, shear=0, y_offset=y_offset)),
+                    billboard(layout_linear_effect(lane, shear=0, y_offset=y_offset)),
                     0.5 / speed,
                     ParticleManageKind.REST,
                     0.0,
@@ -1087,7 +1098,7 @@ def handle_note_particles(
                     assert_never(direction)
             emit_particle(
                 particles.directional,
-                place(layout_rotated2_linear_effect(lane, degree=shear, y_offset=y_offset)),
+                billboard(layout_rotated2_linear_effect(lane, degree=shear, y_offset=y_offset)),
                 0.32 / speed,
                 ParticleManageKind.REST,
                 0.0,
@@ -1098,7 +1109,7 @@ def handle_note_particles(
             chunk = begin_particle_chunk(particles.tick, group_id, ParticleManageKind.REST) if managed else 0.0
             emit_particle(
                 particles.tick,
-                place(layout_tick_effect(lane, y_offset=y_offset)),
+                billboard(layout_tick_effect(lane, y_offset=y_offset)),
                 0.6 / speed,
                 ParticleManageKind.REST,
                 0.0,
@@ -1109,7 +1120,7 @@ def handle_note_particles(
         if slot_linear_particle.is_available:
             chunk = begin_particle_chunk(slot_linear_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
             for slot_lane in _iter_bundled_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
-                layout = place(layout_linear_effect(slot_lane, shear=0, y_offset=y_offset))
+                layout = billboard(layout_linear_effect(slot_lane, shear=0, y_offset=y_offset), slot_lane)
                 if not quad_touches_screen(layout):
                     continue
                 emit_particle(
@@ -1121,17 +1132,45 @@ def handle_note_particles(
                     chunk,
                     managed,
                 )
-    if Options.lane_effect_enabled:
+    if Options.lane_effect_enabled and lane_particles:
         lane_y_offset = (
             y_offset if kind in {NoteKind.CRIT_FLICK, NoteKind.CRIT_HEAD_FLICK, NoteKind.CRIT_TAIL_FLICK} else 0.0
         )
+        extend_down = kind not in {
+            NoteKind.CRIT_FLICK,
+            NoteKind.CRIT_HEAD_FLICK,
+            NoteKind.CRIT_TAIL_FLICK,
+            NoteKind.CRIT_TRACE_FLICK,
+            NoteKind.CRIT_HEAD_TRACE_FLICK,
+            NoteKind.CRIT_TAIL_TRACE_FLICK,
+        }
         if particles.lane.is_available:
             chunk = begin_particle_chunk(particles.lane, group_id, ParticleManageKind.LANE) if managed else 0.0
-            _emit_lane_particles(particles.lane, lane, size, lane_y_offset, 1 / speed, chunk, managed, transform)
+            _emit_lane_particles(
+                particles.lane,
+                lane,
+                size,
+                lane_y_offset,
+                1 / speed,
+                chunk,
+                managed,
+                transform,
+                extend_down=extend_down,
+                compensate_overshoot=True,
+            )
         elif particles.lane_basic.is_available:
             chunk = begin_particle_chunk(particles.lane_basic, group_id, ParticleManageKind.LANE) if managed else 0.0
             _emit_lane_particles(
-                particles.lane_basic, lane, size, lane_y_offset, 0.3 / speed, chunk, managed, transform
+                particles.lane_basic,
+                lane,
+                size,
+                lane_y_offset,
+                0.3 / speed,
+                chunk,
+                managed,
+                transform,
+                extend_down=extend_down,
+                compensate_overshoot=False,
             )
 
 
@@ -1149,7 +1188,10 @@ def _emit_lane_particles(
     duration: float,
     chunk: float,
     managed: bool,
-    transform: AffineTransform2d,
+    transform: StageScreenTransform,
+    *,
+    extend_down: bool,
+    compensate_overshoot: bool,
 ):
     """Emit per-lane particles for visible lanes; off-screen stretches become merged quads.
 
@@ -1160,6 +1202,11 @@ def _emit_lane_particles(
 
     def place(q):
         return transform.transform_quad(q)
+
+    def lane_layout(lane: float, half_width: float) -> Quad:
+        return layout_particle_lane(
+            lane, half_width, y_offset=y_offset, extend_down=extend_down, compensate_overshoot=compensate_overshoot
+        )
 
     min_i = floor(center_lane - size)
     max_i = ceil(center_lane + size) - 1
@@ -1181,7 +1228,7 @@ def _emit_lane_particles(
         merged_size = (max_i - min_i + 1) / 2
         emit_particle(
             particle,
-            place(layout_particle_lane(merged_center, merged_size, y_offset=y_offset)),
+            place(lane_layout(merged_center, merged_size)),
             duration,
             ParticleManageKind.LANE,
             clamp(floor(merged_center), -127, 127),
@@ -1195,7 +1242,7 @@ def _emit_lane_particles(
         merged_size = (start_i - min_i) / 2
         emit_particle(
             particle,
-            place(layout_particle_lane(merged_center, merged_size, y_offset=y_offset)),
+            place(lane_layout(merged_center, merged_size)),
             duration,
             ParticleManageKind.LANE,
             start_i - 1,
@@ -1208,7 +1255,7 @@ def _emit_lane_particles(
         merged_size = (max_i - end_i) / 2
         emit_particle(
             particle,
-            place(layout_particle_lane(merged_center, merged_size, y_offset=y_offset)),
+            place(lane_layout(merged_center, merged_size)),
             duration,
             ParticleManageKind.LANE,
             end_i + 1,
@@ -1220,7 +1267,7 @@ def _emit_lane_particles(
         slot_lane = i + 0.5
         emit_particle(
             particle,
-            place(layout_particle_lane(slot_lane, 0.5, y_offset=y_offset)),
+            place(lane_layout(slot_lane, 0.5)),
             duration,
             ParticleManageKind.LANE,
             slot_lane,
@@ -1313,7 +1360,7 @@ def schedule_note_slot_effects(
     group_id: float = 0.0,
     single_line: bool = False,
     *,
-    transform: AffineTransform2d,
+    transform: StageScreenTransform,
 ):
     if is_tutorial():
         return
@@ -1377,7 +1424,7 @@ def draw_tutorial_note_slot_effects(
                 start_time=start_time,
                 end_time=start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed,
                 lane=slot_lane,
-                transform=IDENTITY_AFFINE_TRANSFORM,
+                transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
             )
     slot_glow_sprite = sprite_set.slot_glow.perfect
     if (
@@ -1390,7 +1437,7 @@ def draw_tutorial_note_slot_effects(
             end_time=start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed,
             lane=lane,
             size=size,
-            transform=IDENTITY_AFFINE_TRANSFORM,
+            transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
         )
 
 
@@ -1721,7 +1768,7 @@ def get_hitbox_target_sprite(kind: NoteKind) -> Sprite:
 def draw_hitbox_bounds_overlay(bounds: Quad, sprite: Sprite, alpha: float):
     t = HITBOX_DEBUG_BORDER_THICKNESS
     a = alpha
-    z_bounds = get_z_alt(LAYER_OVERLAY, 0)
+    z_bounds = get_z_alt(layers.overlay, 0)
     draw_hitbox_line(sprite, bounds.tl, bounds.tr, t, z_bounds, a)
     draw_hitbox_line(sprite, bounds.bl, bounds.br, t, z_bounds, a)
     draw_hitbox_line(sprite, bounds.tl, bounds.bl, t, z_bounds, a)
@@ -1737,10 +1784,10 @@ def draw_connector_hitbox_overlay(bounds: Quad, alpha: float):
 def draw_hitbox_overlay(hitbox: Hitbox, kind: NoteKind, alpha: float, *, time_to_target: float):
     t = HITBOX_DEBUG_BORDER_THICKNESS
     a = alpha
-    z_triangle = get_z_alt(LAYER_OVERLAY, 1)
-    z_apex = get_z_alt(LAYER_OVERLAY, 2)
-    z_target = get_z_alt(LAYER_OVERLAY, 3)
-    z_target_dot = get_z_alt(LAYER_OVERLAY, 4)
+    z_triangle = get_z_alt(layers.overlay, 1)
+    z_apex = get_z_alt(layers.overlay, 2)
+    z_target = get_z_alt(layers.overlay, 3)
+    z_target_dot = get_z_alt(layers.overlay, 4)
 
     draw_hitbox_bounds_overlay(hitbox.bounds, get_hitbox_bounds_sprite(kind, time_to_target), alpha)
 

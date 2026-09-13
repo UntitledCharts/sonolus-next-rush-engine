@@ -17,13 +17,13 @@ from sekai.lib.layer import (
     get_z_alt,
 )
 from sekai.lib.layout import (
-    IDENTITY_AFFINE_TRANSFORM,
+    IDENTITY_STAGE_SCREEN_TRANSFORM,
     LANE_B,
     LANE_T,
     TARGET_ASPECT_RATIO,
-    AffineTransform2d,
     DynamicLayout,
     Layout,
+    StageScreenTransform,
     aspect_ratio,
     get_note_spawn_depth,
     get_perspective_y,
@@ -66,8 +66,8 @@ class Fever:
     y_offset: float
     alpha_l: float
     alpha_r: float
-    left_transform: AffineTransform2d
-    right_transform: AffineTransform2d
+    left_transform: StageScreenTransform
+    right_transform: StageScreenTransform
 
 
 def draw_fever_side_cover(draw_time: float):
@@ -614,14 +614,14 @@ def draw_judgment_effect(
     y_offset: float = 0.0,
     *,
     duration: float = 6.0,
-    transform: AffineTransform2d = IDENTITY_AFFINE_TRANSFORM,
+    transform: StageScreenTransform = IDENTITY_STAGE_SCREEN_TRANSFORM,
 ):
     enter_progress = unlerp_clamped(0, 0.25, draw_time)
     exit_progress = unlerp_clamped(duration - 0.25, duration, draw_time)
 
     anim = enter_progress - exit_progress
     layout = transform.transform_quad(layout_skill_judgment_line(l, r, y_offset))
-    z = get_z_alt(LAYER_JUDGMENT_SKILL)
+    z = get_z_alt(LAYER_JUDGMENT_SKILL, elevation=transform.elevation)
     ActiveSkin.skill_judgment_line.draw(layout, z=z.tuple, a=anim * stage_alpha)
 
 
@@ -632,5 +632,5 @@ def reset_fever_bounds():
     Fever.y_offset = 0.0
     Fever.alpha_l = 0.0
     Fever.alpha_r = 0.0
-    Fever.left_transform = IDENTITY_AFFINE_TRANSFORM
-    Fever.right_transform = IDENTITY_AFFINE_TRANSFORM
+    Fever.left_transform = IDENTITY_STAGE_SCREEN_TRANSFORM
+    Fever.right_transform = IDENTITY_STAGE_SCREEN_TRANSFORM

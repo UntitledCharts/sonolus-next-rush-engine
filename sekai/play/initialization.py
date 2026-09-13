@@ -54,9 +54,10 @@ class Initialization(PlayArchetype):
 
     replay_revision: EngineRevision = exported(name="replayRevision")
 
-    @callback(order=-1)
+    @callback(order=-3)
     def preprocess(self):
         init_level_config(self.revision)
+        init_event_list(self.first_camera_ref)
         init_layout()
         init_skin()
         init_particles()
@@ -74,7 +75,6 @@ class Initialization(PlayArchetype):
         init_life(note.NOTE_ARCHETYPES, self.initial_life)
         init_play_common()
         init_connector_sfx_times()
-        init_event_list(self.first_camera_ref)
 
         custom_elements.LifeManager.life = self.initial_life
         custom_elements.LifeManager.initial_life = self.initial_life

@@ -1,4 +1,5 @@
 from sekai.arc_test_level import level as arc_level
+from sekai.elevation_demo_level import level as elevation_demo_level
 from sekai.level_utils import (
     LevelBpmChange,
     LevelCameraChange,
@@ -42,9 +43,9 @@ def _stage_b_oscillation_beats() -> list[float]:
 
 
 STAGE_A_LANE = -5.0
-STAGE_A_Y_OFFSETS = (0.0, 0.8)  # alternate the left stage's y offset to exercise the judge line at an offset under tilt
+STAGE_A_Y_OFFSETS = (0.0, 0.8)  # Move the left stage's judge line up and down while the camera tilts.
 
-# Reuse stage_b's oscillation cadence (one step per half-period) to alternate stage_a's y offset.
+# Change stage_a's y offset whenever stage_b switches direction.
 stage_a_pivot_changes = [
     LevelStagePivotChange(
         beat=beat,
@@ -102,8 +103,8 @@ stage_b_pivot_changes = [
     for i, beat in enumerate(_stage_b_oscillation_beats())
 ]
 
-# stage_b ramps division_line_alpha from full to faint so the lane dividers visibly fade out over the song
-# (multiplicative with the lane's own alpha) without touching the judge line or borders.
+# Fade stage_b's lane dividers over the song by reducing division_line_alpha, which multiplies lane_alpha.
+# This leaves the judge line and borders unchanged.
 stage_b = LevelStage(
     from_start=True,
     until_end=True,
@@ -147,13 +148,13 @@ stage_b = LevelStage(
     ],
 )
 
-# Tilt-only sweep (no zoom, rotation, or panning) so stage tilt can be inspected in isolation.
-# Notes run over beats 4-20: classic perspective -> flat (held over beats 10-14) -> classic.
+# Change only the camera tilt so its effect is easy to inspect. Notes run over beats 4-20.
+# Reduce the tilt, hold it over beats 10-14, then return close to the original perspective.
 camera_changes = [
     LevelCameraChange(beat=0.0, stage_tilt=1.0, ease=EaseType.IN_OUT_QUAD),  # classic perspective
     LevelCameraChange(beat=4.0, stage_tilt=1.0, ease=EaseType.IN_OUT_QUAD),
-    LevelCameraChange(beat=10.0, stage_tilt=0.4, ease=EaseType.IN_OUT_QUAD),  # flat: vertical lanes
-    LevelCameraChange(beat=14.0, stage_tilt=0.4, ease=EaseType.IN_OUT_QUAD),  # hold flat for inspection
+    LevelCameraChange(beat=10.0, stage_tilt=0.4, ease=EaseType.IN_OUT_QUAD),  # reduced tilt
+    LevelCameraChange(beat=14.0, stage_tilt=0.4, ease=EaseType.IN_OUT_QUAD),  # hold for inspection
     LevelCameraChange(beat=20.0, stage_tilt=0.99, ease=EaseType.IN_OUT_QUAD),  # back to classic
 ]
 
@@ -272,12 +273,10 @@ fever_start = LevelFeverStart(beat=100)
 test_skill = LevelSkill(beat=1.0, effect=2)
 
 
-# Full-screen guide overlay: exercises SegmentPresentation.FULL_SCREEN. While a segment is at the
-# judge line (the current time falls within its target-time span), it fills the entire screen with
-# the guide sprite at that segment's alpha sampled at the judge line, ignoring camera/zoom/tilt.
-# The per-segment alpha ramps so the overlay intensity changes as successive segments cross the
-# judge line; nothing is drawn before the first or after the last note. The window (beats 8-12.5)
-# overlaps the flat-tilt hold (beats 10-14) to confirm the quad still covers the whole screen.
+# Test SegmentPresentation.FULL_SCREEN while the camera tilt changes. Between a segment's head and tail
+# times, its guide sprite should fill the screen using the segment's alpha at the judge line.
+# Successive segments change alpha so the overlay changes intensity. It should disappear outside beats
+# 8-12.5 and cover the whole screen even during the interval with reduced tilt at beats 10-14.
 full_screen_guide_segments = [(8.0, 0.15), (9.5, 2), (11.0, 0.15), (12.5, 0.4)]
 full_screen_guide = LevelSlide()
 full_screen_guide.notes = [
@@ -298,14 +297,13 @@ full_screen_guide.notes = [
 ]
 
 
-# A separate stage on the right hosting a flick on every beat, to exercise flick rendering
-# (bodies + arrows) under the tilt sweep. Its mask (lanes 4..6) sits just past stage_b's pulled-in
-# right swing, so the visible masks don't overlap.
+# Put a flick on every beat on the right stage to inspect its body and arrow as the camera tilts.
+# This stage's mask covers lanes 4..6, just beyond stage_b's rightmost position, so the masks don't overlap.
 #
-# It also exercises judge_line_style / full_width: it starts as a normal red judge line, fades into a
-# SINGLE_LINE judge line (lanes 4..6) around the flat-camera hold so the single-line look and the
-# suppressed slot effect on the flicks can be inspected without covering the screen, then widens to a
-# full-width single line and finally to a full-width default judge line at the very end.
+# Also test judge_line_style and full_width. Start with a normal red judge line, then fade to SINGLE_LINE
+# while the camera holds its reduced tilt. Keep the line within lanes 4..6 so its appearance and the
+# lack of flick slot effects are easy to inspect. Finally, widen it to the full screen and restore
+# the default judge-line style.
 def _right_flick_style(beat: float, style: JudgeLineStyle, full_width: bool) -> LevelStageStyleChange:
     return LevelStageStyleChange(
         beat=beat,
@@ -561,7 +559,7 @@ def _mask_lab_stage(lane: float, mask_notes: bool) -> LevelStage:
     )
 
 
-# Mask lab: the left stage masks relative lanes [-2, 2]; the right is an unmasked control until the final connector.
+# The left stage masks relative lanes [-2, 2]. Keep the right stage unmasked for comparison until the final connector.
 mask_lab_stage = _mask_lab_stage(-3.0, mask_notes=True)
 mask_lab_control_stage = _mask_lab_stage(3.0, mask_notes=False)
 mask_lab_control_stage.style_changes = [
@@ -588,16 +586,16 @@ mask_lab_stage.mask_changes = [
     LevelStageMaskChange(beat=46.0, lane=-3.0, size=3.0, mask_notes=True, ease=EaseType.IN_OUT_QUAD),
     LevelStageMaskChange(beat=49.0, lane=-3.0, size=2.0, mask_notes=True, ease=EaseType.IN_OUT_QUAD),
 ]
-# The transform jumps coincide with the mask toggles. Judgment geometry at exactly 36/40 must use
-# the same left-limit transform as the attached notes, then use the new transform immediately after.
+# The transform jumps when masking changes at beats 36 and 40. At those exact beats, judgment geometry
+# must use the previous transform, as attached notes do. It must use the new transform immediately afterward.
 mask_lab_stage.transform_changes = [
     LevelStageTransformChange(beat=0.0, ease=EaseType.NONE),
     LevelStageTransformChange(beat=36.0, x_lane_translate=2.0, ease=EaseType.NONE),
     LevelStageTransformChange(beat=40.0, ease=EaseType.LINEAR),
 ]
 mask_lab_lanes = (-3.0, -1.5, 0.0, 1.5, 3.0)
-# The outer masked notes have zero visual/base-hitbox size at the nearest edge; Show Hitboxes demonstrates that
-# their normal one-lane leniency is applied afterward, leaving a two-lane-wide input region.
+# Masking clips the outer notes and their base hitboxes to zero width at the nearest mask edge.
+# Show Hitboxes should show a two-lane-wide input region because one lane of leniency is then added on each side.
 mask_lab_notes = [
     LevelNote(
         beat=float(i + 1) + (0.25 if stage is mask_lab_control_stage else 0.0),
@@ -704,7 +702,7 @@ mask_lab_same_side_connector = LevelSlide(
 )
 
 
-# Endpoints outside opposite mask bounds leave the middle of the connector visible with exact splits.
+# With the endpoints beyond opposite mask edges, the middle of the connector should remain visible up to each edge.
 mask_lab_opposite_connector = LevelSlide(
     notes=[
         LevelNote(
@@ -734,7 +732,8 @@ mask_lab_connector_attached_notes = [
     LevelNote(beat=26.5, lane=0.0, size=0.0, kind=NoteKind.NORM_TICK, attach=mask_lab_opposite_connector),
 ]
 
-# Outside notes at 30/32 emit particles at the mask edge; 31/33 are clipped references.
+# Notes outside the mask at beats 30 and 32 emit particles at the mask edge.
+# Partially clipped notes at beats 31 and 33 provide a comparison.
 mask_lab_effect_notes = [
     LevelNote(beat=30.0, lane=-3.0, size=1.0, kind=NoteKind.NORM_TAP, stage=mask_lab_stage),
     LevelNote(beat=31.0, lane=-1.5, size=1.0, kind=NoteKind.NORM_TAP, stage=mask_lab_stage),
@@ -743,8 +742,8 @@ mask_lab_effect_notes = [
 ]
 
 
-# Toggle masking at 35-41, then narrow and widen the mask over 42-46; pairs also test sim lines.
-# The outside notes exactly at 36/40 use the left-limit mask state: 36 stays masked and 40 stays unmasked.
+# Toggle masking during beats 35-41, then narrow and widen the mask over beats 42-46. Note pairs also test sim lines.
+# Notes exactly at a masking change use the previous state, so beat 36 stays masked and beat 40 stays unmasked.
 mask_lab_transition_notes = [
     LevelNote(beat=35.0, lane=3.0, size=1.0, kind=NoteKind.NORM_TAP, stage=mask_lab_stage),
     LevelNote(beat=35.0, lane=0.0, size=1.0, kind=NoteKind.NORM_TAP, stage=mask_lab_stage),
@@ -765,7 +764,7 @@ mask_lab_transition_notes = [
 ]
 
 
-# This stationary active head tests mask toggles and width animation while staying connector-aligned.
+# Keep the active head stationary while the mask changes to check that its hitbox still matches the connector.
 def _mask_lab_transition_slide(stage: LevelStage) -> LevelSlide:
     beats = (34.0, 38.0, 42.0, 46.0, 48.0)
     return LevelSlide(
@@ -793,7 +792,7 @@ mask_lab_transition_slide = _mask_lab_transition_slide(mask_lab_stage)
 mask_lab_transition_control_slide = _mask_lab_transition_slide(mask_lab_control_stage)
 for note in mask_lab_transition_control_slide.notes:
     note.beat += 0.25
-# Attached ticks exactly on both mask toggles exercise the same left-limit mask rule as standalone notes.
+# Attached ticks exactly at both masking changes should use the previous mask state, just like standalone notes.
 mask_lab_transition_attached_notes = [
     LevelNote(beat=beat, lane=0.0, size=0.0, kind=NoteKind.NORM_TICK, attach=mask_lab_transition_slide)
     for beat in (36.0, 40.0)
@@ -814,8 +813,9 @@ mask_lab_sim_notes = [
 ]
 
 
-# The right stage also enables note masking for this section. Purple interpolates the two stage masks;
-# yellow shows the same lane 0 geometry with an unmasked tail. Purple matches yellow's full width in the middle.
+# Enable note masking on the right stage for this section. The purple connector interpolates between the two stage
+# masks. The yellow connector uses the same lane 0 geometry but has an unmasked tail, so its full width stays visible.
+# The purple connector should match the yellow connector's width in the middle.
 mask_lab_different_stage_connector = LevelSlide(
     notes=[
         LevelNote(
@@ -889,10 +889,11 @@ mask_lab_different_stage_attached_notes = [
 ]
 
 
-# Dedicated attached-note/connector parity section. The linear connector crosses the masked stage from fully outside
-# left to fully outside right; attached ticks sample zero, partial, full, partial, and zero masked widths in order.
-# In preview their bodies line up with the connector cross-section. With Show Hitboxes enabled, each tick's hitbox
-# also matches the active connector hitbox at its judgment time, including post-mask leniency at the zero-width ends.
+# Check that attached notes and their connector stay aligned as the connector moves across both mask edges.
+# The ticks are fully hidden, partly visible, fully visible, partly visible, and fully hidden, in that order.
+# In preview, each tick's body should match the connector's width and position at that beat. With Show Hitboxes
+# enabled, its hitbox should match the active connector's at judgment time, including the leniency added after
+# masking when the visible width is zero.
 mask_lab_parity_section = LevelSlide(
     notes=[
         LevelNote(
@@ -922,10 +923,10 @@ mask_lab_parity_attached_notes = [
 mask_lab_parity_section.notes[1:1] = mask_lab_parity_attached_notes
 
 
-# Attachment-boundary regressions: the beat-63 tick attaches exactly to a reference joint, so both
-# refs resolve to that same note and its fraction safely falls back to 0.5. The beat-64 tick is also
-# at fraction 0.5, but between distinct refs. As consecutive separators they exercise a connector
-# with equal endpoint fractions, while its masked visuals and hitbox must still move between them.
+# The tick at beat 63 attaches exactly to a joint, so its attachment head and tail reference the same note.
+# Its attachment fraction therefore defaults to 0.5. The tick at beat 64 also has a fraction of 0.5 because
+# it is halfway between two different joints. These ticks are consecutive separators, so they create a
+# connector whose endpoint attachment fractions are equal. Its drawing and hitbox must still move between the ticks.
 mask_lab_exact_joint_reference = LevelSlide(
     notes=[
         LevelNote(
@@ -1033,3 +1034,4 @@ def load_levels():
     yield level
     yield mask_lab_level
     yield arc_level
+    yield elevation_demo_level

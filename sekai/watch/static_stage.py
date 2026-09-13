@@ -1,4 +1,4 @@
-from sonolus.script.archetype import WatchArchetype, callback, entity_memory
+from sonolus.script.archetype import EntityRef, WatchArchetype, callback, entity_memory
 from sonolus.script.runtime import is_skip, time
 
 from sekai.lib import archetype_names
@@ -6,11 +6,12 @@ from sekai.lib.custom_elements import LifeManager, ScoreIndicator
 from sekai.lib.events import reset_fever_bounds
 from sekai.lib.initialization import LastNote
 from sekai.lib.layout import (
-    IDENTITY_AFFINE_TRANSFORM,
+    IDENTITY_STAGE_SCREEN_TRANSFORM,
     StaticStageData,
     refresh_layout,
 )
-from sekai.lib.stage import draw_stage_and_accessories, play_lane_particle
+from sekai.lib.stage import draw_stage_and_accessories, get_stage_props, play_lane_particle
+from sekai.watch.dynamic_stage import WatchDynamicStage
 
 
 class WatchStaticStage(WatchArchetype):
@@ -26,7 +27,7 @@ class WatchStaticStage(WatchArchetype):
     def initialize(self):
         self.dead_time = -2
 
-    @callback(order=-2)
+    @callback(order=-3)
     def update_sequential(self):
         refresh_layout()
         reset_fever_bounds()
@@ -55,6 +56,8 @@ class WatchScheduledLaneEffect(WatchArchetype):
 
     lane: float = entity_memory()
     target_time: float = entity_memory()
+    stage_ref: EntityRef[WatchDynamicStage] = entity_memory()
+    played: bool = entity_memory()
 
     def spawn_time(self) -> float:
         return self.target_time
@@ -63,6 +66,16 @@ class WatchScheduledLaneEffect(WatchArchetype):
         return self.target_time + 1
 
     def initialize(self):
+        self.played = False
+
+    def update_parallel(self):
+        if self.played:
+            return
+        self.played = True
         if is_skip():
             return
-        play_lane_particle(self.lane, IDENTITY_AFFINE_TRANSFORM)
+        transform = +IDENTITY_STAGE_SCREEN_TRANSFORM
+        if self.stage_ref.index > 0:
+            props = get_stage_props(self.stage_ref.get(), self.target_time)
+            transform @= props.stage_transform().to_screen_transform()
+        play_lane_particle(self.lane, transform)

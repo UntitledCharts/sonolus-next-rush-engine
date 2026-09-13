@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from enum import IntEnum
 from math import atan, ceil, cos, floor, log, pi, sin
-from typing import Protocol, assert_never, cast
+from typing import Protocol, Self, assert_never, cast
 
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
 from sonolus.script.array import Array, Dim
-from sonolus.script.debug import static_error
 from sonolus.script.globals import level_data, level_memory
-from sonolus.script.interval import clamp, lerp, remap, unlerp
-from sonolus.script.num import Num
+from sonolus.script.interval import Interval, clamp, lerp, remap, unlerp
 from sonolus.script.quad import Quad, QuadLike, Rect
 from sonolus.script.record import Record
 from sonolus.script.runtime import (
@@ -31,7 +29,6 @@ from sekai.lib.baseevent import get_event_as, query_event_list
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import HitboxRange, Options, StageCoverNoteSpeedCompensation, Version
-from sekai.lib.timescale import CompositeTime
 
 LANE_T = 47 / 850
 LANE_B = 1176 / 850
@@ -61,9 +58,8 @@ APPROACH_TILT_LERP_MIN = 0.05
 # Stage width at 0 tilt
 STAGE_WIDTH_MID = (APPROACH_SCALE + 1) / 2
 
-# As tilt decreases, the perspective vanishing point (where the width factor reaches 0) recedes
-# upward and the stage top is extended toward it. This floors the effective tilt used for that
-# extent so it stays finite (instead of diverging) as tilt approaches 0.
+# As tilt decreases, the vanishing point moves upward and we extend the stage toward it.
+# This is a minimum tilt for this extension so the stage height stays finite at zero tilt.
 STAGE_TILT_VANISH_MIN = 0.2
 
 
@@ -122,8 +118,11 @@ class Layout:
     field_w: float
     field_h: float
     approach_start: float
+    default_preempt: float
     cover_depth: float
     cutoff_depth: float
+    spawn_progress_start: float
+    spawn_progress_cutoff: float
     flick_speed_threshold: float
     initial_background: Quad
     t: float
@@ -150,6 +149,7 @@ class DynamicLayout:
     progress_cutoff: float
     width_offset: float
     lane_t: float
+    safe_lane_t: float
     lane_b: float
     stage_lane_t: float
     stage_lane_b: float
@@ -166,13 +166,19 @@ class CameraInfo(Record):
     stage_tilt: float
 
 
-class AffineTransform2d(Record):
+class StageScreenTransform(Record):
+    """Stage mapping after camera projection, with elevation for drawing order.
+
+    We blend StageTransform components before composing this mapping.
+    """
+
     a00: float
     a01: float
     a02: float
     a10: float
     a11: float
     a12: float
+    elevation: float
 
     def apply(self, p: Vec2) -> Vec2:
         return Vec2(
@@ -181,13 +187,25 @@ class AffineTransform2d(Record):
         )
 
     def apply_inverse(self, p: Vec2) -> Vec2:
+        """Undo the stage mapping with a pseudoinverse if the stage has nearly or fully collapsed to a line."""
+        result = +Vec2
         det = self.a00 * self.a11 - self.a01 * self.a10
         dx = p.x - self.a02
         dy = p.y - self.a12
-        return Vec2(
-            (self.a11 * dx - self.a01 * dy) / det,
-            (self.a00 * dy - self.a10 * dx) / det,
-        )
+        if abs(det) < 1e-8:
+            # Rank-one pseudoinverse.
+            norm = self.a00**2 + self.a01**2 + self.a10**2 + self.a11**2
+            if norm >= 1e-8:
+                result @= Vec2(
+                    (self.a00 * dx + self.a10 * dy) / norm,
+                    (self.a01 * dx + self.a11 * dy) / norm,
+                )
+        else:
+            result @= Vec2(
+                (self.a11 * dx - self.a01 * dy) / det,
+                (self.a00 * dy - self.a10 * dx) / det,
+            )
+        return result
 
     def transform_quad(self, q: QuadLike) -> Quad:
         return Quad(
@@ -197,14 +215,33 @@ class AffineTransform2d(Record):
             tr=self.apply(q.tr),
         )
 
+    def transform_billboard(self, q: QuadLike, anchor: Vec2) -> Quad:
+        """Transform a decoration's anchor and rotate the decoration without changing its size."""
+        rotation = Vec2(self.a00 + self.a11, self.a10 - self.a01).normalize_or_zero()
+        if rotation.magnitude == 0:
+            rotation @= Vec2(1, 0)
+        origin = self.apply(anchor)
 
-IDENTITY_AFFINE_TRANSFORM = AffineTransform2d(a00=1.0, a01=0.0, a02=0.0, a10=0.0, a11=1.0, a12=0.0)
+        def place(p: Vec2) -> Vec2:
+            offset = p - anchor
+            return origin + Vec2(
+                rotation.x * offset.x - rotation.y * offset.y,
+                rotation.y * offset.x + rotation.x * offset.y,
+            )
+
+        return Quad(bl=place(q.bl), br=place(q.br), tl=place(q.tl), tr=place(q.tr))
+
+
+IDENTITY_STAGE_SCREEN_TRANSFORM = StageScreenTransform(
+    a00=1.0, a01=0.0, a02=0.0, a10=0.0, a11=1.0, a12=0.0, elevation=0.0
+)
 
 
 class StageTransform(Record):
-    """A per-stage rigid post-map in camera screen space.
+    """Blendable components of a stage's screen transform for one camera state.
 
-    Rotate by `sr` about pivot `(px, py)` then translate `(tx, ty)`.
+    The mapping applies elevation projection, rotation by `sr` about pivot
+    `(px, py)`, then translation by `(tx, ty)`.
     """
 
     sr: float
@@ -212,26 +249,55 @@ class StageTransform(Record):
     py: float
     tx: float
     ty: float
+    projection: StageScreenTransform
 
-    def transform(self) -> AffineTransform2d:
+    def to_screen_transform(self) -> StageScreenTransform:
+        """Compose the components for drawing and input geometry."""
         cs = cos(self.sr)
         sn = sin(self.sr)
-        return AffineTransform2d(
-            a00=cs,
-            a01=sn,
-            a02=self.px * (1 - cs) - sn * self.py + self.tx,
-            a10=-sn,
-            a11=cs,
-            a12=self.py * (1 - cs) + sn * self.px + self.ty,
+        p = self.projection
+        return StageScreenTransform(
+            a00=cs * p.a00 + sn * p.a10,
+            a01=cs * p.a01 + sn * p.a11,
+            a02=cs * p.a02 + sn * p.a12 + self.px * (1 - cs) - sn * self.py + self.tx,
+            a10=-sn * p.a00 + cs * p.a10,
+            a11=-sn * p.a01 + cs * p.a11,
+            a12=-sn * p.a02 + cs * p.a12 + self.py * (1 - cs) + sn * self.px + self.ty,
+            elevation=p.elevation,
         )
 
 
 def identity_stage_transform() -> StageTransform:
-    return StageTransform(sr=0.0, px=0.0, py=0.0, tx=0.0, ty=0.0)
+    return StageTransform(sr=0.0, px=0.0, py=0.0, tx=0.0, ty=0.0, projection=+IDENTITY_STAGE_SCREEN_TRANSFORM)
 
 
 def stage_transform_is_identity(st: StageTransform) -> bool:
-    return st.sr == 0.0 and st.tx == 0.0 and st.ty == 0.0
+    return st.sr == 0.0 and st.tx == 0.0 and st.ty == 0.0 and st.projection.elevation == 0.0
+
+
+def elevation_projection(camera: LayoutTransform, elevation: float) -> StageScreenTransform:
+    """Project stage elevation while keeping the perspective vanishing line fixed.
+
+    At full tilt, one elevation unit raises the stage by one lane width.
+    The formula stays finite at zero tilt. Limit elevation so the stage cannot flip.
+    """
+    tilt = camera.stage_tilt
+    amount = elevation * camera.w_scale * tilt
+    if tilt > 0:
+        amount = min(amount, -camera.h_scale / tilt)
+    scale_delta = amount * tilt / camera.h_scale
+    shift = amount * ((1 - tilt) * STAGE_WIDTH_MID - tilt * camera.t / camera.h_scale)
+    cs = cos(camera.rotate)
+    sn = sin(camera.rotate)
+    return StageScreenTransform(
+        a00=1 + scale_delta * sn * sn,
+        a01=scale_delta * sn * cs,
+        a02=shift * sn,
+        a10=scale_delta * sn * cs,
+        a11=1 + scale_delta * cs * cs,
+        a12=shift * cs,
+        elevation=amount / camera.w_scale / tilt if tilt > 0 else 0.0,
+    )
 
 
 def stage_rotation_pivot(camera: LayoutTransform, judge_depth: float) -> Vec2:
@@ -249,6 +315,7 @@ def compute_stage_transform(
     y_lane_translate: float,
     mask_lane: float,
     center_weight: float = 0.0,
+    elevation: float = 0.0,
 ) -> StageTransform:
     travel = approach_at_tilt(1.0, camera.stage_tilt)
     width = width_factor_at_tilt(travel, camera.stage_tilt)
@@ -256,6 +323,8 @@ def compute_stage_transform(
         mask_lane * width * camera.w_scale + camera.x_translate,
         travel * camera.h_scale + camera.t,
     ).rotate(-camera.rotate)
+    projection = elevation_projection(camera, elevation)
+    judge_center @= projection.apply(judge_center)
     base_t = Layout.field_h * FIELD_T_FACTOR
     base_h = Layout.field_h * FIELD_B_FACTOR - base_t
     center_judge_y = camera.h_scale * (travel + base_t / base_h)
@@ -263,14 +332,14 @@ def compute_stage_transform(
         x_lane_translate * camera.w_scale,
         y_lane_translate * camera.w_scale - center_weight * center_judge_y,
     ).rotate(-camera.rotate)
-    pivot = stage_rotation_pivot(camera, travel)
+    pivot = projection.apply(stage_rotation_pivot(camera, travel))
     cs = cos(stage_rotate)
     sn = sin(stage_rotate)
     dx = judge_center.x - pivot.x
     dy = judge_center.y - pivot.y
     tx = offset.x + (1 - cs) * dx - sn * dy
     ty = offset.y + (1 - cs) * dy + sn * dx
-    return StageTransform(sr=stage_rotate, px=pivot.x, py=pivot.y, tx=tx, ty=ty)
+    return StageTransform(sr=stage_rotate, px=pivot.x, py=pivot.y, tx=tx, ty=ty, projection=projection)
 
 
 def blend_stage_transform(a: StageTransform, b: StageTransform, frac: float) -> StageTransform:
@@ -280,6 +349,15 @@ def blend_stage_transform(a: StageTransform, b: StageTransform, frac: float) -> 
         py=lerp(a.py, b.py, frac),
         tx=lerp(a.tx, b.tx, frac),
         ty=lerp(a.ty, b.ty, frac),
+        projection=StageScreenTransform(
+            a00=lerp(a.projection.a00, b.projection.a00, frac),
+            a01=lerp(a.projection.a01, b.projection.a01, frac),
+            a02=lerp(a.projection.a02, b.projection.a02, frac),
+            a10=lerp(a.projection.a10, b.projection.a10, frac),
+            a11=lerp(a.projection.a11, b.projection.a11, frac),
+            a12=lerp(a.projection.a12, b.projection.a12, frac),
+            elevation=lerp(a.projection.elevation, b.projection.elevation, frac),
+        ),
     )
 
 
@@ -336,9 +414,8 @@ def init_layout():
 
     Layout.approach_start = 0.0
 
-    # Fixed approach-curve depths for the cover/spawn and far cutoff boundaries. These are
-    # tilt-independent (they pin screen positions); refresh_layout() converts them to the
-    # equivalent progress bounds under the current tilt each frame.
+    # Store the cover and drawing cutoff depths. These depths stay fixed as tilt changes.
+    # Each frame, refresh_layout() uses them to calculate progress bounds for the current tilt.
     cover = stage_cover_amount()
     hidden = hidden_amount()
     if cover:
@@ -355,6 +432,9 @@ def init_layout():
         candidate = inverse_approach_untilted(target_travel)
         Layout.approach_start = clamp(candidate, 0, 0.99)
 
+    # Preempt time is fixed for the level; compute it once.
+    Layout.default_preempt = preempt_time()
+
     bg = background()
     if Options.background_auto_correction:
         background_zoom = 1.0
@@ -365,6 +445,10 @@ def init_layout():
     Layout.initial_background = bg.scale_centered(Vec2(background_zoom, background_zoom))
 
     refresh_layout()
+
+    visibility = _compute_conservative_progress_bounds()
+    Layout.spawn_progress_start = visibility.start
+    Layout.spawn_progress_cutoff = visibility.end
 
     Layout.flick_speed_threshold = 2 * DynamicLayout.w_scale
 
@@ -384,7 +468,7 @@ class CameraChangeLike(Protocol):
     prev_ref: EntityRef
 
     @classmethod
-    def at(cls, index: int) -> CameraChangeLike: ...
+    def at(cls, index: int) -> Self: ...
 
     @property
     def index(self) -> int: ...
@@ -394,7 +478,7 @@ class InitializationLike(Protocol):
     first_camera_ref: EntityRef
 
     @classmethod
-    def at(cls, index: int) -> InitializationLike: ...
+    def at(cls, index: int) -> Self: ...
 
 
 def _camera_change_archetype() -> type[CameraChangeLike]:
@@ -607,6 +691,7 @@ def refresh_layout():
     tilt = current_stage_tilt()
 
     DynamicLayout.width_offset = (1 - tilt) * STAGE_WIDTH_MID
+    DynamicLayout.safe_lane_t = (1e-4 - DynamicLayout.width_offset) / max(tilt, 1e-6)
     vanish_tilt = max(tilt, STAGE_TILT_VANISH_MIN)
     vanish_ext = (1 - vanish_tilt) * STAGE_WIDTH_MID / vanish_tilt
     DynamicLayout.lane_t = LANE_T - vanish_ext
@@ -749,12 +834,45 @@ def approach(progress: float) -> float:
     return approach_at_tilt(progress, current_stage_tilt())
 
 
+class ApproachCache(Record):
+    """Approach setup shared by samples within one draw, while the camera is fixed."""
+
+    spawn_depth: float
+    slice_start: float
+    slice_spawn: float
+
+    def prepare(self):
+        tilt = current_stage_tilt()
+        if tilt < 1.0:
+            self.spawn_depth = approach_curve_base(Layout.approach_start)
+            if tilt > 0.0:
+                self.slice_start, self.slice_spawn = approach_slice_window(
+                    max(tilt, APPROACH_TILT_LERP_MIN), self.spawn_depth
+                )
+
+    def at(self, progress: float) -> float:
+        tilt = current_stage_tilt()
+        if tilt >= 1.0:
+            return approach_curve_base(lerp(Layout.approach_start, 1.0, progress))
+        if tilt <= 0.0:
+            return lerp(self.spawn_depth, 1.0, progress)
+        travel = approach_curve_base(lerp(self.slice_start, 1.0, progress))
+        sliced = remap(self.slice_spawn, 1.0, self.spawn_depth, 1.0, travel)
+        if tilt < APPROACH_TILT_LERP_MIN:
+            linear = lerp(self.spawn_depth, 1.0, progress)
+            return lerp(linear, sliced, tilt / APPROACH_TILT_LERP_MIN)
+        return sliced
+
+
 def inverse_approach_untilted(approach_value: float) -> float:
     return unlerp(Layout.approach_start, 1.0, inverse_approach_curve_base(approach_value))
 
 
 def inverse_approach_tilt(approach_value: float) -> float:
-    tilt = current_stage_tilt()
+    return inverse_approach_at_tilt(approach_value, current_stage_tilt())
+
+
+def inverse_approach_at_tilt(approach_value: float, tilt: float) -> float:
     if tilt >= 1.0:
         return inverse_approach_untilted(approach_value)
     spawn_depth = approach_curve_base(Layout.approach_start)
@@ -770,19 +888,55 @@ def inverse_approach_tilt(approach_value: float) -> float:
     return inverse_approach_slice(approach_value, tilt, spawn_depth)
 
 
+def _compute_conservative_progress_bounds() -> Interval:
+    """Bound spawn progress for tilt, stage cover, and drawing cutoffs.
+
+    Stage y offsets are handled separately by the spawn search.
+    """
+    fixed_tilt = 1.0
+    changing_tilt = False
+    if is_play() or is_watch():
+        ref = +_initialization_archetype().at(0).first_camera_ref
+        if ref.index > 0:
+            fixed_tilt = get_event_as(ref, _camera_change_archetype()).stage_tilt
+        while ref.index > 0:
+            camera = get_event_as(ref, _camera_change_archetype())
+            if camera.stage_tilt != fixed_tilt:
+                changing_tilt = True
+            ref.index = camera.next_ref.index
+    if changing_tilt:
+        spawn_depth = approach_curve_base(Layout.approach_start)
+        if stage_cover_amount():
+            # The cover hides notes before the approach starts.
+            lower = 0.0
+        else:
+            # Use the minimum tilt for extending the stage so notes spawn before they can become visible.
+            vanish_ext = (1 - STAGE_TILT_VANISH_MIN) * STAGE_WIDTH_MID / STAGE_TILT_VANISH_MIN
+            lower = inverse_approach_slice(APPROACH_SCALE - vanish_ext, STAGE_TILT_VANISH_MIN, APPROACH_SCALE)
+        # The untilted bound covers the end cutoff for all tilt values.
+        upper = max(1.0, (Layout.cutoff_depth - spawn_depth) / (1 - spawn_depth))
+    else:
+        vanish_tilt = max(fixed_tilt, STAGE_TILT_VANISH_MIN)
+        vanish_ext = (1 - vanish_tilt) * STAGE_WIDTH_MID / vanish_tilt
+        start_depth = Layout.cover_depth if stage_cover_amount() else Layout.cover_depth - vanish_ext
+        lower = inverse_approach_at_tilt(start_depth, fixed_tilt)
+        upper = inverse_approach_at_tilt(Layout.cutoff_depth, fixed_tilt)
+    # Spawn early enough for note geometry, arrows, and attachments.
+    lower = min(lower, -3.0)
+    upper = max(upper, 3.0)
+    return Interval(lower, upper)
+
+
+def conservative_progress_bounds() -> Interval:
+    return Interval(Layout.spawn_progress_start, Layout.spawn_progress_cutoff)
+
+
 def progress_to(
-    to_time: float | CompositeTime,
-    now: float | CompositeTime,
+    to_time: float,
+    now: float,
     force_speed: float = 0,
 ) -> float:
-    p = preempt_time(force_speed)
-    match (to_time, now):
-        case (CompositeTime(), CompositeTime()):
-            return ((now.base - to_time.base) + now.delta - to_time.delta + p) / p
-        case (Num(), Num()):
-            return unlerp(to_time - p, to_time, now)
-        case _:
-            static_error("Unexpected types for progress_to")
+    return distance_to_progress(to_time - now, force_speed)
 
 
 def preempt_time(force_speed: float = 0) -> float:
@@ -792,6 +946,10 @@ def preempt_time(force_speed: float = 0) -> float:
     if Options.stage_cover_scroll_speed_compensation == StageCoverNoteSpeedCompensation.FIXED_ONLY:
         return raw * (1 - Layout.approach_start)
     return raw
+
+
+def distance_to_progress(distance: float, force_speed: float = 0) -> float:
+    return 1.0 - distance / preempt_time(force_speed)
 
 
 def get_alpha(target_time: float, now: float | None = None) -> float:
@@ -874,7 +1032,7 @@ def pre_rotation_vec_at(lane: float, travel: float = 1.0) -> Vec2:
     )
 
 
-def touch_to_lane(pos: Vec2, transform: AffineTransform2d) -> float:
+def touch_to_lane(pos: Vec2, transform: StageScreenTransform) -> float:
     unrotated = transform.apply_inverse(pos).rotate(DynamicLayout.rotate)
     y_raw = (unrotated.y - DynamicLayout.t) / DynamicLayout.h_scale
     x_raw = (unrotated.x - DynamicLayout.x_translate) / DynamicLayout.w_scale
@@ -884,7 +1042,7 @@ def touch_to_lane(pos: Vec2, transform: AffineTransform2d) -> float:
     return x_raw / width
 
 
-def visible_lane_range_at(depth: float, transform: AffineTransform2d) -> tuple[float, float]:
+def visible_lane_range_at(depth: float, transform: StageScreenTransform) -> tuple[float, float]:
     """Conservative [min, max] range of lanes that can appear on screen at the given depth.
 
     Projects the screen corners onto the lane axis of the current camera layout composed with
@@ -1015,13 +1173,23 @@ def layout_stage_lane_by_edges(l: float, r: float, y_offset: float = 0.0) -> Qua
     )
 
 
-def layout_particle_lane(lane: float, size: float, y_offset: float = 0.0) -> Quad:
-    return perspective_rect(
-        l=lane - (size + 0.01),
-        r=lane + (size + 0.01),
-        t=DynamicLayout.lane_t,
-        b=get_perspective_y(-1, approach(1 - y_offset)),
-        travel=approach(1 - y_offset),
+def layout_particle_lane(
+    lane: float, size: float, y_offset: float = 0.0, *, extend_down: bool = True, compensate_overshoot: bool = True
+) -> Quad:
+    travel = approach(1 - y_offset)
+    top = max(tilt_depth(DynamicLayout.lane_t, travel), DynamicLayout.safe_lane_t)
+    bottom = DynamicLayout.lane_b
+    if extend_down:
+        bottom = lerp(bottom, DynamicLayout.stage_lane_b, 0.25 * current_stage_tilt())
+    bottom = max(tilt_depth(bottom, travel), top)
+    if compensate_overshoot:
+        # Account for overshoot in the animation
+        top = max(top, lerp(DynamicLayout.safe_lane_t, bottom, 0.07 / 1.07))
+    return Quad(
+        bl=transformed_vec_at(lane - size, bottom),
+        br=transformed_vec_at(lane + size, bottom),
+        tl=transformed_vec_at(lane - size, top),
+        tr=transformed_vec_at(lane + size, top),
     )
 
 
@@ -1753,12 +1921,44 @@ def layout_slide_connector_segment(
         start_lane, end_lane = end_lane, start_lane
         start_size, end_size = end_size, start_size
         start_travel, end_travel = end_travel, start_travel
-    return Quad(
-        bl=perspective_vec(start_lane - start_size, 1, start_travel),
-        br=perspective_vec(start_lane + start_size, 1, start_travel),
-        tl=perspective_vec(end_lane - end_size, 1, end_travel),
-        tr=perspective_vec(end_lane + end_size, 1, end_travel),
-    )
+    start_width = tilt_width_factor(start_travel)
+    end_width = tilt_width_factor(end_travel)
+    start_left_x = (start_lane - start_size) * start_width * DynamicLayout.w_scale + DynamicLayout.x_translate
+    start_right_x = (start_lane + start_size) * start_width * DynamicLayout.w_scale + DynamicLayout.x_translate
+    end_left_x = (end_lane - end_size) * end_width * DynamicLayout.w_scale + DynamicLayout.x_translate
+    end_right_x = (end_lane + end_size) * end_width * DynamicLayout.w_scale + DynamicLayout.x_translate
+    start_y = start_travel * DynamicLayout.h_scale + DynamicLayout.t
+    end_y = end_travel * DynamicLayout.h_scale + DynamicLayout.t
+    result = +Quad
+    if DynamicLayout.rotate == 0:
+        result @= Quad(
+            bl=Vec2(start_left_x, start_y),
+            br=Vec2(start_right_x, start_y),
+            tl=Vec2(end_left_x, end_y),
+            tr=Vec2(end_right_x, end_y),
+        )
+    else:
+        camera_cos = cos(-DynamicLayout.rotate)
+        camera_sin = sin(-DynamicLayout.rotate)
+        result @= Quad(
+            bl=Vec2(
+                start_left_x * camera_cos - start_y * camera_sin,
+                start_left_x * camera_sin + start_y * camera_cos,
+            ),
+            br=Vec2(
+                start_right_x * camera_cos - start_y * camera_sin,
+                start_right_x * camera_sin + start_y * camera_cos,
+            ),
+            tl=Vec2(
+                end_left_x * camera_cos - end_y * camera_sin,
+                end_left_x * camera_sin + end_y * camera_cos,
+            ),
+            tr=Vec2(
+                end_right_x * camera_cos - end_y * camera_sin,
+                end_right_x * camera_sin + end_y * camera_cos,
+            ),
+        )
+    return result
 
 
 def st_slide_connector_segment(
@@ -1768,8 +1968,8 @@ def st_slide_connector_segment(
     end_lane: float,
     end_size: float,
     end_travel: float,
-    start_transform: AffineTransform2d,
-    end_transform: AffineTransform2d,
+    start_transform: StageScreenTransform,
+    end_transform: StageScreenTransform,
 ) -> Quad:
     result = +Quad
     if start_travel >= end_travel:
@@ -1794,24 +1994,30 @@ def layout_sim_line(
     left_travel: float,
     right_lane: float,
     right_travel: float,
-    left_transform: AffineTransform2d,
-    right_transform: AffineTransform2d,
+    left_transform: StageScreenTransform,
+    right_transform: StageScreenTransform,
 ) -> Quad:
     ml = +Vec2
     mr = +Vec2
+    left_scale = max(0.0, left_transform.a00 * left_transform.a11 - left_transform.a01 * left_transform.a10)
+    right_scale = max(0.0, right_transform.a00 * right_transform.a11 - right_transform.a01 * right_transform.a10)
     if left_lane <= right_lane:
         ml @= left_transform.apply(perspective_vec(left_lane, 1, left_travel))
         mr @= right_transform.apply(perspective_vec(right_lane, 1, right_travel))
         ml_travel = left_travel
         mr_travel = right_travel
+        ml_scale = left_scale
+        mr_scale = right_scale
     else:
         ml @= right_transform.apply(perspective_vec(right_lane, 1, right_travel))
         mr @= left_transform.apply(perspective_vec(left_lane, 1, left_travel))
         ml_travel = right_travel
         mr_travel = left_travel
+        ml_scale = right_scale
+        mr_scale = left_scale
     ort = (mr - ml).orthogonal().normalize_or_zero()
-    ml_h = DynamicLayout.scaled_note_h * tilt_width_factor(ml_travel)
-    mr_h = DynamicLayout.scaled_note_h * tilt_width_factor(mr_travel)
+    ml_h = DynamicLayout.scaled_note_h * tilt_width_factor(ml_travel) * ml_scale
+    mr_h = DynamicLayout.scaled_note_h * tilt_width_factor(mr_travel) * mr_scale
     return Quad(
         bl=ml + ort * ml_h,
         br=mr + ort * mr_h,
@@ -2040,7 +2246,7 @@ def compute_hitbox(
     leniency: float,
     y_offset: float = 0.0,
     *,
-    stage_transform: AffineTransform2d,
+    stage_transform: StageScreenTransform,
 ) -> Hitbox:
     tilt = transform.stage_tilt
     travel = approach_at_tilt(1 - y_offset, tilt)
@@ -2083,17 +2289,28 @@ def compute_hitbox(
         bl_x_final = interpolate_hitbox_edge_x(base_l_x, base_y, l_x, note_y, b_y) - (leniency * lane_w)
         br_x_final = interpolate_hitbox_edge_x(base_r_x, base_y, r_x, note_y, b_y) + (leniency * lane_w)
 
+    target_l = stage_transform.apply(Vec2(l_x, note_y).rotate(rot))
+    target_r = stage_transform.apply(Vec2(r_x, note_y).rotate(rot))
+    # Keep the hitbox height and leniency even when elevation flattens the stage to a line.
+    axis = Vec2(1, 0).rotate(rot)
+    horizontal = Vec2(
+        stage_transform.a00 * axis.x + stage_transform.a01 * axis.y,
+        stage_transform.a10 * axis.x + stage_transform.a11 * axis.y,
+    ).normalize_or_zero()
+    vertical = horizontal.orthogonal() * vertical_extent
+    margin = horizontal * (leniency * lane_w)
+    bound_bl = target_l - margin - vertical
+    bound_br = target_r + margin - vertical
+    bound_tl = target_l - margin + vertical
+    bound_tr = target_r + margin + vertical
+    if Options.hitbox_range != HitboxRange.DEFAULT and abs(stage_transform.elevation) < 1e-8:
+        bound_bl @= stage_transform.apply(Vec2(bl_x_final, b_y).rotate(rot))
+        bound_br @= stage_transform.apply(Vec2(br_x_final, b_y).rotate(rot))
+        bound_tl @= stage_transform.apply(Vec2(tl_x_final, t_y).rotate(rot))
+        bound_tr @= stage_transform.apply(Vec2(tr_x_final, t_y).rotate(rot))
     return Hitbox(
-        target=HitboxTarget(
-            l=stage_transform.apply(Vec2(l_x, note_y).rotate(rot)),
-            r=stage_transform.apply(Vec2(r_x, note_y).rotate(rot)),
-        ),
-        bounds=Quad(
-            bl=stage_transform.apply(Vec2(bl_x_final, b_y).rotate(rot)),
-            br=stage_transform.apply(Vec2(br_x_final, b_y).rotate(rot)),
-            tl=stage_transform.apply(Vec2(tl_x_final, t_y).rotate(rot)),
-            tr=stage_transform.apply(Vec2(tr_x_final, t_y).rotate(rot)),
-        ),
+        target=HitboxTarget(l=target_l, r=target_r),
+        bounds=Quad(bl=bound_bl, br=bound_br, tl=bound_tl, tr=bound_tr),
     )
 
 
@@ -2108,7 +2325,7 @@ def compute_hitbox_at_time(
     target_time: float,
     y_offset: float = 0.0,
     *,
-    stage_transform: AffineTransform2d,
+    stage_transform: StageScreenTransform,
     left_limit: bool = False,
 ) -> Hitbox:
     return compute_hitbox(

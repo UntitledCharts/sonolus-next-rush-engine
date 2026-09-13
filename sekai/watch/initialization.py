@@ -52,7 +52,7 @@ from sekai.lib.streams import Streams
 from sekai.lib.ui import init_ui
 from sekai.watch import custom_elements, note
 from sekai.watch.connector import WatchConnector
-from sekai.watch.dynamic_stage import WatchCameraChange
+from sekai.watch.dynamic_stage import WatchCameraChange, WatchDynamicStage
 from sekai.watch.events import Fever, Skill
 from sekai.watch.static_stage import WatchScheduledLaneEffect, WatchStaticStage
 
@@ -67,11 +67,12 @@ class WatchInitialization(WatchArchetype):
 
     is_multi: bool = imported()
 
-    @callback(order=-1)
+    @callback(order=-3)
     def preprocess(self):
         if is_replay():
             self.revision = self.replay_revision
         init_level_config(self.revision)
+        init_event_list(self.first_camera_ref)
         init_layout()
         init_skin()
         init_particles()
@@ -92,14 +93,10 @@ class WatchInitialization(WatchArchetype):
         LifeManager.initial_life = self.initial_life
         LifeManager.max_life = max(2000, self.initial_life * 2)
 
-        init_event_list(self.first_camera_ref)
         WatchStaticStage.spawn()
         custom_elements.StateManager.spawn()
 
-        for input_time, lanes in Streams.empty_input_lanes.iter_items_from(-2):
-            for lane in lanes:
-                schedule_lane_sfx(lane, input_time)
-                WatchScheduledLaneEffect.spawn(lane=lane, target_time=input_time)
+        schedule_empty_input_effects()
 
         entity_count = count_entities()
         sorted_linked_list(entity_count)
@@ -582,3 +579,15 @@ def calculate_replay_life(note_head: int, skill_head: int) -> None:
             current_note.replay_life = life
             note_ptr = current_note.next_ref.index
     LifeManager.first = first_event_time
+
+
+def schedule_empty_input_effects():
+    for input_time, lanes in Streams.empty_input_lanes.iter_items_from(-2):
+        for i, lane in enumerate(lanes):
+            stage_ref = EntityRef[WatchDynamicStage](0)
+            if input_time in Streams.empty_input_stages:
+                stages = Streams.empty_input_stages[input_time]
+                if i < len(stages):
+                    stage_ref.index = stages[i]
+            schedule_lane_sfx(lane, input_time)
+            WatchScheduledLaneEffect.spawn(lane=lane, target_time=input_time, stage_ref=stage_ref)

@@ -10,7 +10,7 @@ from sekai.lib.custom_elements import LifeManager, ScoreIndicator
 from sekai.lib.events import reset_fever_bounds
 from sekai.lib.initialization import LastNote
 from sekai.lib.layout import (
-    IDENTITY_AFFINE_TRANSFORM,
+    IDENTITY_STAGE_SCREEN_TRANSFORM,
     StaticStageData,
     layout_lane_area,
     refresh_layout,
@@ -26,6 +26,7 @@ from sekai.play.common import PlayLevelMemory
 @level_memory
 class StageMemory:
     empty_lanes: VarArray[float, Dim[16]]
+    empty_lane_stages: VarArray[int, Dim[16]]
 
 
 class StaticStage(PlayArchetype):
@@ -41,7 +42,7 @@ class StaticStage(PlayArchetype):
     def initialize(self):
         self.dead_time = -2
 
-    @callback(order=-2)
+    @callback(order=-3)
     def update_sequential(self):
         refresh_layout()
         reset_fever_bounds()
@@ -52,7 +53,9 @@ class StaticStage(PlayArchetype):
         if LevelConfig.dynamic_stages:
             if len(empty_lanes) > 0:
                 Streams.empty_input_lanes[offset_adjusted_time()] = empty_lanes
+                Streams.empty_input_stages[offset_adjusted_time()] = StageMemory.empty_lane_stages
                 empty_lanes.clear()
+                StageMemory.empty_lane_stages.clear()
             return
         empty_lanes.clear()
         empty_triggered = False
@@ -62,25 +65,25 @@ class StaticStage(PlayArchetype):
                 continue
             if not input_manager.is_allowed_empty(touch):
                 continue
-            lane = touch_to_lane(touch.position, IDENTITY_AFFINE_TRANSFORM)
+            lane = touch_to_lane(touch.position, IDENTITY_STAGE_SCREEN_TRANSFORM)
             rounded_lane = clamp(round(lane - 0.5) + 0.5, -5.5, 5.5)
             if touch.started:
                 play_lane_hit_effects(
                     rounded_lane,
                     sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6,
-                    transform=IDENTITY_AFFINE_TRANSFORM,
+                    transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
                 )
                 empty_triggered = True
                 if not empty_lanes.is_full():
                     empty_lanes.append(rounded_lane)
             else:
-                prev_lane = touch_to_lane(touch.prev_position, IDENTITY_AFFINE_TRANSFORM)
+                prev_lane = touch_to_lane(touch.prev_position, IDENTITY_STAGE_SCREEN_TRANSFORM)
                 prev_rounded_lane = clamp(round(prev_lane - 0.5) + 0.5, -5.5, 5.5)
                 if rounded_lane != prev_rounded_lane:
                     play_lane_hit_effects(
                         rounded_lane,
                         sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6,
-                        transform=IDENTITY_AFFINE_TRANSFORM,
+                        transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
                     )
                     empty_triggered = True
                     if not empty_lanes.is_full():

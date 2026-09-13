@@ -26,7 +26,7 @@ engine = Engine(
 
 project = Project(
     engine=engine,
-    levels=load_levels(),
+    levels=[*load_levels()],
     converters={
         "chcy-extended": convert_extended_level_data,
     },

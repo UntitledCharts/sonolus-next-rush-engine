@@ -18,6 +18,7 @@ from sekai.lib.layout import FlickDirection, StageTransformAnchor, ZoomVerticalA
 from sekai.lib.level_config import EngineRevision
 from sekai.lib.note import NoteKind
 from sekai.lib.stage import DivisionParity, JudgeLineColor, JudgeLineStyle, StageBorderStyle
+from sekai.lib.timescale import TransitionStyle
 from sekai.play.bpm_change import BpmChange
 from sekai.play.connector import Connector
 from sekai.play.dynamic_stage import (
@@ -58,7 +59,7 @@ _ACTIVE_HOLD_SEGMENT_KINDS = frozenset(
     }
 )
 
-# Segment kinds whose connectors track touches through their section's active head/tail refs.
+# These connectors track touches using the active head and tail of their input section.
 _INPUT_TRACKED_SEGMENT_KINDS = _ACTIVE_HOLD_SEGMENT_KINDS | {ConnectorKind.DAMAGE}
 
 _DAMAGE_TICK_STEP = 0.5
@@ -98,8 +99,9 @@ class LevelTimescaleChange:
     beat: float
     timescale: float
     timescale_skip: float = 0.0
-    timescale_ease: TimescaleEase = TimescaleEase.NONE
+    timescale_ease: EaseType | TimescaleEase = EaseType.NONE
     hide_notes: bool = False
+    transition_style: TransitionStyle = TransitionStyle.TIMESCALE
 
 
 @dataclass
@@ -152,6 +154,7 @@ class LevelStageTransformChange:
     y_lane_translate: float = 0.0
     anchor: StageTransformAnchor = StageTransformAnchor.DEFAULT
     ease: EaseType = EaseType.LINEAR
+    elevation: float = 0.0
 
 
 @dataclass
@@ -451,16 +454,17 @@ def build_level(
 
 
 def _input_section_bounds(notes: list[LevelNote], separator_indices: list[int]) -> dict[int, tuple[int, int]]:
-    """Map each separator span's head index to the separator indices bounding its input section.
+    """Find the input section containing each span between separators.
 
-    Consecutive spans whose kinds share an input class (active hold, or damage) form one section
-    with a single active head/tail, so e.g. an active slide with mid-slide separators is one hold
-    and a multi-segment damage slide shows its touched state as a whole.
+    The result maps each span's head index to the head and tail indices of its section.
+    Group consecutive spans only when they are all real holds, all fake holds, or all damage.
+    This lets a hold continue through separators and lets consecutive damage segments show a
+    shared touched state.
     """
 
     def input_class(kind: ConnectorKind) -> int:
-        # Fake actives get their own class: sharing a head with a real hold would leak their
-        # forced-active state onto it.
+        # Fake holds are always active. Give them a separate class so sharing a head cannot mark
+        # a real hold as active too.
         match kind:
             case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_CRITICAL:
                 return 1
@@ -494,9 +498,10 @@ def _emit_damage_ticks(
 ) -> None:
     """Emit a TransientHiddenDamageTickNote every half beat over each DAMAGE segment of the slide.
 
-    Ticks cover both segment endpoints, except that the slide's very first beat never gets a tick
-    and a damage->damage joint is emitted once, by the earlier segment. A damage run ending off the
-    half-beat grid gets a tick at its final beat, since no grid tick's window covers that stretch.
+    Ticks include segment endpoints on the half-beat grid, except for the slide's first beat.
+    When two damage segments share an endpoint, only the earlier segment emits its tick.
+    If a sequence of damage segments ends between grid beats, add a tick at its final beat
+    to cover the time after the last grid tick's window.
     """
     spans = list(itertools.pairwise(separator_indices))
     section_by_span_head = _input_section_bounds(slide.notes, separator_indices)
@@ -544,7 +549,10 @@ def _emit_damage_ticks(
 
 
 def _bracketing_non_attached(non_attached: list[BaseNote], beat: float) -> tuple[BaseNote, BaseNote]:
-    """Find the consecutive non-attached joints enclosing the beat, attaching backward only at the slide's end."""
+    """Find the two consecutive non-attached joints around the beat.
+
+    At an exact joint, use that joint and the next one. At the slide's end, use the last two joints.
+    """
     attach_tail: BaseNote | None = None
     for cand in non_attached:
         if cand.beat > beat + _BEAT_EPSILON:
@@ -566,6 +574,17 @@ def _build_timescale_group(
 ) -> tuple[TimescaleGroup, list[PlayArchetype]]:
     if not level_group.changes:
         raise ValueError("LevelTimescaleGroup must have at least one change")
+    if not math.isfinite(level_group.force_note_speed):
+        raise ValueError("Timescale group force_note_speed must be finite")
+    for index, change in enumerate(level_group.changes):
+        for name in ("beat", "timescale", "timescale_skip"):
+            if not math.isfinite(getattr(change, name)):
+                raise ValueError(f"Timescale change {index}: {name} must be finite")
+        try:
+            EaseType(change.timescale_ease)
+            TransitionStyle(change.transition_style)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Timescale change {index}: unknown easing or transition style") from exc
     group = TimescaleGroup(force_note_speed=level_group.force_note_speed)
     change_entities: list[TimescaleChange] = []
     for level_change in sorted(level_group.changes, key=lambda c: c.beat):
@@ -574,8 +593,9 @@ def _build_timescale_group(
             timescale=level_change.timescale,
             timescale_skip=level_change.timescale_skip,
             timescale_group=group.ref(),
-            timescale_ease=level_change.timescale_ease,
+            timescale_ease=EaseType(level_change.timescale_ease),
             hide_notes=level_change.hide_notes,
+            transition_style=level_change.transition_style,
         )
         if change_entities:
             change_entities[-1].next_ref = change.ref()
@@ -652,6 +672,7 @@ def _build_stage(level_stage: LevelStage) -> tuple[DynamicStage, list[PlayArchet
             rotate=tr.rotate,
             x_lane_translate=tr.x_lane_translate,
             y_lane_translate=tr.y_lane_translate,
+            elevation=tr.elevation,
             anchor=tr.anchor,
             ease=tr.ease,
         )
