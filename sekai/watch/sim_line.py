@@ -45,8 +45,8 @@ class WatchSimLine(WatchArchetype):
         if visibility_end <= MIN_START_TIME:
             return
         start_time = min(
-            self.left.start_time,
-            self.right.start_time,
+            self.left.scheduled_spawn_time,
+            self.right.scheduled_spawn_time,
             segment_visual_spawn_time(
                 self.left, self.right, min(self.left.target_time, self.right.target_time, visibility_end)
             ),

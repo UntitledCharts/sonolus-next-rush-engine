@@ -392,6 +392,8 @@ class StageStyleChangeLike(Protocol):
     ease: EaseType
     next_ref: EntityRef
     prev_ref: EntityRef
+    note_visibility_start: float
+    previous_note_visibility_end: float
 
     @classmethod
     def at(cls, index: int) -> Self: ...
@@ -466,40 +468,74 @@ def stage_y_offset_bounds(stage: DynamicStageLike) -> Interval:
     return result
 
 
-def stage_note_visibility_end(stage: DynamicStageLike) -> float:
-    """Return a safe cutoff after which stage note alpha stays at or below zero.
+def _stage_style_interval_visible(style: StageStyleChangeLike) -> bool:
+    if style.next_ref.index <= 0:
+        return style.note_alpha > 0
+    following = get_event_as(style.next_ref, _stage_style_change_archetype())
+    return following.time > style.time and (
+        style.note_alpha > 0 or (style.ease != EaseType.NONE and following.note_alpha > 0)
+    )
+
+
+def initialize_stage_note_visibility(stage: DynamicStageLike) -> float:
+    """Cache neighboring visibility boundaries and return the permanent cutoff.
 
     The first style also applies before its event time. Events at the same time
     can still set the ending alpha of the previous fade.
+
+    Call after style times and the event list's previous links are initialized.
     """
     ref = +stage.first_style_change_ref
     if ref.index <= 0:
         return inf
     first = get_event_as(ref, _stage_style_change_archetype())
     result = first.time if first.note_alpha > 0 else -inf
+    last_ref = +ref
     while ref.index > 0:
         style = get_event_as(ref, _stage_style_change_archetype())
-        if style.next_ref.index <= 0:
-            if style.note_alpha > 0:
+        style.previous_note_visibility_end = result
+        if _stage_style_interval_visible(style):
+            if style.next_ref.index <= 0:
                 result = inf
-            break
-        following = get_event_as(style.next_ref, _stage_style_change_archetype())
-        if following.time > style.time and (
-            style.note_alpha > 0 or (style.ease != EaseType.NONE and following.note_alpha > 0)
-        ):
-            # Use the next event's time to avoid solving when the fade reaches zero.
-            result = following.time
+            else:
+                result = get_event_as(style.next_ref, _stage_style_change_archetype()).time
+        last_ref.index = ref.index
         ref.index = style.next_ref.index
+    visibility_start = inf
+    while last_ref.index > 0:
+        style = get_event_as(last_ref, _stage_style_change_archetype())
+        if _stage_style_interval_visible(style):
+            visibility_start = style.time
+        style.note_visibility_start = visibility_start
+        last_ref.index = style.prev_ref.index
     return result
 
 
-def stage_note_visibility_start(stage: DynamicStageLike, start: float) -> float:
+def stage_note_visibility_end_before(stage: DynamicStageLike, end: float, earliest: float = -inf) -> float:
+    """Return the last potentially visible interval's end within [earliest, end), or earliest."""
+    if end <= earliest:
+        return earliest
+    if stage.first_style_change_ref.index <= 0:
+        return end
+    ref, following_ref = query_event_list(stage.first_style_change_ref, end, lambda event: event.time)
+    if ref.index > 0:
+        style = get_event_as(ref, _stage_style_change_archetype())
+        if end > style.time and style.note_visibility_start == style.time:
+            return end
+        return max(earliest, style.previous_note_visibility_end)
+    first = get_event_as(following_ref, _stage_style_change_archetype())
+    return end if first.note_alpha > 0 else earliest
+
+
+def stage_note_visibility_start(stage: DynamicStageLike, start: float, latest: float = inf) -> float:
     """Return the next time at or after start when stage notes could be visible.
 
-    Return inf if no later style can make the notes visible. If either end of a
-    fade has positive alpha, treat the whole fade as potentially visible.
+    Return latest if no potentially visible interval begins before it. If either
+    end of a fade has positive alpha, treat the whole fade as potentially visible.
     """
-    if start == inf or stage.first_style_change_ref.index <= 0:
+    if start >= latest:
+        return latest
+    if stage.first_style_change_ref.index <= 0:
         return start
     ref, following_ref = query_event_list(stage.first_style_change_ref, start, lambda event: event.time)
     if ref.index <= 0:
@@ -507,17 +543,8 @@ def stage_note_visibility_start(stage: DynamicStageLike, start: float) -> float:
         if first.note_alpha > 0:
             return start
         ref.index = following_ref.index
-    while ref.index > 0:
-        style = get_event_as(ref, _stage_style_change_archetype())
-        if style.next_ref.index <= 0:
-            return max(start, style.time) if style.note_alpha > 0 else inf
-        following = get_event_as(style.next_ref, _stage_style_change_archetype())
-        if following.time > max(start, style.time) and (
-            style.note_alpha > 0 or (style.ease != EaseType.NONE and following.note_alpha > 0)
-        ):
-            return max(start, style.time)
-        ref.index = style.next_ref.index
-    return inf
+    style = get_event_as(ref, _stage_style_change_archetype())
+    return min(latest, max(start, style.note_visibility_start))
 
 
 def center_anchor_weight(anchor: StageTransformAnchor) -> float:

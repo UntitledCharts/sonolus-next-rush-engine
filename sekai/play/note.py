@@ -139,7 +139,7 @@ class BaseNote(PlayArchetype):
     target_time: float = entity_data()
     visual_start_time: float = entity_memory()
     visual_end_time: float = entity_memory()
-    start_time: float = entity_data()
+    spawn_eligibility_time: float = entity_data()
     scheduled_spawn_time: float = shared_memory()
     target_position: TargetPosition = entity_data()
     target_y_offset: float = entity_data()
@@ -204,7 +204,7 @@ class BaseNote(PlayArchetype):
     def init_data(self):
         if self.data_init_done:
             return
-        self.start_time = inf
+        self.spawn_eligibility_time = inf
 
         self.kind = map_note_kind(cast(NoteKind, self.key))
         self.effect_kind = get_note_effect_kind(self.kind, self.effect_kind)
@@ -235,7 +235,7 @@ class BaseNote(PlayArchetype):
         self.data_init_done = 2
 
     def preprocess(self):
-        self.start_time = inf
+        self.spawn_eligibility_time = inf
         self.scheduled_spawn_time = inf
         self.visual_start_time = inf
         if DISABLE_NOTES:
@@ -284,10 +284,11 @@ class BaseNote(PlayArchetype):
             )
 
         end_time = max(self.target_time, self.input_interval.end) if self.is_scored else self.target_time
+        natural_start_time = note_visual_spawn_time(self, end_time)
         if not self.is_scored:
             self.visual_end_time = min(self.target_time, note_visibility_end(self))
             end_time = self.visual_end_time
-        self.visual_start_time = note_visibility_start(self, note_visual_spawn_time(self, end_time))
+        self.visual_start_time = note_visibility_start(self, natural_start_time)
         if not self.is_scored and self.visual_start_time >= self.visual_end_time:
             self.visual_start_time = inf
         start_time = (
@@ -314,7 +315,8 @@ class BaseNote(PlayArchetype):
             self.extend_stage_windows(start_time - 1.0, end_time + 1.0)
         if self.kind != NoteKind.ANCHOR:
             register_note_group_window(self, start_time, end_time)
-        self.start_time = start_time
+        # A hidden note can still be an endpoint of a visible connector.
+        self.spawn_eligibility_time = min(natural_start_time, start_time)
         self.scheduled_spawn_time = start_time
         self.preprocess_done = True
 

@@ -1,19 +1,23 @@
 from math import inf
 from typing import Any
 
+from sonolus.script.archetype import get_archetype_by_name
 from sonolus.script.array import Dim
 from sonolus.script.containers import VarArray
 from sonolus.script.interval import Interval, lerp
+from sonolus.script.record import Record
 
+from sekai.lib import archetype_names
 from sekai.lib.ease import safe_unlerp_clamped
 from sekai.lib.options import Options
-from sekai.lib.stage import stage_note_visibility_start
+from sekai.lib.stage import stage_note_visibility_end_before, stage_note_visibility_start
 from sekai.lib.timescale import (
     MIN_START_TIME,
     TrajectoryCache,
     evaluate_trajectory,
     group_preempt_time,
     group_visibility_end,
+    group_visibility_end_before,
     group_visibility_start,
     prepare_trajectory,
     register_group_window,
@@ -125,6 +129,95 @@ def note_visibility_start(note: Any, start: float) -> float:
     if start == inf:
         return start
     return max(group_visibility_start(note.timescale_group, start), note_stage_visibility_start(note, start))
+
+
+class _ConnectorVisibilityStage(Record):
+    """Remember each stage's visibility boundary to avoid rescanning hidden intervals."""
+
+    stage_index: int
+    bound: float
+
+
+def _append_connector_visibility_stages(
+    note: Any, stages: VarArray[_ConnectorVisibilityStage, Dim[4]], bound: float
+) -> None:
+    if not note.is_attached:
+        stages.append(_ConnectorVisibilityStage(note.stage_ref.index, bound))
+    else:
+        head = note.attach_head_ref.get()
+        tail = note.attach_tail_ref.get()
+        fraction = safe_unlerp_clamped(head.target_time, tail.target_time, note.target_time)
+        if fraction <= 0:
+            stages.append(_ConnectorVisibilityStage(head.stage_ref.index, bound))
+        elif fraction >= 1:
+            stages.append(_ConnectorVisibilityStage(tail.stage_ref.index, bound))
+        else:
+            stages.append(_ConnectorVisibilityStage(head.stage_ref.index, bound))
+            stages.append(_ConnectorVisibilityStage(tail.stage_ref.index, bound))
+
+
+def _visibility_stage(index: int) -> Any:
+    return get_archetype_by_name(archetype_names.STAGE).at(index)
+
+
+def connector_visibility_start(head: Any, tail: Any, group: Any, start: float, latest: float) -> float:
+    """Skip connector hiding before latest, when its group hides it or both endpoint stages do."""
+    if start >= latest:
+        return start
+    stages = +VarArray[_ConnectorVisibilityStage, Dim[4]]
+    _append_connector_visibility_stages(head, stages, start)
+    _append_connector_visibility_stages(tail, stages, start)
+    while start < latest:
+        previous = start
+        start = min(latest, group_visibility_start(group, start))
+        if start >= latest:
+            break
+        stage_start = latest
+        for i in range(len(stages)):
+            source = stages[i]
+            if source.bound <= start:
+                source.bound = (
+                    stage_note_visibility_start(_visibility_stage(source.stage_index), start, latest)
+                    if source.stage_index > 0
+                    else start
+                )
+            stage_start = min(stage_start, source.bound)
+            if stage_start == start:
+                break
+        start = stage_start
+        if start == previous:
+            break
+    return start
+
+
+def connector_visibility_end(head: Any, tail: Any, group: Any, end: float, earliest: float) -> float:
+    """Trim connector hiding before an exclusive end, stopping at earliest."""
+    if end <= earliest:
+        return end
+    stages = +VarArray[_ConnectorVisibilityStage, Dim[4]]
+    _append_connector_visibility_stages(head, stages, end)
+    _append_connector_visibility_stages(tail, stages, end)
+    while end > earliest:
+        previous = end
+        end = max(earliest, group_visibility_end_before(group, end))
+        if end <= earliest:
+            break
+        stage_end = earliest
+        for i in range(len(stages)):
+            source = stages[i]
+            if source.bound >= end:
+                source.bound = (
+                    stage_note_visibility_end_before(_visibility_stage(source.stage_index), end, earliest)
+                    if source.stage_index > 0
+                    else end
+                )
+            stage_end = max(stage_end, source.bound)
+            if stage_end == end:
+                break
+        end = stage_end
+        if end == previous:
+            break
+    return end
 
 
 def extend_note_chain_stage_windows(head: Any, start: float, end: float) -> None:

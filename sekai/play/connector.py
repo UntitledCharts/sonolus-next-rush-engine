@@ -52,17 +52,16 @@ from sekai.lib.timescale import (
     MIN_START_TIME,
     TrajectoryCache,
     group_hide_notes,
-    group_visibility_end,
     register_group_window,
 )
 from sekai.lib.timescale_consumer import (
+    connector_visibility_end,
+    connector_visibility_start,
     extend_note_chain_stage_windows,
     legacy_connector_spawn_time,
-    note_stage_visibility_end,
     note_visual_progress,
     prepare_note_trajectories,
     register_note_group_window,
-    segment_visual_spawn_time,
 )
 from sekai.play import input_manager, note
 
@@ -140,41 +139,43 @@ class Connector(PlayArchetype):
         if self.active_tail_ref.index > 0:
             head.tick_tail_ref = self.active_tail_ref
 
-        visibility_end = inf
-        # Active sections must keep recording replay state after the connector body is hidden.
-        # Input offsets and replay options can make those later states visible.
-        if self.active_head_ref.index <= 0:
-            visibility_end = min(
-                group_visibility_end(self.segment_head.timescale_group),
-                max(note_stage_visibility_end(head), note_stage_visibility_end(tail)),
-            )
-        self.end_time = min(self.end_time, visibility_end)
-        if visibility_end <= MIN_START_TIME:
-            return
         start_time = min(
             self.visual_active_interval.start,
             self.input_active_interval.start,
-            head.start_time,
-            tail.start_time,
-            segment_visual_spawn_time(head, tail, min(self.visual_active_interval.end, visibility_end)),
+            head.spawn_eligibility_time,
+            tail.spawn_eligibility_time,
         )
+        if self.active_head_ref.index <= 0:
+            self.end_time = connector_visibility_end(
+                head, tail, self.segment_head.timescale_group, self.end_time, start_time
+            )
+            if not self.legacy_hidden_pop:
+                start_time = connector_visibility_start(
+                    head, tail, self.segment_head.timescale_group, start_time, self.end_time
+                )
+            if start_time >= self.end_time or self.end_time <= MIN_START_TIME:
+                return
         if self.legacy_hidden_pop:
             start_time = self.visual_active_interval.start
-        if start_time >= visibility_end:
-            return
+            if start_time >= self.end_time:
+                return
 
-        head.extend_stage_windows(start_time - 1.0, self.end_time + 1.0)
-        tail.extend_stage_windows(start_time - 1.0, self.end_time + 1.0)
+        spawn_time = start_time
+        if self.active_head_ref.index > 0:
+            spawn_time = min(spawn_time, self.active_head.target_time + min(0, input_offset()))
+
+        head.extend_stage_windows(spawn_time - 1.0, self.end_time + 1.0)
+        tail.extend_stage_windows(spawn_time - 1.0, self.end_time + 1.0)
         if self.head_ref.index == self.active_head_ref.index:
             extend_note_chain_stage_windows(
                 self.active_head, self.active_head.target_time, self.active_tail.target_time
             )
 
-        register_note_group_window(head, start_time, self.end_time)
-        register_note_group_window(tail, start_time, self.end_time)
-        register_group_window(self.segment_head.timescale_group, start_time, self.end_time)
+        register_note_group_window(head, spawn_time, self.end_time)
+        register_note_group_window(tail, spawn_time, self.end_time)
+        register_group_window(self.segment_head.timescale_group, spawn_time, self.end_time)
         self.start_time = start_time
-        self.scheduled_spawn_time = start_time
+        self.scheduled_spawn_time = spawn_time
 
     def initialize(self):
         if self.head_ref.index == self.active_head_ref.index:
@@ -234,7 +235,9 @@ class Connector(PlayArchetype):
                 self.active_connector_info.visual_connector_index = self.index + 1
                 self.active_connector_info.visual_update_time = time()
                 self.active_connector_info.connector_kind = self.kind
-            if group_hide_notes(self.segment_head.timescale_group) and self.active_head_ref.index > 0:
+            if self.active_connector_info.visual_connector_index == self.index + 1 and group_hide_notes(
+                self.segment_head.timescale_group
+            ):
                 self.active_connector_info.connector_kind = ConnectorKind.NONE
 
     @callback(order=1)
@@ -259,14 +262,14 @@ class Connector(PlayArchetype):
                     self.can_consume_empty = False
 
     def update_parallel(self):
-        if time() < self.start_time:
+        if time() < self.start_time and self.active_head_ref.index <= 0:
             return
         if self.despawn:
             return
-        self.draw_hitbox()
         current_time = time()
         adj_time = offset_adjusted_time()
-
+        if current_time >= self.start_time:
+            self.draw_hitbox()
         if current_time < self.visual_active_interval.end or self.segment_head.segment_through_judge_line:
             head = self.head
             tail = self.tail
@@ -295,6 +298,8 @@ class Connector(PlayArchetype):
             if visual_state != self.last_visual_state:
                 self.last_visual_state = visual_state
                 Streams.connector_visual_states[self.index][adj_time] = visual_state
+            if current_time < self.start_time:
+                return
             if group_hide_notes(segment_head.timescale_group):
                 return
             if self.active_tail_ref.index > 0:

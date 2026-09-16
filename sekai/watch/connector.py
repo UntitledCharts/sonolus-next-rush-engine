@@ -40,19 +40,24 @@ from sekai.lib.timescale import (
     MIN_START_TIME,
     TrajectoryCache,
     group_hide_notes,
-    group_visibility_end,
     register_group_window,
 )
 from sekai.lib.timescale_consumer import (
+    connector_visibility_end,
+    connector_visibility_start,
     extend_note_chain_stage_windows,
     legacy_connector_spawn_time,
-    note_stage_visibility_end,
     note_visual_progress,
     prepare_note_trajectories,
     register_note_group_window,
-    segment_visual_spawn_time,
 )
 from sekai.watch import note
+
+
+def slide_manager_end_time(active_tail: note.WatchBaseNote) -> float:
+    if active_tail.is_scored:
+        return min(active_tail.target_time, active_tail.despawn_time())
+    return active_tail.target_time
 
 
 class WatchConnector(WatchArchetype):
@@ -115,26 +120,26 @@ class WatchConnector(WatchArchetype):
         if self.segment_head.segment_through_judge_line:
             self.end_time += CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY
 
-        visibility_end = inf
-        # Keep hidden active sections alive because slide effects and the slide head still use their geometry.
-        if self.active_head_ref.index <= 0:
-            visibility_end = min(
-                group_visibility_end(self.segment_head.timescale_group),
-                max(note_stage_visibility_end(head), note_stage_visibility_end(tail)),
-            )
-        self.end_time = min(self.end_time, visibility_end)
-        if visibility_end <= MIN_START_TIME:
-            return
         start_time = min(
             self.visual_active_interval.start,
-            head.start_time,
-            tail.start_time,
-            segment_visual_spawn_time(head, tail, min(self.visual_active_interval.end, visibility_end)),
+            head.spawn_eligibility_time,
+            tail.spawn_eligibility_time,
         )
+        # Hidden active sections still provide slide-head ownership and hitboxes.
+        if self.active_head_ref.index <= 0:
+            self.end_time = connector_visibility_end(
+                head, tail, self.segment_head.timescale_group, self.end_time, start_time
+            )
+            if not self.legacy_hidden_pop:
+                start_time = connector_visibility_start(
+                    head, tail, self.segment_head.timescale_group, start_time, self.end_time
+                )
+            if start_time >= self.end_time or self.end_time <= MIN_START_TIME:
+                return
         if self.legacy_hidden_pop:
             start_time = self.visual_active_interval.start
-        if start_time >= visibility_end:
-            return
+            if start_time >= self.end_time:
+                return
 
         head.extend_stage_windows(start_time - 1.0, self.end_time + 1.0)
         tail.extend_stage_windows(start_time - 1.0, self.end_time + 1.0)
@@ -144,8 +149,7 @@ class WatchConnector(WatchArchetype):
         register_group_window(self.segment_head.timescale_group, start_time, self.end_time)
 
         if self.head_ref.index == self.active_head_ref.index:
-            active_tail = self.active_tail
-            manager_end = active_tail.despawn_time() if active_tail.is_scored else active_tail.target_time
+            manager_end = slide_manager_end_time(self.active_tail)
             extend_note_chain_stage_windows(self.active_head, self.active_head.target_time, manager_end)
             WatchSlideManager.spawn(active_head_ref=self.active_head_ref, active_tail_ref=self.active_tail_ref)
 
@@ -169,7 +173,11 @@ class WatchConnector(WatchArchetype):
             self.active_connector_info.visual_connector_index = self.index + 1
             self.active_connector_info.visual_update_time = time()
             self.active_connector_info.connector_kind = self.kind
-        if group_hide_notes(self.segment_head.timescale_group) and self.active_head_ref.index > 0:
+        if (
+            self.active_head_ref.index > 0
+            and self.active_connector_info.visual_connector_index == self.index + 1
+            and group_hide_notes(self.segment_head.timescale_group)
+        ):
             self.active_connector_info.connector_kind = ConnectorKind.NONE
 
     def update_parallel(self):
@@ -412,8 +420,7 @@ class WatchSlideManager(WatchArchetype):
         return self.active_head.target_time
 
     def despawn_time(self) -> float:
-        active_tail = self.active_tail
-        return active_tail.despawn_time() if active_tail.is_scored else active_tail.target_time
+        return slide_manager_end_time(self.active_tail)
 
     def update_parallel(self):
         current_time = time()
