@@ -135,7 +135,7 @@ title.ru = "LATE/EARLY/WRONG WAY"
 title.ja = "LATE/FAST/FLICK"
 
 [options.mirror]
-title.vi = "Lane đối xứng"
+title.vi = "Lật ngang"
 title.en = "Mirrored Lanes"
 title.ko = "미러 모드"
 title.fr = "Lanes en Miroir"
