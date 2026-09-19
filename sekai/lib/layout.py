@@ -2258,7 +2258,9 @@ def compute_hitbox(
     lane_w = transform.w_scale
     # Dividing out size_zoom keeps the vertical extent constant in screen space regardless of camera size
     vertical_lane_w = lane_w / transform.size_zoom
-    vertical_half_lanes = 2.5 if LevelConfig.dynamic_stages else 5.0
+    # Keep the normal upper reach near the combo display on both stage types.
+    # Full-height modes extend only the lower edge below this normal rectangle.
+    vertical_half_lanes = 3.0
     if (
         Options.stage_cover_scroll_speed_compensation != StageCoverNoteSpeedCompensation.OFF
         and LevelConfig.dynamic_stages
@@ -2281,10 +2283,10 @@ def compute_hitbox(
     bound_br = target_r + margin - vertical
     bound_tl = target_l - margin + vertical
     bound_tr = target_r + margin + vertical
-    determinant = stage_transform.a00 * stage_transform.a11 - stage_transform.a01 * stage_transform.a10
-    if Options.hitbox_range != HitboxRange.DEFAULT and abs(determinant) >= 1e-8:
+    if Options.hitbox_range != HitboxRange.DEFAULT:
         # Work in the final screen-space axes, including stage rotation and translation.
-        # A collapsed stage keeps the finite default rectangle above.
+        # These axes remain usable when elevation collapses the stage to a line,
+        # so full-height input still reaches the screen boundary in that case.
         up = horizontal.orthogonal()
         target_y = target_l.dot(up)
         target_left = target_l.dot(horizontal) - leniency * lane_w

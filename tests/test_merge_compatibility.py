@@ -34,16 +34,6 @@ class ElevationCompatibilityTests(unittest.TestCase):
             t=0, w_scale=0.1, h_scale=-0.5, x_translate=0, rotate=0, stage_tilt=1, size_zoom=1
         )
 
-    def test_flattened_stage_keeps_input_height_and_leniency(self):
-        stage = layout.StageScreenTransform(a00=1, a01=0, a02=0, a10=0, a11=0, a12=0.4, elevation=1)
-        for mode in HitboxRange:
-            with self.subTest(mode=mode):
-                self.options.hitbox_range = mode
-                hitbox = layout.compute_hitbox(self.camera, 0, 1, 0.5, stage_transform=stage)
-                assert isclose(hitbox.bounds.tl.y - hitbox.bounds.bl.y, 0.5)
-                assert isclose(hitbox.bounds.br.x - hitbox.bounds.bl.x, 0.3)
-                assert hitbox.bounds.contains_point(Vec2(0, 0.4))
-
     def test_full_height_modes_reach_screen_bottom(self):
         for mode in (HitboxRange.FULL_VERTICAL, HitboxRange.FULL_ADAPTIVE):
             with self.subTest(mode=mode):
