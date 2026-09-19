@@ -221,7 +221,7 @@ class BaseNote(PlayArchetype):
         self.data_init_done = 1
 
     def init_geometry(self):
-        # Initialization sorts notes before the stage and timescale groups preprocess.
+        # Initialization resolves note data before stages and timescale groups preprocess.
         # Resolve geometry afterward, including anchors whose own callback runs later.
         if self.data_init_done == 2:
             return

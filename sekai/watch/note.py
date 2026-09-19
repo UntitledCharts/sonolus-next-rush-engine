@@ -143,8 +143,6 @@ class WatchBaseNote(WatchArchetype):
 
     active_connector_info: ActiveConnectorInfo = shared_memory()
 
-    init_chain_ref: EntityRef[WatchBaseNote] = shared_memory()
-
     hitbox: Hitbox = entity_memory()
     attach_eased_frac: float = shared_memory()
 
@@ -186,7 +184,7 @@ class WatchBaseNote(WatchArchetype):
         self.data_init_done = 1
 
     def init_geometry(self):
-        # Initialization sorts notes before the stage and timescale groups preprocess.
+        # Initialization resolves note data before stages and timescale groups preprocess.
         # Resolve geometry afterward, including anchors whose own callback runs later.
         if self.data_init_done == 2:
             return

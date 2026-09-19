@@ -509,6 +509,13 @@ def _locate(group: TimescaleGroupLike, now: float, ref: int, use_visibility_inde
             marker = _marker(ref)
             if marker.event_start <= now and (marker.next_ref.index <= 0 or now < marker.event_end):
                 return ref
+            # Keep nearby and time-ordered queries cheap. Only jump through the
+            # tree when the current interval and its neighbor both miss.
+            neighbor_ref = marker.prev_ref if now < marker.event_start else marker.next_ref.index
+            if neighbor_ref > 0:
+                neighbor = _marker(neighbor_ref)
+                if neighbor.event_start <= now and (neighbor.next_ref.index <= 0 or now < neighbor.event_end):
+                    return neighbor_ref
         if now < _marker(group.first_ref.index).event_start:
             return 0
         if now >= _marker(group.last_ref).event_start:
@@ -536,17 +543,19 @@ def _locate(group: TimescaleGroupLike, now: float, ref: int, use_visibility_inde
     return ref
 
 
-def locate_time(group: int | EntityRef, now: float) -> int:
+def locate_time(group: int | EntityRef, now: float, *, use_visibility_index: bool = False) -> int:
     index = _group_index(group)
     if index <= 0 or Options.disable_timescale:
         return 0
     entity = _require_group(index)
-    entity.lookup_ref = _locate(entity, now, entity.lookup_ref)
+    entity.lookup_ref = _locate(entity, now, entity.lookup_ref, use_visibility_index)
     return entity.lookup_ref
 
 
 def locate_target(group: int | EntityRef, hit_time: float) -> TargetPosition:
-    ref = locate_time(group, hit_time)
+    # Target queries can jump between unrelated notes and attached endpoints. Use
+    # the existing tree when available; mixed-scroll groups retain cursor lookup.
+    ref = locate_time(group, hit_time, use_visibility_index=True)
     return TargetPosition(ref, _coordinate(ref, hit_time))
 
 

@@ -31,6 +31,7 @@ from sekai.lib.connector import (
     update_linear_connector_particle,
 )
 from sekai.lib.ease import EaseType, safe_unlerp_clamped
+from sekai.lib.initialization import schedule_connector_sfx_after_notes
 from sekai.lib.layout import StageTransform, blend_stage_transform
 from sekai.lib.note import draw_connector_hitbox_overlay, draw_slide_note_head, get_attach_params
 from sekai.lib.options import Options
@@ -91,6 +92,7 @@ class WatchConnector(WatchArchetype):
 
     @callback(order=1)
     def preprocess(self):
+        schedule_connector_sfx_after_notes()
         self.start_time = inf
         self.scheduled_spawn_time = inf
         if DISABLE_NOTES:
@@ -266,9 +268,6 @@ class WatchConnector(WatchArchetype):
             draw_connector(
                 kind=self.kind,
                 visual_state=visual_state,
-                animation_start_time=(
-                    self.active_head.target_time if self.active_head_ref.index > 0 else segment_head.target_time
-                ),
                 ease_type=self.ease_type,
                 head_lane=head_lane,
                 head_size=head_size,

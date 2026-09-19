@@ -4,6 +4,7 @@ from sonolus.script.archetype import (
     EntityRef,
     WatchArchetype,
     callback,
+    entity_data,
     entity_info_at,
     imported,
 )
@@ -67,6 +68,8 @@ class WatchInitialization(WatchArchetype):
 
     is_multi: bool = imported()
 
+    connector_sfx_scheduled: bool = entity_data()
+
     @callback(order=-3)
     def preprocess(self):
         if is_replay():
@@ -109,8 +112,14 @@ class WatchInitialization(WatchArchetype):
                 Streams.connector_critical_sfx_times[0],
                 ConnectorKind.ACTIVE_CRITICAL,
             )
-        else:
-            schedule_auto_connector_sfx(entity_count)
+
+    def schedule_connector_sfx(self):
+        # Called by the first connector at order 1, after groups (-2) and notes (0).
+        if self.connector_sfx_scheduled:
+            return
+        self.connector_sfx_scheduled = True
+        if not is_replay() or Options.auto_sfx:
+            schedule_auto_connector_sfx(count_entities())
 
 
 def sorted_linked_list(entity_count: int):
@@ -143,35 +152,11 @@ def initial_list(entity_count):
     note_id = note.WatchBaseNote._compile_time_id()
     skill_id = Skill._compile_time_id()
 
-    init_head = 0
-    beats_ascending = True
-    next_chain_beat = 1e8
-    for i in range(entity_count):
-        entity_index = entity_count - 1 - i
+    # Resolve every original next/prev link before reusing next_ref for score order.
+    # init_data no longer queries timescales, so entity order is sufficient here.
+    for entity_index in range(entity_count):
         if note_id in WatchArchetype._get_mro_id_array(entity_info_at(entity_index).archetype_id):
-            chain_note = note.WatchBaseNote.at(entity_index)
-            if chain_note.beat > next_chain_beat:
-                beats_ascending = False
-            next_chain_beat = chain_note.beat
-            chain_note.init_chain_ref.index = init_head
-            init_head = entity_index
-
-    def get_beat(n):
-        return n.beat
-
-    def get_chain_next(n):
-        return n.init_chain_ref
-
-    if not beats_ascending:
-        init_head = sort_linked_entities(
-            note.WatchBaseNote.at(init_head).ref(), get_value=get_beat, get_next_ref=get_chain_next
-        ).index
-
-    init_index = init_head
-    while init_index > 0:
-        init_note = note.WatchBaseNote.at(init_index)
-        init_note.init_data()
-        init_index = init_note.init_chain_ref.index
+            note.WatchBaseNote.at(entity_index).init_data()
 
     for i in range(entity_count):
         entity_index = entity_count - 1 - i
@@ -185,6 +170,7 @@ def initial_list(entity_count):
                 note_head = entity_index
                 note_length += 1
         elif is_skill:
+            Skill.at(entity_index).init_data()
             Skill.at(entity_index).next_ref.index = skill_head
             skill_head = entity_index
             skill_length += 1

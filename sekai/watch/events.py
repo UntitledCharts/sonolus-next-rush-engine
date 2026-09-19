@@ -56,10 +56,13 @@ class Skill(WatchArchetype):
     end_time_3: float = entity_memory()
     end_time_effect: float = entity_memory()
 
-    @callback(order=-2)
-    def preprocess(self):
+    def init_data(self):
+        # Initialization resolves these fields before sorting and weighting notes.
         self.effect = SkillMode.from_options(Options.skill_mode, self.effect)
         self.start_time = beat_to_time(self.beat)
+
+    @callback(order=-2)
+    def preprocess(self):
         self.end_time_3 = self.start_time + 3
         self.end_time_effect = self.start_time + self.duration
         if Options.hide_ui != 3 and Options.skill_effect and ActiveSkin.skill_bar_score.is_available:
@@ -115,7 +118,7 @@ class FeverChance(WatchArchetype):
     percentage: float = entity_memory()
     name = archetype_names.FEVER_CHANCE
 
-    @callback(order=-2)
+    @callback(order=-4)
     def preprocess(self):
         self.start_time = beat_to_time(self.beat)
         Fever.fever_chance_time = (
@@ -172,7 +175,7 @@ class FeverStart(WatchArchetype):
     start_time: float = entity_memory()
     name = archetype_names.FEVER_START
 
-    @callback(order=-2)
+    @callback(order=-4)
     def preprocess(self):
         self.start_time = beat_to_time(self.beat)
         Fever.fever_start_time = (

@@ -2267,28 +2267,6 @@ def compute_hitbox(
         vertical_half_lanes *= clamp((1 - cover_travel) / (1 - APPROACH_SCALE), 0, 1)
     vertical_extent = vertical_half_lanes * vertical_lane_w
     rot = -transform.rotate
-    t_y = note_y + vertical_extent
-    bl_x_final, br_x_final = l_x - leniency * lane_w, r_x + leniency * lane_w
-    tl_x_final, tr_x_final = bl_x_final, br_x_final
-    b_y = note_y - vertical_extent
-
-    full_bottom = screen_bound_pre_rotation_y(transform.rotate, screen().b)
-
-    if Options.hitbox_range == HitboxRange.FULL_VERTICAL:
-        b_y = full_bottom
-
-    elif Options.hitbox_range == HitboxRange.FULL_ADAPTIVE:
-        b_y = full_bottom
-
-        base_travel = approach_at_tilt(1.0, tilt)
-        base_width = width_factor_at_tilt(base_travel, tilt)
-        base_l_x = (lane - size) * base_width * transform.w_scale + transform.x_translate
-        base_r_x = (lane + size) * base_width * transform.w_scale + transform.x_translate
-        base_y = base_travel * transform.h_scale + transform.t
-
-        bl_x_final = interpolate_hitbox_edge_x(base_l_x, base_y, l_x, note_y, b_y) - (leniency * lane_w)
-        br_x_final = interpolate_hitbox_edge_x(base_r_x, base_y, r_x, note_y, b_y) + (leniency * lane_w)
-
     target_l = stage_transform.apply(Vec2(l_x, note_y).rotate(rot))
     target_r = stage_transform.apply(Vec2(r_x, note_y).rotate(rot))
     # Keep the hitbox height and leniency even when elevation flattens the stage to a line.
@@ -2303,11 +2281,53 @@ def compute_hitbox(
     bound_br = target_r + margin - vertical
     bound_tl = target_l - margin + vertical
     bound_tr = target_r + margin + vertical
-    if Options.hitbox_range != HitboxRange.DEFAULT and abs(stage_transform.elevation) < 1e-8:
-        bound_bl @= stage_transform.apply(Vec2(bl_x_final, b_y).rotate(rot))
-        bound_br @= stage_transform.apply(Vec2(br_x_final, b_y).rotate(rot))
-        bound_tl @= stage_transform.apply(Vec2(tl_x_final, t_y).rotate(rot))
-        bound_tr @= stage_transform.apply(Vec2(tr_x_final, t_y).rotate(rot))
+    determinant = stage_transform.a00 * stage_transform.a11 - stage_transform.a01 * stage_transform.a10
+    if Options.hitbox_range != HitboxRange.DEFAULT and abs(determinant) >= 1e-8:
+        # Work in the final screen-space axes, including stage rotation and translation.
+        # A collapsed stage keeps the finite default rectangle above.
+        up = horizontal.orthogonal()
+        target_y = target_l.dot(up)
+        target_left = target_l.dot(horizontal) - leniency * lane_w
+        target_right = target_r.dot(horizontal) + leniency * lane_w
+        default_bottom = target_y - vertical_extent
+        top = target_y + vertical_extent
+        bounds = screen()
+        bottom = min(bounds.l * up.x, bounds.r * up.x) + min(bounds.b * up.y, bounds.t * up.y)
+        extension = default_bottom - bottom
+        if extension > 1e-8:
+            bottom_left = target_left
+            bottom_right = target_right
+            if Options.hitbox_range == HitboxRange.FULL_ADAPTIVE:
+                base_travel = approach_at_tilt(1.0, tilt)
+                base_width = width_factor_at_tilt(base_travel, tilt)
+                base_y = base_travel * transform.h_scale + transform.t
+                base_l = stage_transform.apply(
+                    Vec2((lane - size) * base_width * lane_w + transform.x_translate, base_y).rotate(rot)
+                )
+                base_r = stage_transform.apply(
+                    Vec2((lane + size) * base_width * lane_w + transform.x_translate, base_y).rotate(rot)
+                )
+                bottom_left = (
+                    interpolate_hitbox_edge_x(
+                        base_l.dot(horizontal), base_l.dot(up), target_l.dot(horizontal), target_y, bottom
+                    )
+                    - leniency * lane_w
+                )
+                bottom_right = (
+                    interpolate_hitbox_edge_x(
+                        base_r.dot(horizontal), base_r.dot(up), target_r.dot(horizontal), target_y, bottom
+                    )
+                    + leniency * lane_w
+                )
+            # A single quad must include direct hits as well as the base lanes.
+            # Widen its lower edge to enclose the default input rectangle; skewing
+            # both edges toward the base can exclude the note itself.
+            bottom_left = min(bottom_left, target_left)
+            bottom_right = max(bottom_right, target_right)
+            bound_bl @= horizontal * bottom_left + up * bottom
+            bound_br @= horizontal * bottom_right + up * bottom
+            bound_tl @= horizontal * target_left + up * top
+            bound_tr @= horizontal * target_right + up * top
     return Hitbox(
         target=HitboxTarget(l=target_l, r=target_r),
         bounds=Quad(bl=bound_bl, br=bound_br, tl=bound_tl, tr=bound_tr),

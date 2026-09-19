@@ -1,10 +1,24 @@
 from math import floor
-from typing import Any, Protocol
+from typing import Any, Protocol, Self, cast
 
-from sonolus.script.archetype import EntityRef, entity_info_at
+from sonolus.script.archetype import EntityRef, entity_info_at, get_archetype_by_name
 from sonolus.script.containers import sort_linked_entities
 from sonolus.script.globals import level_data
 from sonolus.script.runtime import level_score
+
+from sekai.lib import archetype_names
+
+
+class InitializationLike(Protocol):
+    @classmethod
+    def at(cls, index: int) -> Self: ...
+
+    def schedule_connector_sfx(self) -> None: ...
+
+
+def schedule_connector_sfx_after_notes():
+    initialization = cast(type[InitializationLike], get_archetype_by_name(archetype_names.INITIALIZATION))
+    initialization.at(0).schedule_connector_sfx()
 
 
 @level_data

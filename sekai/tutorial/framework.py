@@ -328,7 +328,6 @@ class QueuedTutorialNoteDrawConnectorTo(Record):
         draw_connector(
             kind=kind,
             visual_state=visual_state,
-            animation_start_time=head_target_time,
             ease_type=self.ease_type,
             head_lane=lane,
             head_size=size,
