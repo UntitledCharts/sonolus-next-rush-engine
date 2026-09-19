@@ -5,7 +5,6 @@ from typing import Literal, Self, assert_never
 from sonolus.script.archetype import EntityRef
 from sonolus.script.array import Dim
 from sonolus.script.containers import VarArray
-from sonolus.script.easing import ease_out_cubic
 from sonolus.script.effect import Effect, LoopedEffectHandle
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp, lerp, remap_clamped
@@ -455,6 +454,7 @@ def get_connector_quality_option(kind: ConnectorKind) -> float:
 def draw_connector(
     kind: ConnectorKind,
     visual_state: ConnectorVisualState,
+    animation_start_time: float,
     ease_type: EaseType,
     head_lane: float,
     head_size: float,
@@ -609,7 +609,7 @@ def draw_connector(
                 ease_type=ease_type,
                 normal_sprite=normal_sprite,
                 active_sprite=active_sprite,
-                segment_head_target_time=segment_head_target_time,
+                animation_start_time=animation_start_time,
                 z_normal=z_normal,
                 z_active=z_active,
                 head_lane=head_lane,
@@ -647,6 +647,7 @@ def draw_connector(
                 head_alpha=head_alpha,
                 tail_target_time=tail_target_time,
                 tail_alpha=tail_alpha,
+                animation_start_time=animation_start_time,
             )
         case _:
             assert_never(presentation)
@@ -885,7 +886,7 @@ def draw_connector_default_segment(
     z_normal: ZIndexes,
     z_active: ZIndexes,
     base_a: float,
-    segment_head_target_time: float,
+    animation_start_time: float,
     start_lane: float,
     start_size: float,
     start_travel: float,
@@ -930,17 +931,16 @@ def draw_connector_default_segment(
         else:
             layout @= Quad(bl=render_cache.left, br=render_cache.right, tl=start_left, tr=start_right)
 
-    if visual_state == ConnectorVisualState.ACTIVE and active_sprite.is_available:
-        if Options.connector_animation:
-            normal_alpha, active_alpha = get_cross_fate_opacities(base_a, time() - segment_head_target_time, 0.5)
-            normal_sprite.draw(layout, z=segment_z_normal.tuple, a=normal_alpha)
-            active_sprite.draw(layout, z=segment_z_active.tuple, a=active_alpha)
-        else:
-            normal_sprite.draw(layout, z=segment_z_normal.tuple, a=base_a)
-    else:
-        normal_sprite.draw(
-            layout, z=segment_z_normal.tuple, a=base_a * (1 if visual_state != ConnectorVisualState.INACTIVE else 0.5)
-        )
+    draw_connector_quad(
+        layout,
+        visual_state,
+        normal_sprite,
+        active_sprite,
+        segment_z_normal,
+        segment_z_active,
+        base_a,
+        animation_start_time,
+    )
 
 
 def draw_connector_masked_segment(
@@ -950,7 +950,7 @@ def draw_connector_masked_segment(
     z_normal: ZIndexes,
     z_active: ZIndexes,
     base_a: float,
-    segment_head_target_time: float,
+    animation_start_time: float,
     start_lane: float,
     start_size: float,
     start_travel: float,
@@ -1021,7 +1021,7 @@ def draw_connector_masked_segment(
                     z_normal=z_normal,
                     z_active=z_active,
                     base_a=base_a,
-                    segment_head_target_time=segment_head_target_time,
+                    animation_start_time=animation_start_time,
                     start_lane=subsegment_start_lane,
                     start_size=subsegment_start_size,
                     start_travel=subsegment_start_travel,
@@ -1066,7 +1066,7 @@ def draw_connector_masked_segment(
                 z_normal=z_normal,
                 z_active=z_active,
                 base_a=base_a,
-                segment_head_target_time=segment_head_target_time,
+                animation_start_time=animation_start_time,
                 start_lane=last_render_lane,
                 start_size=last_render_size,
                 start_travel=start_travel,
@@ -1152,10 +1152,10 @@ def clip_connector_progress_to_screen(
 def draw_connector_default(
     kind: ConnectorKind,
     visual_state: ConnectorVisualState,
+    animation_start_time: float,
     ease_type: EaseType,
     normal_sprite: Sprite,
     active_sprite: Sprite,
-    segment_head_target_time: float,
     z_normal: ZIndexes,
     z_active: ZIndexes,
     head_lane: float,
@@ -1331,10 +1331,19 @@ def draw_connector_default(
                 segment_z_normal.z2 += transform.elevation
                 segment_z_active.z2 += transform.elevation
                 draw_connector_quad(
-                    layout, visual_state, normal_sprite, active_sprite, segment_z_normal, segment_z_active, base_a
+                    layout,
+                    visual_state,
+                    normal_sprite,
+                    active_sprite,
+                    segment_z_normal,
+                    segment_z_active,
+                    base_a,
+                    animation_start_time,
                 )
             else:
-                draw_connector_quad(layout, visual_state, normal_sprite, active_sprite, z_normal, z_active, base_a)
+                draw_connector_quad(
+                    layout, visual_state, normal_sprite, active_sprite, z_normal, z_active, base_a, animation_start_time
+                )
         return
 
     approach_cache = +ApproachCache
@@ -1415,7 +1424,7 @@ def draw_connector_default(
                 z_normal=z_normal,
                 z_active=z_active,
                 base_a=base_a,
-                segment_head_target_time=segment_head_target_time,
+                animation_start_time=animation_start_time,
                 start_lane=last_lane,
                 start_size=last_size,
                 start_travel=last_travel,
@@ -1441,7 +1450,7 @@ def draw_connector_default(
                 z_normal=z_normal,
                 z_active=z_active,
                 base_a=base_a,
-                segment_head_target_time=segment_head_target_time,
+                animation_start_time=animation_start_time,
                 start_lane=last_lane,
                 start_size=last_size if last_size > 0 else CONNECTOR_ZERO_SIZE_FALLBACK,
                 start_travel=last_travel,
@@ -1490,12 +1499,15 @@ def draw_connector_full_screen(
     head_alpha: float,
     tail_target_time: float,
     tail_alpha: float,
+    animation_start_time: float,
 ):
     judge_frac = safe_unlerp_clamped(head_target_time, tail_target_time, time())
     judge_alpha = lerp(head_alpha, tail_alpha, judge_frac)
     base_a = clamp(get_alpha(time()) * judge_alpha * get_connector_alpha_option(kind), 0, 1)
     if base_a > 0:
-        draw_connector_quad(screen(), visual_state, normal_sprite, active_sprite, z_normal, z_active, base_a)
+        draw_connector_quad(
+            screen(), visual_state, normal_sprite, active_sprite, z_normal, z_active, base_a, animation_start_time
+        )
 
 
 def draw_connector_quad(
@@ -1506,14 +1518,15 @@ def draw_connector_quad(
     z_normal: ZIndexes,
     z_active: ZIndexes,
     base_a: float,
+    animation_start_time: float,
 ):
     if visual_state == ConnectorVisualState.ACTIVE and active_sprite.is_available:
         if Options.connector_animation:
-            a_modifier = (cos(2 * pi * time()) + 1) / 2
-            normal_sprite.draw(layout, z=z_normal.tuple, a=base_a * ease_out_cubic(a_modifier))
-            active_sprite.draw(layout, z=z_active.tuple, a=base_a * ease_out_cubic(1 - a_modifier))
+            normal_alpha, active_alpha = get_cross_fate_opacities(base_a, time() - animation_start_time, 0.5)
+            normal_sprite.draw(layout, z=z_normal.tuple, a=normal_alpha)
+            active_sprite.draw(layout, z=z_active.tuple, a=active_alpha)
         else:
-            active_sprite.draw(layout, z=z_active.tuple, a=base_a)
+            normal_sprite.draw(layout, z=z_normal.tuple, a=base_a)
     else:
         normal_sprite.draw(
             layout, z=z_normal.tuple, a=base_a * (1 if visual_state != ConnectorVisualState.INACTIVE else 0.5)
