@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from math import floor
 from typing import Any, Protocol, Self, cast
 
@@ -73,7 +74,12 @@ class SortableArchetypeClass(Protocol):
     def at(self, index: int, check: bool = True) -> SortableEntity: ...
 
 
-def sort_entities_by_time(index: int, entity_cls: SortableArchetypeClass):
+def sort_entities_by_time(
+    index: int,
+    entity_cls: SortableArchetypeClass,
+    *,
+    get_next_ref: Callable[[Any], EntityRef[Any]] | None = None,
+):
     head = entity_cls.at(index)
 
     def get_time(h: SortableEntity) -> float:
@@ -85,5 +91,5 @@ def sort_entities_by_time(index: int, entity_cls: SortableArchetypeClass):
     return sort_linked_entities(
         head.ref(),
         get_value=get_time,
-        get_next_ref=get_next,
+        get_next_ref=get_next if get_next_ref is None else get_next_ref,
     )

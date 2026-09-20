@@ -145,6 +145,8 @@ class WatchBaseNote(WatchArchetype):
 
     hitbox: Hitbox = entity_memory()
     attach_eased_frac: float = shared_memory()
+    # Keep score order separate from slide geometry and safe from replay imports.
+    score_next_ref: EntityRef[WatchBaseNote] = shared_memory()
 
     end_time: float = imported()
     played_hit_effects: bool = imported()
@@ -299,7 +301,7 @@ class WatchBaseNote(WatchArchetype):
 
         if self.is_scored:
             spawn_custom(
-                self.next_ref,
+                self.score_next_ref,
                 self.index,
             )
 
@@ -341,11 +343,12 @@ class WatchBaseNote(WatchArchetype):
             pivot_lane = props.pivot_lane
             division = props.division.start
             half_offset = division.parity == DivisionParity.ODD and division.size % 2 == 1
+        render_lane, render_size = self.visual_extents_at(t)
         schedule_note_particles(
             self.kind,
             self.effect_kind,
-            self.visual_lane_at(t),
-            self.size,
+            render_lane,
+            render_size,
             t,
             self.direction,
             self.judgment,

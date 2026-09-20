@@ -596,27 +596,31 @@ class SlideManager(PlayArchetype):
                 else:
                     replace = info.connector_kind != self.last_kind
                     self.last_kind = info.connector_kind
-                    update_circular_connector_particle(
-                        self.circular_particle,
-                        info.connector_kind,
-                        self.visual_lane,
-                        replace,
-                        self.visual_y_offset,
-                        transform=head_transform,
-                    )
-                    update_linear_connector_particle(
-                        self.linear_particle,
-                        info.connector_kind,
-                        self.visual_lane,
-                        replace,
-                        self.visual_y_offset,
-                        transform=head_transform,
-                    )
+                    if self.visual_size <= 0:
+                        destroy_looped_particle(self.circular_particle)
+                        destroy_looped_particle(self.linear_particle)
+                    else:
+                        update_circular_connector_particle(
+                            self.circular_particle,
+                            info.connector_kind,
+                            self.visual_lane,
+                            replace,
+                            self.visual_y_offset,
+                            transform=head_transform,
+                        )
+                        update_linear_connector_particle(
+                            self.linear_particle,
+                            info.connector_kind,
+                            self.visual_lane,
+                            replace,
+                            self.visual_y_offset,
+                            transform=head_transform,
+                        )
                     if self.last_effect_kind != info.connector_kind:
                         connector_effect_kind_stream[adj_time] = info.connector_kind
                         self.last_effect_kind = info.connector_kind
                     trail_period = CONNECTOR_TRAIL_SPAWN_PERIOD / Options.effect_animation_speed
-                    if current_time >= self.next_trail_spawn_time:
+                    if self.visual_size > 0 and current_time >= self.next_trail_spawn_time:
                         self.next_trail_spawn_time = max(
                             self.next_trail_spawn_time + trail_period,
                             current_time + trail_period / 2,

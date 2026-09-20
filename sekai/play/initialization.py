@@ -118,7 +118,7 @@ def sorted_linked_list(entity_count: int):
         count_skill(sorted_skill_head.index)
 
     if note_length > 0:
-        sorted_note_head = sort_entities_by_time(note_head, note.BaseNote)
+        sorted_note_head = sort_entities_by_time(note_head, note.BaseNote, get_next_ref=lambda n: n.score_next_ref)
         setting_count(sorted_note_head.index, sorted_skill_head.index)
     else:
         # No scorable notes: the result can never change, so show the maximum score from the start.
@@ -136,7 +136,7 @@ def initial_list(entity_count):
     note_id = note.BaseNote._compile_time_id()
     skill_id = Skill._compile_time_id()
 
-    # Resolve every original next/prev link before reusing next_ref for score order.
+    # Initialize note data and slide links before building the separate score list.
     # init_data no longer queries timescales, so entity order is sufficient here.
     for entity_index in range(entity_count):
         if note_id in PlayArchetype._get_mro_id_array(entity_info_at(entity_index).archetype_id):
@@ -150,7 +150,7 @@ def initial_list(entity_count):
         is_skill = skill_id in mro
         if is_note:
             if note.BaseNote.at(entity_index).is_scored:
-                note.BaseNote.at(entity_index).next_ref.index = note_head
+                note.BaseNote.at(entity_index).score_next_ref.index = note_head
                 note_head = entity_index
                 note_length += 1
         elif is_skill:
@@ -305,7 +305,7 @@ def setting_count(head: int, skill: int) -> None:
             Fever.fever_last_count = max(note.BaseNote.at(ptr).count, Fever.fever_last_count)
 
         LastNote.last_time = max(LastNote.last_time, note.BaseNote.at(ptr).calc_time)
-        ptr = note.BaseNote.at(ptr).next_ref.index
+        ptr = note.BaseNote.at(ptr).score_next_ref.index
 
     if Options.custom_score == 2:
         custom_elements.ScoreIndicator.percentage = 100

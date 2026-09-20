@@ -463,7 +463,7 @@ class WatchSlideManager(WatchArchetype):
             ):
                 replace = connector_kind != self.last_kind
                 self.last_kind = connector_kind
-                if not skipping:
+                if not skipping and self.visual_size > 0:
                     update_circular_connector_particle(
                         self.circular_particle,
                         connector_kind,

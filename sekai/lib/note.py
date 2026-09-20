@@ -1003,6 +1003,9 @@ def handle_note_particles(
     lane_particles: bool = True,
     transform: StageScreenTransform = IDENTITY_STAGE_SCREEN_TRANSFORM,
 ):
+    if size <= 0:
+        return
+
     def place(q):
         return transform.transform_quad(q)
 
@@ -1021,7 +1024,7 @@ def handle_note_particles(
             if linear_particle == particles.linear_good:
                 chunk = begin_particle_chunk(linear_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
                 for slot_lane in _iter_bundled_slot_lanes(lane, size):
-                    layout = billboard(layout_linear_effect(slot_lane, shear=0), slot_lane, 0)
+                    layout = billboard(layout_linear_effect(slot_lane, shear=0, y_offset=y_offset), slot_lane)
                     if not quad_touches_screen(layout):
                         continue
                     emit_particle(
@@ -1049,7 +1052,7 @@ def handle_note_particles(
             if circular_particle == particles.circular_good:
                 chunk = begin_particle_chunk(circular_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
                 for slot_lane in _iter_bundled_slot_lanes(lane, size):
-                    layout = place(layout_circular_effect(slot_lane, w=1.75, h=1.05))
+                    layout = place(layout_circular_effect(slot_lane, w=1.75, h=1.05, y_offset=y_offset))
                     if not quad_touches_screen(layout):
                         continue
                     emit_particle(
@@ -1199,6 +1202,8 @@ def _emit_lane_particles(
     particle count by the on-screen lane count. Merged emissions use integer slot keys, which
     never collide with the half-integer keys of individual lanes.
     """
+    if size <= 0:
+        return
 
     def place(q):
         return transform.transform_quad(q)

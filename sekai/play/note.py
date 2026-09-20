@@ -131,6 +131,8 @@ class BaseNote(PlayArchetype):
     prev_ref: EntityRef[BaseNote] = imported(name="prev")
     effect_kind: NoteEffectKind = imported(name="effectKind")
 
+    # Score order is independent of the imported slide next/prev links.
+    score_next_ref: EntityRef[BaseNote] = entity_data()
     kind: NoteKind = entity_data()
     # 0: untouched, 1: initialized for score sorting, 2: stage/timeline geometry ready.
     data_init_done: int = entity_data()
@@ -142,7 +144,6 @@ class BaseNote(PlayArchetype):
     spawn_eligibility_time: float = entity_data()
     scheduled_spawn_time: float = shared_memory()
     target_position: TargetPosition = entity_data()
-    target_y_offset: float = entity_data()
 
     trajectory_first: TrajectoryCache = entity_memory()
     trajectory_second: TrajectoryCache = entity_memory()
@@ -230,7 +231,6 @@ class BaseNote(PlayArchetype):
         if self.stage_ref.index > 0:
             self.rel_lane = self.lane
             self.lane += get_stage_pivot_lane(self.stage_ref.get(), self.target_time)
-            self.target_y_offset = self._basic_y_offset_at(self.target_time, left_limit=True)
 
         self.data_init_done = 2
 
@@ -277,11 +277,6 @@ class BaseNote(PlayArchetype):
             )
             self.lane = lane
             self.size = size
-            self.target_y_offset = lerp(
-                attach_head._basic_y_offset_at(self.target_time, left_limit=True),
-                attach_tail._basic_y_offset_at(self.target_time, left_limit=True),
-                get_attach_frac(attach_head.target_time, attach_tail.target_time, self.target_time),
-            )
 
         end_time = max(self.target_time, self.input_interval.end) if self.is_scored else self.target_time
         natural_start_time = note_visual_spawn_time(self, end_time)
@@ -306,7 +301,7 @@ class BaseNote(PlayArchetype):
                 hitbox_size,
                 get_leniency(self.kind),
                 self.target_time,
-                self.target_y_offset,
+                self.y_offset_at(self.target_time, left_limit=True),
                 stage_transform=self.stage_transform_at(self.target_time, left_limit=True).to_screen_transform(),
                 left_limit=True,
             )

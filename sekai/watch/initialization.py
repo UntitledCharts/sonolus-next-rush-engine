@@ -132,7 +132,9 @@ def sorted_linked_list(entity_count: int):
 
     sorted_note_head = +EntityRef[note.WatchBaseNote]
     if note_length > 0:
-        sorted_note_head @= sort_entities_by_time(note_head, note.WatchBaseNote)
+        sorted_note_head @= sort_entities_by_time(
+            note_head, note.WatchBaseNote, get_next_ref=lambda n: n.score_next_ref
+        )
         setting_combo(sorted_note_head.index, sorted_skill_head.index)
     else:
         custom_elements.ScoreIndicator.score = 1000000
@@ -152,7 +154,7 @@ def initial_list(entity_count):
     note_id = note.WatchBaseNote._compile_time_id()
     skill_id = Skill._compile_time_id()
 
-    # Resolve every original next/prev link before reusing next_ref for score order.
+    # Initialize note data and slide links before building the separate score list.
     # init_data no longer queries timescales, so entity order is sufficient here.
     for entity_index in range(entity_count):
         if note_id in WatchArchetype._get_mro_id_array(entity_info_at(entity_index).archetype_id):
@@ -166,7 +168,7 @@ def initial_list(entity_count):
         is_skill = skill_id in mro
         if is_note:
             if note.WatchBaseNote.at(entity_index).is_scored:
-                note.WatchBaseNote.at(entity_index).next_ref.index = note_head
+                note.WatchBaseNote.at(entity_index).score_next_ref.index = note_head
                 note_head = entity_index
                 note_length += 1
         elif is_skill:
@@ -264,7 +266,7 @@ def setting_combo(head: int, skill: int) -> None:
         total_weight.add(current_note_weight)
 
         LastNote.last_time = max(LastNote.last_time, note.WatchBaseNote.at(ptr).calc_time)
-        ptr = note.WatchBaseNote.at(ptr).next_ref.index
+        ptr = note.WatchBaseNote.at(ptr).score_next_ref.index
 
     if prev_acc > 0:
         custom_elements.JudgmentAccuracy.spawn(
@@ -513,7 +515,7 @@ def calculate_score(head: int, max_score: int, total_weight: float):
 
                 note.WatchBaseNote.at(ptr).percentage = acc_sum.total / count
 
-        ptr = note.WatchBaseNote.at(ptr).next_ref.index
+        ptr = note.WatchBaseNote.at(ptr).score_next_ref.index
 
 
 def count_skill(head: int) -> None:
@@ -563,7 +565,7 @@ def calculate_replay_life(note_head: int, skill_head: int) -> None:
                         life += current_note.archetype_life.miss_increment + current_note.entity_life.miss_increment
                 life = clamp(life, 0, LifeManager.max_life)
             current_note.replay_life = life
-            note_ptr = current_note.next_ref.index
+            note_ptr = current_note.score_next_ref.index
     LifeManager.first = first_event_time
 
 
