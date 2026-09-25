@@ -6,16 +6,14 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from sonolus.script.quad import Rect
-from sonolus.script.vec import Vec2
 
 from sekai.lib import layer, layout
-from sekai.lib.options import HitboxRange, StageCoverNoteSpeedCompensation
+from sekai.lib.options import StageCoverNoteSpeedCompensation
 
 
 class ElevationCompatibilityTests(unittest.TestCase):
     def setUp(self):
         self.options = SimpleNamespace(
-            hitbox_range=HitboxRange.DEFAULT,
             stage_cover_scroll_speed_compensation=StageCoverNoteSpeedCompensation.OFF,
             alternative_approach_curve=False,
         )
@@ -34,16 +32,15 @@ class ElevationCompatibilityTests(unittest.TestCase):
             t=0, w_scale=0.1, h_scale=-0.5, x_translate=0, rotate=0, stage_tilt=1, size_zoom=1
         )
 
-    def test_full_height_modes_reach_screen_bottom(self):
-        for mode in (HitboxRange.FULL_VERTICAL, HitboxRange.FULL_ADAPTIVE):
-            with self.subTest(mode=mode):
-                self.options.hitbox_range = mode
-                hitbox = layout.compute_hitbox(
-                    self.camera, 0, 1, 0.5, stage_transform=layout.IDENTITY_STAGE_SCREEN_TRANSFORM
-                )
-                assert isclose(hitbox.bounds.bl.y, -1)
-                assert isclose(hitbox.bounds.br.y, -1)
-                assert hitbox.bounds.contains_point(Vec2(0, -0.9))
+    def test_hitbox_uses_static_stage_extents_during_dynamic_camera(self):
+        layout.Layout.w_scale = 0.1
+        layout.Layout.t = 0.4
+        layout.Layout.h_scale = -0.6
+        hitbox = layout.compute_hitbox(
+            self.camera, 0, 1, 0.5, stage_transform=layout.IDENTITY_STAGE_SCREEN_TRANSFORM
+        )
+        assert isclose(hitbox.bounds.tl.y - hitbox.target.l.y, 0.15)
+        assert isclose(hitbox.target.l.y - hitbox.bounds.bl.y, 0.8)
 
     def test_custom_layers_follow_elevation_order(self):
         with (
