@@ -2262,7 +2262,7 @@ def compute_hitbox(
     # Use the static-stage dimensions for both extents. Dynamic camera and stage transforms
     # move the resulting hitbox without changing the area in which the player can touch.
     up = horizontal.orthogonal()
-    upper_extent = 1.5 * Layout.w_scale
+    upper_extent = 3.0 * Layout.w_scale
     static_judgment_y = Layout.t + Layout.h_scale
     lower_extent = max(static_judgment_y - screen().b, 0.0)
     margin = horizontal * (leniency * lane_w)
