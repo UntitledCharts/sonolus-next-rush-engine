@@ -4,13 +4,15 @@ import unittest
 from contextlib import ExitStack
 from math import isclose
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
 from sonolus.script.archetype import EntityRef
 from sonolus.script.bucket import Judgment
+from sonolus.script.particle import Particle
 from sonolus.script.vec import Vec2
 
-from sekai.lib import initialization, layout
+from sekai.lib import initialization, layout, particle_manager
 from sekai.lib import note as note_lib
 from sekai.lib.ease import EaseType
 from sekai.lib.stage import VisualMask, masked_note_extents_by_limits
@@ -89,6 +91,22 @@ class SlideScoreLinkTests(unittest.TestCase):
 
 
 class MaskedEffectTests(unittest.TestCase):
+    def test_unrelated_particle_groups_do_not_share_a_recycling_chunk(self):
+        particle = cast(Particle, SimpleNamespace(id=4))
+        handler = SimpleNamespace(chunk_serial=0)
+        with (
+            patch.object(particle_manager, "ParticleHandler", handler),
+            patch.object(particle_manager, "purge_particle_chunk") as purge,
+        ):
+            first = particle_manager.begin_particle_chunk(
+                particle, 1, particle_manager.ParticleManageKind.MULTI
+            )
+            second = particle_manager.begin_particle_chunk(
+                particle, 7, particle_manager.ParticleManageKind.MULTI
+            )
+        assert first != second
+        assert purge.call_args_list[0].args != purge.call_args_list[1].args
+
     def test_play_hit_effects_receive_the_visible_note_width(self):
         fake = SimpleNamespace(
             should_play_hit_effects=True,

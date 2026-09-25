@@ -36,12 +36,6 @@ class HitboxMode(IntEnum):
     VERTICAL = 1
 
 
-class HitboxRange(IntEnum):
-    DEFAULT = 0
-    FULL_VERTICAL = 1
-    FULL_ADAPTIVE = 2
-
-
 class SkillMode(IntEnum):
     LEVEL_DEFAULT = 0
     SCORE = 1
@@ -49,7 +43,7 @@ class SkillMode(IntEnum):
     JUDGMENT = 3
 
     @classmethod
-    def from_options(cls, option_val: int, legacy_val: int) -> "SkillMode":
+    def from_options(cls, option_val: int, legacy_val: int) -> SkillMode:
         option_map = {1: cls.SCORE, 2: cls.HEAL, 3: cls.JUDGMENT}
         legacy_map = {1: cls.HEAL, 2: cls.JUDGMENT}
 
@@ -517,18 +511,6 @@ class Options:
         scope="Rush",
         advanced=True,
         default=False,
-    )
-    hitbox_range: HitboxRange = select_option(
-        name="Hitbox",
-        category=gameplay,
-        advanced=True,
-        scope="Rush",
-        values=[
-            "default",
-            "full_vertical",
-            "full_adaptive",
-        ],
-        default=HitboxRange.DEFAULT,
     )
     test_aspect_ratio: bool = toggle_option(
         name="Test Aspect Ratio",
