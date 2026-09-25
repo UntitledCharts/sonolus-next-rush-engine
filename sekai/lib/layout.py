@@ -28,7 +28,7 @@ from sekai.lib import archetype_names
 from sekai.lib.baseevent import get_event_as, query_event_list
 from sekai.lib.ease import EaseType, ease
 from sekai.lib.level_config import LevelConfig
-from sekai.lib.options import HitboxRange, Options, StageCoverNoteSpeedCompensation, Version
+from sekai.lib.options import Options, StageCoverNoteSpeedCompensation, Version
 
 LANE_T = 47 / 850
 LANE_B = 1176 / 850
@@ -2155,12 +2155,6 @@ class Hitbox(Record):
     bounds: Quad
 
 
-def interpolate_hitbox_edge_x(base_x: float, base_y: float, target_x: float, target_y: float, y: float) -> float:
-    if base_y == target_y:
-        return target_x
-    return lerp(base_x, target_x, clamp((y - base_y) / (target_y - base_y), 0.0, 1.0))
-
-
 class LayoutTransform(Record):
     t: float
     w_scale: float
@@ -2256,18 +2250,6 @@ def compute_hitbox(
     note_y = travel * transform.h_scale + transform.t
     # We intentionally don't adjust for tilt to give the same screen-space leniency at low tilt
     lane_w = transform.w_scale
-    # Dividing out size_zoom keeps the vertical extent constant in screen space regardless of camera size
-    vertical_lane_w = lane_w / transform.size_zoom
-    # Keep the normal upper reach near the combo display on both stage types.
-    # Full-height modes extend only the lower edge below this normal rectangle.
-    vertical_half_lanes = 3.0
-    if (
-        Options.stage_cover_scroll_speed_compensation != StageCoverNoteSpeedCompensation.OFF
-        and LevelConfig.dynamic_stages
-    ):
-        cover_travel = lerp(APPROACH_SCALE, 1.0, stage_cover_amount())
-        vertical_half_lanes *= clamp((1 - cover_travel) / (1 - APPROACH_SCALE), 0, 1)
-    vertical_extent = vertical_half_lanes * vertical_lane_w
     rot = -transform.rotate
     target_l = stage_transform.apply(Vec2(l_x, note_y).rotate(rot))
     target_r = stage_transform.apply(Vec2(r_x, note_y).rotate(rot))
@@ -2277,59 +2259,18 @@ def compute_hitbox(
         stage_transform.a00 * axis.x + stage_transform.a01 * axis.y,
         stage_transform.a10 * axis.x + stage_transform.a11 * axis.y,
     ).normalize_or_zero()
-    vertical = horizontal.orthogonal() * vertical_extent
+    # Use the static-stage dimensions for both extents. Dynamic camera and stage transforms
+    # move the resulting hitbox without changing the area in which the player can touch.
+    up = horizontal.orthogonal()
+    # Preserve the previous three-lane reach from the center to the upper edge.
+    upper_extent = 3.0 * Layout.w_scale
+    static_judgment_y = Layout.t + Layout.h_scale
+    lower_extent = max(static_judgment_y - screen().b, 0.0)
     margin = horizontal * (leniency * lane_w)
-    bound_bl = target_l - margin - vertical
-    bound_br = target_r + margin - vertical
-    bound_tl = target_l - margin + vertical
-    bound_tr = target_r + margin + vertical
-    if Options.hitbox_range != HitboxRange.DEFAULT:
-        # Work in the final screen-space axes, including stage rotation and translation.
-        # These axes remain usable when elevation collapses the stage to a line,
-        # so full-height input still reaches the screen boundary in that case.
-        up = horizontal.orthogonal()
-        target_y = target_l.dot(up)
-        target_left = target_l.dot(horizontal) - leniency * lane_w
-        target_right = target_r.dot(horizontal) + leniency * lane_w
-        default_bottom = target_y - vertical_extent
-        top = target_y + vertical_extent
-        bounds = screen()
-        bottom = min(bounds.l * up.x, bounds.r * up.x) + min(bounds.b * up.y, bounds.t * up.y)
-        extension = default_bottom - bottom
-        if extension > 1e-8:
-            bottom_left = target_left
-            bottom_right = target_right
-            if Options.hitbox_range == HitboxRange.FULL_ADAPTIVE:
-                base_travel = approach_at_tilt(1.0, tilt)
-                base_width = width_factor_at_tilt(base_travel, tilt)
-                base_y = base_travel * transform.h_scale + transform.t
-                base_l = stage_transform.apply(
-                    Vec2((lane - size) * base_width * lane_w + transform.x_translate, base_y).rotate(rot)
-                )
-                base_r = stage_transform.apply(
-                    Vec2((lane + size) * base_width * lane_w + transform.x_translate, base_y).rotate(rot)
-                )
-                bottom_left = (
-                    interpolate_hitbox_edge_x(
-                        base_l.dot(horizontal), base_l.dot(up), target_l.dot(horizontal), target_y, bottom
-                    )
-                    - leniency * lane_w
-                )
-                bottom_right = (
-                    interpolate_hitbox_edge_x(
-                        base_r.dot(horizontal), base_r.dot(up), target_r.dot(horizontal), target_y, bottom
-                    )
-                    + leniency * lane_w
-                )
-            # A single quad must include direct hits as well as the base lanes.
-            # Widen its lower edge to enclose the default input rectangle; skewing
-            # both edges toward the base can exclude the note itself.
-            bottom_left = min(bottom_left, target_left)
-            bottom_right = max(bottom_right, target_right)
-            bound_bl @= horizontal * bottom_left + up * bottom
-            bound_br @= horizontal * bottom_right + up * bottom
-            bound_tl @= horizontal * target_left + up * top
-            bound_tr @= horizontal * target_right + up * top
+    bound_bl = target_l - margin - up * lower_extent
+    bound_br = target_r + margin - up * lower_extent
+    bound_tl = target_l - margin + up * upper_extent
+    bound_tr = target_r + margin + up * upper_extent
     return Hitbox(
         target=HitboxTarget(l=target_l, r=target_r),
         bounds=Quad(bl=bound_bl, br=bound_br, tl=bound_tl, tr=bound_tr),

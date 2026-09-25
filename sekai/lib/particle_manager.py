@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import IntEnum
-from math import floor
 
 from sonolus.script.array import Dim
 from sonolus.script.containers import VarArray
@@ -14,9 +13,6 @@ from sekai.lib.particle import EMPTY_PARTICLE
 
 PARTICLE_ID_STRIDE = 8192.0
 SLOT_OFFSET = 512.0
-
-CHUNK_COUNT = 6.0
-
 
 class ParticleManageKind(IntEnum):
     LANE = 0
@@ -71,10 +67,6 @@ def purge_particle_chunk(chunk_key: float):
         i -= 1
 
 
-def particle_group_slot(group_id: float) -> float:
-    return group_id - floor(group_id / CHUNK_COUNT) * CHUNK_COUNT
-
-
 def particle_slot_key(particle_id: float, slot: float) -> float:
     return particle_id * PARTICLE_ID_STRIDE + slot
 
@@ -83,8 +75,9 @@ def begin_particle_chunk(particle: Particle, group_id: float, manage_kind: Parti
     if particle == EMPTY_PARTICLE:
         return 0.0
     particle_id = particle.id
-    slot = particle_group_slot(group_id)
-    chunk_key = particle_id * CHUNK_COUNT + slot
+    # Preserve the complete entity group ID. Folding IDs into six slots made unrelated
+    # simultaneous notes (for example groups 1 and 7) destroy each other's particles.
+    chunk_key = particle_slot_key(particle_id, group_id)
     if manage_kind != ParticleManageKind.REST:
         purge_particle_chunk(chunk_key)
     ParticleHandler.chunk_serial += 1
@@ -124,7 +117,7 @@ def emit_particle(
     particle_id = particle.id
 
     if manage_kind == ParticleManageKind.REST:
-        slot = chunk_key - particle_id * CHUNK_COUNT
+        slot = chunk_key - particle_id * PARTICLE_ID_STRIDE
         key = particle_slot_key(particle_id, slot)
     elif manage_kind == ParticleManageKind.LANE:
         key = particle_id * PARTICLE_ID_STRIDE + (slot * 2 + SLOT_OFFSET)
