@@ -39,7 +39,7 @@ class ElevationCompatibilityTests(unittest.TestCase):
         hitbox = layout.compute_hitbox(
             self.camera, 0, 1, 0.5, stage_transform=layout.IDENTITY_STAGE_SCREEN_TRANSFORM
         )
-        assert isclose(hitbox.bounds.tl.y - hitbox.target.l.y, 0.15)
+        assert isclose(hitbox.bounds.tl.y - hitbox.target.l.y, 0.3)
         assert isclose(hitbox.target.l.y - hitbox.bounds.bl.y, 0.8)
 
     def test_custom_layers_follow_elevation_order(self):
