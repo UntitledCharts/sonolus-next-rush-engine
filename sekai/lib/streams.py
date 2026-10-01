@@ -2,7 +2,7 @@ from sonolus.script.array import Dim
 from sonolus.script.containers import VarArray
 from sonolus.script.stream import Stream, StreamGroup, streams
 
-from sekai.lib.connector import ConnectorKind, ConnectorSfxTimes, ConnectorVisualState
+from sekai.lib.connector import ConnectorKind, ConnectorSfxEvent, ConnectorSfxTimes, ConnectorVisualState
 
 
 @streams
@@ -14,3 +14,7 @@ class Streams:
     connector_critical_sfx_times: StreamGroup[ConnectorSfxTimes, Dim[1_000_000]]
 
     empty_input_stages: Stream[VarArray[int, Dim[16]]]
+
+    # Append fields to preserve stream offsets in older replays.
+    unified_connector_sfx: bool
+    connector_sfx_events: Stream[ConnectorSfxEvent]

@@ -22,8 +22,8 @@ from sekai.lib.connector import (
     ActiveConnectorKind,
     ConnectorKind,
     connector_sfx_is_active,
-    connector_sfx_matches_kind,
     inactive_connector_sfx_times,
+    is_sfx_connector,
     schedule_connector_sfx,
     schedule_connector_sfx_between,
 )
@@ -104,14 +104,12 @@ class WatchInitialization(WatchArchetype):
         entity_count = count_entities()
         sorted_linked_list(entity_count)
         if is_replay() and not Options.auto_sfx:
-            schedule_replay_connector_sfx(
-                Streams.connector_normal_sfx_times[0],
-                ConnectorKind.ACTIVE_NORMAL,
-            )
-            schedule_replay_connector_sfx(
-                Streams.connector_critical_sfx_times[0],
-                ConnectorKind.ACTIVE_CRITICAL,
-            )
+            if Streams.unified_connector_sfx:
+                schedule_unified_replay_connector_sfx()
+            else:
+                # Replays recorded before the shared state retain their original sound tracks.
+                schedule_replay_connector_sfx(Streams.connector_normal_sfx_times[0], ConnectorKind.ACTIVE_NORMAL)
+                schedule_replay_connector_sfx(Streams.connector_critical_sfx_times[0], ConnectorKind.ACTIVE_CRITICAL)
 
     def schedule_connector_sfx(self):
         # Called by the first connector at order 1, after groups (-2) and notes (0).
@@ -285,8 +283,7 @@ def setting_combo(head: int, skill: int) -> None:
 def schedule_auto_connector_sfx(entity_count: int):
     connector_id = WatchConnector._compile_time_id()
 
-    normal_head = 0
-    critical_head = 0
+    slide_head = 0
     for i in range(entity_count - 1, -1, -1):
         info = entity_info_at(i)
         mro = WatchArchetype._get_mro_id_array(info.archetype_id)
@@ -300,20 +297,15 @@ def schedule_auto_connector_sfx(entity_count: int):
             # hold-wins-over-release tie-break would otherwise leave stuck on. It holds for no
             # duration, so skip it entirely.
             continue
-        if connector_sfx_matches_kind(connector.segment_head.segment_kind, ConnectorKind.ACTIVE_NORMAL):
-            connector.sfx_act_next.index = normal_head
-            connector.sfx_deact_next.index = normal_head
-            normal_head = i
-        elif connector_sfx_matches_kind(connector.segment_head.segment_kind, ConnectorKind.ACTIVE_CRITICAL):
-            connector.sfx_act_next.index = critical_head
-            connector.sfx_deact_next.index = critical_head
-            critical_head = i
+        if is_sfx_connector(connector.segment_head.segment_kind):
+            connector.sfx_act_next.index = slide_head
+            connector.sfx_deact_next.index = slide_head
+            slide_head = i
 
-    schedule_auto_connector_sfx_kind(normal_head, ConnectorKind.ACTIVE_NORMAL)
-    schedule_auto_connector_sfx_kind(critical_head, ConnectorKind.ACTIVE_CRITICAL)
+    schedule_auto_connector_sfx_events(slide_head)
 
 
-def schedule_auto_connector_sfx_kind(list_head: int, sfx_kind: ActiveConnectorKind):
+def schedule_auto_connector_sfx_events(list_head: int):
     if list_head <= 0:
         return
 
@@ -354,7 +346,7 @@ def schedule_auto_connector_sfx_kind(list_head: int, sfx_kind: ActiveConnectorKi
 
         if active_time >= inactive_time and active_connector_index > 0:
             schedule_connector_sfx(
-                sfx_kind,
+                WatchConnector.at(active_connector_index).segment_head.segment_kind,
                 WatchConnector.at(active_connector_index).segment_head.timescale_group,
                 current_time,
                 next_time,
@@ -375,11 +367,25 @@ def schedule_auto_connector_sfx_kind(list_head: int, sfx_kind: ActiveConnectorKi
 
     if active_time >= inactive_time and active_connector_index > 0:
         schedule_connector_sfx(
-            sfx_kind,
+            WatchConnector.at(active_connector_index).segment_head.segment_kind,
             WatchConnector.at(active_connector_index).segment_head.timescale_group,
             current_time,
             LastNote.last_time,
         )
+
+
+def schedule_unified_replay_connector_sfx():
+    last_times = inactive_connector_sfx_times()
+    last_kind = ConnectorKind.NONE
+    last_time = -1e8
+    for next_time, event in Streams.connector_sfx_events.iter_items_from(-2):
+        if last_kind != ConnectorKind.NONE and connector_sfx_is_active(last_times):
+            schedule_connector_sfx_between(last_kind, last_time, next_time)
+        last_times @= event.times
+        last_kind = event.kind
+        last_time = next_time
+    if last_kind != ConnectorKind.NONE and connector_sfx_is_active(last_times):
+        schedule_connector_sfx_between(last_kind, last_time, LastNote.last_time)
 
 
 def schedule_replay_connector_sfx(stream, kind: ActiveConnectorKind):

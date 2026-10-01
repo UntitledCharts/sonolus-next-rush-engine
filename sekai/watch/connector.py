@@ -81,7 +81,7 @@ class WatchConnector(WatchArchetype):
     end_time: float = entity_data()
     visual_active_interval: Interval = entity_data()
     # Temporary linked-list pointers used only during preprocess to sort connectors by their
-    # activation / deactivation times for the auto-SFX sweep (see schedule_auto_connector_sfx_kind).
+    # activation / deactivation times for the auto-SFX sweep (see schedule_auto_connector_sfx_events).
     # entity_data (not entity_memory) so they can be written cross-entity from preprocess.
     sfx_act_next: EntityRef[WatchConnector] = entity_data()
     sfx_deact_next: EntityRef[WatchConnector] = entity_data()

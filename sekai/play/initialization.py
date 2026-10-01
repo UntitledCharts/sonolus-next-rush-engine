@@ -8,10 +8,8 @@ from sekai.lib.buckets import init_buckets
 from sekai.lib.connector import (
     CONNECTOR_SFX_ACTIVE_TIME_INIT,
     CONNECTOR_SFX_INACTIVE_TIME_INIT,
-    ActiveConnectorKind,
-    ConnectorKind,
-    connector_sfx_matches_kind,
     init_connector_sfx_times,
+    is_sfx_connector,
     schedule_connector_sfx,
 )
 from sekai.lib.custom_elements import init_fixed_ui_layout
@@ -165,8 +163,7 @@ def initial_list(entity_count):
 def schedule_auto_connector_sfx(entity_count: int):
     connector_id = Connector._compile_time_id()
 
-    normal_head = 0
-    critical_head = 0
+    slide_head = 0
     for i in range(entity_count - 1, -1, -1):
         info = entity_info_at(i)
         mro = PlayArchetype._get_mro_id_array(info.archetype_id)
@@ -180,20 +177,15 @@ def schedule_auto_connector_sfx(entity_count: int):
             # hold-wins-over-release tie-break would otherwise leave stuck on. It holds for no
             # duration, so skip it entirely.
             continue
-        if connector_sfx_matches_kind(connector.segment_head.segment_kind, ConnectorKind.ACTIVE_NORMAL):
-            connector.sfx_act_next.index = normal_head
-            connector.sfx_deact_next.index = normal_head
-            normal_head = i
-        elif connector_sfx_matches_kind(connector.segment_head.segment_kind, ConnectorKind.ACTIVE_CRITICAL):
-            connector.sfx_act_next.index = critical_head
-            connector.sfx_deact_next.index = critical_head
-            critical_head = i
+        if is_sfx_connector(connector.segment_head.segment_kind):
+            connector.sfx_act_next.index = slide_head
+            connector.sfx_deact_next.index = slide_head
+            slide_head = i
 
-    schedule_auto_connector_sfx_kind(normal_head, ConnectorKind.ACTIVE_NORMAL)
-    schedule_auto_connector_sfx_kind(critical_head, ConnectorKind.ACTIVE_CRITICAL)
+    schedule_auto_connector_sfx_events(slide_head)
 
 
-def schedule_auto_connector_sfx_kind(list_head: int, sfx_kind: ActiveConnectorKind):
+def schedule_auto_connector_sfx_events(list_head: int):
     if list_head <= 0:
         return
 
@@ -232,7 +224,7 @@ def schedule_auto_connector_sfx_kind(list_head: int, sfx_kind: ActiveConnectorKi
 
         if active_time >= inactive_time and active_connector_index > 0:
             schedule_connector_sfx(
-                sfx_kind,
+                Connector.at(active_connector_index).segment_head.segment_kind,
                 Connector.at(active_connector_index).segment_head.timescale_group,
                 current_time,
                 next_time,
@@ -253,7 +245,7 @@ def schedule_auto_connector_sfx_kind(list_head: int, sfx_kind: ActiveConnectorKi
 
     if active_time >= inactive_time and active_connector_index > 0:
         schedule_connector_sfx(
-            sfx_kind,
+            Connector.at(active_connector_index).segment_head.segment_kind,
             Connector.at(active_connector_index).segment_head.timescale_group,
             current_time,
             LastNote.last_time,
