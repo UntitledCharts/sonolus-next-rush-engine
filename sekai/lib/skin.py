@@ -3,6 +3,7 @@ from __future__ import annotations
 from enum import IntEnum
 from typing import TYPE_CHECKING, Self, assert_never
 
+from sonolus.script.array import Array, Dim
 from sonolus.script.bucket import Judgment
 from sonolus.script.globals import level_data
 from sonolus.script.interval import Interval, clamp
@@ -15,6 +16,90 @@ from sekai.lib.options import Options, Version
 
 if TYPE_CHECKING:
     from sekai.lib.buckets import SekaiWindow
+
+from sekai.lib.note_style import NoteStyle, NoteVisualFamily
+
+# Keep six arrow widths adjacent so each direction remains a SpriteGroup.
+_STYLE_COLORS = ("Neutral", "Red", "Green", "Blue", "Yellow", "Purple", "Cyan", "Black")
+_STYLE_NOTE_NAMES = (
+    "Normal Note",
+    "Slide Note",
+    "Flick Note",
+    "Down Flick Note",
+    "Critical Note",
+    "Critical Slide Note",
+    "Critical Flick Note",
+    "Critical Down Flick Note",
+    "Normal Trace Note",
+    "Trace Flick Note",
+    "Trace Down Flick Note",
+    "Critical Trace Note",
+    "Critical Trace Flick Note",
+    "Critical Trace Down Flick Note",
+    None,
+    None,
+    "Damage Note",
+)
+_STYLE_TICK_NAMES = (
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    "Normal Trace Diamond",
+    "Trace Flick Diamond",
+    "Trace Down Flick Diamond",
+    "Critical Trace Diamond",
+    "Critical Trace Flick Diamond",
+    "Critical Trace Down Flick Diamond",
+    "Normal Slide Diamond",
+    "Critical Slide Diamond",
+    None,
+)
+_STYLE_SLOT_NAMES = (
+    "Normal",
+    "Slide",
+    "Flick",
+    "Down Flick",
+    "Critical",
+    "Critical Slide",
+    "Critical Flick",
+    "Critical Down Flick",
+)
+_STYLE_ARROWS = ("Flick Arrow", "Critical Flick Arrow")
+_STYLE_DIRECTIONS = ("Up", "Up Left", "Down", "Down Left")
+_STYLE_SPRITE_NAMES = tuple(
+    name
+    for color in _STYLE_COLORS
+    for name in (
+        *(
+            f"Sekai {family} {part} {color}"
+            for family in _STYLE_NOTE_NAMES
+            if family
+            for part in ("Left", "Middle", "Right")
+        ),
+        *(f"Sekai {family} {color}" for family in _STYLE_TICK_NAMES if family),
+        *(f"Sekai Slot{glow} {family} {color}" for family in _STYLE_SLOT_NAMES for glow in ("", " Glow")),
+        *(
+            f"Sekai {family} {direction} {width} {color}"
+            for family in _STYLE_ARROWS
+            for direction in _STYLE_DIRECTIONS
+            for width in range(1, 7)
+        ),
+        *(
+            f"Sekai {family} Active Slide Connection {state} {color}"
+            for family in ("Normal", "Critical")
+            for state in ("Normal", "Active")
+        ),
+        *(f"Sekai {family} Slide Slot Glow {color}" for family in ("Normal", "Critical")),
+        f"Sekai Damage Slide Connection {color}",
+        f"Sekai Damage Slide Connection Active {color}",
+    )
+)
+_STYLE_SPRITE_INDEX = {name: index for index, name in enumerate(_STYLE_SPRITE_NAMES)}
 
 
 @skin
@@ -356,6 +441,8 @@ class BaseSkin:
     skill_line: StandardSprite.GRID_GREEN
     fever_chance_line: StandardSprite.GRID_CYAN
     fever_start_line: StandardSprite.GRID_BLUE
+
+    color_sprites: SpriteGroup = sprite_group(_STYLE_SPRITE_NAMES)
 
     # Custom Elements
     perfect: Sprite = sprite("Judge Perfect")
@@ -2011,3 +2098,231 @@ def init_skin():
     )
 
     ActiveSkin.ui_checker = UIChecker(v1=BaseSkin.v1, v3=BaseSkin.v3)
+
+    init_style_skin()
+
+
+def _style_sprite(name: str, color: str) -> Sprite:
+    """Return the named color sprite from BaseSkin."""
+    return BaseSkin.color_sprites[_STYLE_SPRITE_INDEX[f"Sekai {name} {color}"]]
+
+
+def _style_arrow(critical: bool, color: str) -> ArrowSpriteSet:
+    prefix = "Critical Flick Arrow" if critical else "Flick Arrow"
+    groups = [SpriteGroup(_style_sprite(f"{prefix} {direction} 1", color).id, 6) for direction in _STYLE_DIRECTIONS]
+    return ArrowSpriteSet.of_normal(*groups)
+
+
+def _style_note(family: NoteVisualFamily, color: str) -> NoteSpriteSet:
+    body_name = _STYLE_NOTE_NAMES[family]
+    tick_name = _STYLE_TICK_NAMES[family]
+    body = +EMPTY_BODY_SPRITE_SET
+    if body_name is not None:
+        parts = [_style_sprite(f"{body_name} {part}", color) for part in ("Left", "Middle", "Right")]
+        body = (
+            BodySpriteSet.of_slim(*parts)
+            if NoteVisualFamily.TRACE_NOTE <= family <= NoteVisualFamily.CRITICAL_TRACE_DOWN_FLICK_NOTE
+            else BodySpriteSet.of_normal(*parts)
+        )
+    arrow = +EMPTY_ARROW_SPRITE_SET
+    if "FLICK" in family.name:
+        arrow = _style_arrow("CRITICAL" in family.name, color)
+    return NoteSpriteSet(
+        body=body,
+        arrow=arrow,
+        tick=_style_sprite(tick_name, color) if tick_name else EMPTY_SPRITE,
+        slot=_style_sprite(f"Slot {_STYLE_SLOT_NAMES[family]}", color) if family < 8 else EMPTY_SPRITE,
+        slot_glow=SlotGlowSpriteSet(
+            perfect=_style_sprite(f"Slot Glow {_STYLE_SLOT_NAMES[family]}", color),
+            great=_style_sprite(f"Slot Glow {_STYLE_SLOT_NAMES[family]}", color),
+            good=_style_sprite(f"Slot Glow {_STYLE_SLOT_NAMES[family]}", color),
+        )
+        if family < 8
+        else EMPTY_SLOT_GLOW_SPRITE_SET,
+    )
+
+
+def _style_connector(family: str, color: str) -> ActiveConnectorSpriteSet:
+    if family == "Damage":
+        return ActiveConnectorSpriteSet(
+            connection=ActiveConnectionSpriteSet.of_normal(
+                _style_sprite("Damage Slide Connection", color),
+                _style_sprite("Damage Slide Connection Active", color),
+            ),
+            slot_glow=EMPTY_SPRITE,
+        )
+    return ActiveConnectorSpriteSet(
+        connection=ActiveConnectionSpriteSet.of_normal(
+            _style_sprite(f"{family} Active Slide Connection Normal", color),
+            _style_sprite(f"{family} Active Slide Connection Active", color),
+        ),
+        slot_glow=_style_sprite(f"{family} Slide Slot Glow", color),
+    )
+
+
+# Source tables live in ROM; preprocessing selects available sprites.
+_STYLE_NOTES = Array(*(Array(*(_style_note(family, color) for color in _STYLE_COLORS)) for family in NoteVisualFamily))
+_STYLE_CONNECTORS = Array(
+    *(
+        Array(*(_style_connector(family, color) for color in _STYLE_COLORS))
+        for family in ("Normal", "Critical", "Damage")
+    )
+)
+
+
+class StyleNoteSprites(Record):
+    """Note sprites without arrows, which are shared to fit the 4096-slot LevelData limit."""
+
+    body: BodySpriteSet
+    tick: Sprite
+    slot: Sprite
+    slot_glow: SlotGlowSpriteSet
+
+    @classmethod
+    def of(cls, sprites: NoteSpriteSet) -> Self:
+        return cls(body=sprites.body, tick=sprites.tick, slot=sprites.slot, slot_glow=sprites.slot_glow)
+
+
+@level_data
+class StyleSkin:
+    notes: Array[Array[StyleNoteSprites, Dim[9]], Dim[17]]
+    arrows: Array[Array[ArrowSpriteSet, Dim[9]], Dim[2]]
+    connectors: Array[Array[ActiveConnectorSpriteSet, Dim[9]], Dim[3]]
+
+
+def _complete_body(body: BodySpriteSet) -> bool:
+    return body.left.is_available and body.middle.is_available and body.right.is_available
+
+
+def _complete_arrow(arrow: ArrowSpriteSet) -> bool:
+    available = True
+    for width in range(6):
+        if not (
+            arrow.up[width].is_available
+            and arrow.up_left[width].is_available
+            and arrow.down[width].is_available
+            and arrow.down_left[width].is_available
+        ):
+            available = False
+            break
+    return available
+
+
+def _resolve_style_note(source: NoteSpriteSet, default: NoteSpriteSet) -> NoteSpriteSet:
+    result = +default
+    if source.body.middle.id >= 0 and _complete_body(source.body):
+        result.body @= source.body
+        # Damage notes may use slim trace sprites as their default.
+        if default.body.middle.id >= 0:
+            if default.body.render_type in {BodyRenderType.SLIM, BodyRenderType.SLIM_FALLBACK}:
+                result.body.render_type = BodyRenderType.SLIM
+            else:
+                result.body.render_type = BodyRenderType.NORMAL
+    if source.arrow.up[0].id >= 0 and _complete_arrow(source.arrow):
+        result.arrow @= source.arrow
+    result.tick @= first_available_sprite(source.tick, default.tick)
+    result.slot @= first_available_sprite(source.slot, default.slot)
+    result.slot_glow @= first_available_slot_glow_sprite_set(source.slot_glow, default.slot_glow)
+    return result
+
+
+def _resolve_style_connector(
+    source: ActiveConnectorSpriteSet, default: ActiveConnectorSpriteSet
+) -> ActiveConnectorSpriteSet:
+    result = +default
+    if source.connection.normal.is_available and source.connection.active.is_available:
+        result.connection @= source.connection
+    result.slot_glow @= first_available_sprite(source.slot_glow, default.slot_glow)
+    return result
+
+
+def init_style_skin():
+    defaults = Array(
+        ActiveSkin.normal_note,
+        ActiveSkin.slide_note,
+        ActiveSkin.flick_note,
+        ActiveSkin.down_flick_note,
+        ActiveSkin.critical_note,
+        ActiveSkin.critical_slide_note,
+        ActiveSkin.critical_flick_note,
+        ActiveSkin.critical_down_flick_note,
+        ActiveSkin.trace_note,
+        ActiveSkin.trace_flick_note,
+        ActiveSkin.trace_down_flick_note,
+        ActiveSkin.critical_trace_note,
+        ActiveSkin.critical_trace_flick_note,
+        ActiveSkin.critical_trace_down_flick_note,
+        ActiveSkin.normal_slide_tick_note,
+        ActiveSkin.critical_slide_tick_note,
+        ActiveSkin.damage_note,
+    )
+    for family in range(len(StyleSkin.notes)):
+        StyleSkin.notes[family][0] @= StyleNoteSprites.of(defaults[family])
+        for style in range(1, len(StyleSkin.notes[family])):
+            resolved = _resolve_style_note(_STYLE_NOTES[family][style - 1], defaults[family])
+            StyleSkin.notes[family][style] @= StyleNoteSprites.of(resolved)
+            if family == NoteVisualFamily.FLICK_NOTE:
+                StyleSkin.arrows[0][style] @= resolved.arrow
+            elif family == NoteVisualFamily.CRITICAL_FLICK_NOTE:
+                StyleSkin.arrows[1][style] @= resolved.arrow
+    StyleSkin.arrows[0][0] @= ActiveSkin.flick_note.arrow
+    StyleSkin.arrows[1][0] @= ActiveSkin.critical_flick_note.arrow
+    connector_defaults = Array(
+        ActiveSkin.active_slide_connector,
+        ActiveSkin.critical_active_slide_connector,
+        ActiveConnectorSpriteSet(
+            connection=ActiveConnectionSpriteSet.of_normal(
+                ActiveSkin.damage_slide_connector, ActiveSkin.damage_slide_connector_active
+            ),
+            slot_glow=EMPTY_SPRITE,
+        ),
+    )
+    for family in range(len(StyleSkin.connectors)):
+        StyleSkin.connectors[family][0] @= connector_defaults[family]
+        for style in range(1, len(StyleSkin.connectors[family])):
+            StyleSkin.connectors[family][style] @= _resolve_style_connector(
+                _STYLE_CONNECTORS[family][style - 1], connector_defaults[family]
+            )
+
+
+def styled_note_sprites(family: NoteVisualFamily, style: NoteStyle) -> NoteSpriteSet:
+    index = int(style)
+    if index < 0 or index > 8 or style != index:
+        index = 0
+    sprites = StyleSkin.notes[family][index]
+    result = +NoteSpriteSet(
+        body=sprites.body,
+        arrow=EMPTY_ARROW_SPRITE_SET,
+        tick=sprites.tick,
+        slot=sprites.slot,
+        slot_glow=sprites.slot_glow,
+    )
+    if family in {
+        NoteVisualFamily.FLICK_NOTE,
+        NoteVisualFamily.DOWN_FLICK_NOTE,
+        NoteVisualFamily.TRACE_FLICK_NOTE,
+        NoteVisualFamily.TRACE_DOWN_FLICK_NOTE,
+    }:
+        result.arrow @= StyleSkin.arrows[0][index]
+    elif family in {
+        NoteVisualFamily.CRITICAL_FLICK_NOTE,
+        NoteVisualFamily.CRITICAL_DOWN_FLICK_NOTE,
+        NoteVisualFamily.CRITICAL_TRACE_FLICK_NOTE,
+        NoteVisualFamily.CRITICAL_TRACE_DOWN_FLICK_NOTE,
+    }:
+        result.arrow @= StyleSkin.arrows[1][index]
+    return result
+
+
+def get_styled_active_connector_sprites(style: int, critical: bool) -> ActiveConnectorSpriteSet:
+    index = int(style)
+    if index < 0 or index > 8 or style != index:
+        index = 0
+    return StyleSkin.connectors[int(critical)][index]
+
+
+def get_styled_damage_connector_sprites(style: int) -> ActiveConnectorSpriteSet:
+    index = int(style)
+    if index < 0 or index > 8 or style != index:
+        index = 0
+    return StyleSkin.connectors[2][index]

@@ -22,6 +22,7 @@ from sekai.lib.note import (
     map_note_kind,
     mirror_flick_direction,
 )
+from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
 from sekai.lib.skin import ArrowRenderType, ArrowSpriteSet, BodyRenderType, BodySpriteSet
 from sekai.lib.stage import (
@@ -56,6 +57,7 @@ class PreviewBaseNote(PreviewArchetype):
     lane: float = imported()
     size: float = imported()
     direction: FlickDirection = imported()
+    style: NoteStyle = imported()
     active_head_ref: EntityRef[PreviewBaseNote] = imported(name="activeHead")
     is_attached: bool = imported(name="isAttached")
     connector_ease: EaseType = imported(name="connectorEase")
@@ -143,6 +145,7 @@ class PreviewBaseNote(PreviewArchetype):
             self.preview_col,
             self.preview_y,
             self.preview_adjusted_time,
+            self.style,
         )
 
     @property
@@ -238,8 +241,9 @@ def draw_note(
     col: int,
     y: float,
     adjusted_time: float,
+    style: NoteStyle = NoteStyle.DEFAULT,
 ):
-    sprite_set = get_note_sprite_set(kind, direction)
+    sprite_set = get_note_sprite_set(kind, direction, style)
     draw_note_body(sprite_set.body, kind, lane, size, col, y, adjusted_time)
     draw_note_arrow(sprite_set.arrow, kind, lane, size, direction, col, y, adjusted_time)
     draw_note_tick(sprite_set.tick, lane, col, y, adjusted_time)

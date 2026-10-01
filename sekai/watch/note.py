@@ -65,6 +65,7 @@ from sekai.lib.note import (
     schedule_note_sfx,
     schedule_note_slot_effects,
 )
+from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
 from sekai.lib.stage import (
     DivisionParity,
@@ -108,6 +109,7 @@ class WatchBaseNote(WatchArchetype):
     lane: float = imported()
     size: float = imported()
     direction: FlickDirection = imported()
+    style: NoteStyle = imported()
     active_head_ref: EntityRef[WatchBaseNote] = imported(name="activeHead")
     is_attached: bool = imported(name="isAttached")
     connector_ease: EaseType = imported(name="connectorEase")
@@ -124,7 +126,7 @@ class WatchBaseNote(WatchArchetype):
 
     kind: NoteKind = entity_data()
     # 0: untouched, 1: initialized for score sorting, 2: stage/timeline geometry ready.
-    data_init_done: int = entity_data()
+    data_init_done: int = shared_memory()
     # Another note may call init_data before this note finishes preprocessing.
     preprocess_done: bool = entity_data()
     rel_lane: float = entity_data()
@@ -357,6 +359,7 @@ class WatchBaseNote(WatchArchetype):
             half_offset=half_offset,
             group_id=self.index,
             lane_particles=self._stage_lane_particles_at(t),
+            style=self.style,
             transform=self.stage_transform_at(t).to_screen_transform(),
         )
 
@@ -409,6 +412,7 @@ class WatchBaseNote(WatchArchetype):
             group_id=self.index,
             single_line=single_line,
             transform=transform.to_screen_transform(),
+            style=self.style,
         )
 
     def spawn_time(self) -> float:
@@ -465,6 +469,7 @@ class WatchBaseNote(WatchArchetype):
                 self.target_time,
                 transform=self.visual_stage_transform().to_screen_transform(),
                 note_alpha=note_alpha,
+                style=self.style,
             )
         else:
             draw_note(
@@ -476,6 +481,7 @@ class WatchBaseNote(WatchArchetype):
                 self.target_time,
                 transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
                 note_alpha=note_alpha,
+                style=self.style,
             )
 
     def draw_hitbox(self):
@@ -554,6 +560,7 @@ class WatchBaseNote(WatchArchetype):
                 half_offset=self.visual_half_offset,
                 lane_particles=self._stage_lane_particles_at(time()),
                 transform=self.visual_stage_transform().to_screen_transform(),
+                style=self.style,
             )
 
     def _basic_input_geometry(self, context: InputGeometryContext) -> InputGeometry:

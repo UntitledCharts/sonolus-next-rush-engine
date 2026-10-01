@@ -22,6 +22,7 @@ from sekai.lib.connector import (
     draw_connector,
     draw_connector_slot_glow_effect,
     get_connector_alpha_option,
+    get_connector_base_kind,
     get_connector_fractions,
     get_connector_interp_frac,
     should_show_connector_hitbox,
@@ -195,7 +196,7 @@ class WatchConnector(WatchArchetype):
             if self.active_head_ref.index > 0:
                 if is_replay():
                     visual_state = Streams.connector_visual_states[self.index].get_previous_inclusive(current_time)
-                elif self.kind == ConnectorKind.DAMAGE:
+                elif get_connector_base_kind(self.kind) == ConnectorKind.DAMAGE:
                     # Autoplay never touches damage connectors.
                     visual_state = ConnectorVisualState.WAITING
                 elif current_time < self.active_head.target_time:
@@ -212,6 +213,7 @@ class WatchConnector(WatchArchetype):
                 active_tail_end = active_tail.despawn_time() if active_tail.is_scored else active_tail.target_time
                 if time() >= active_tail_end:
                     return
+            self.draw_fake_damage_head()
             if get_connector_alpha_option(self.kind) <= 0:
                 return
             head_note_alpha = head.visual_note_alpha
@@ -297,6 +299,40 @@ class WatchConnector(WatchArchetype):
                 head_mask=head_mask,
                 tail_mask=tail_mask,
             )
+
+    def draw_fake_damage_head(self):
+        if (
+            get_connector_base_kind(self.kind) != ConnectorKind.FAKE_DAMAGE
+            or self.active_head_ref.index > 0
+            or Options.disable_fake_notes
+            or not self.visual_active_interval.start <= time() < self.visual_active_interval.end
+        ):
+            return
+        lane, size = self.current_visual_head_extents(time())
+        if size <= 0:
+            return
+        head = self.head
+        tail = self.tail
+        frac, transform_frac = get_connector_fractions(
+            self.ease_type,
+            head.target_time,
+            head.head_ease_frac,
+            tail.target_time,
+            tail.tail_ease_frac,
+            time(),
+        )
+        transform = blend_stage_transform(head.visual_stage_transform(), tail.visual_stage_transform(), transform_frac)
+        draw_slide_note_head(
+            self.segment_head.kind,
+            self.kind,
+            lane,
+            size,
+            self.segment_head.target_time,
+            1.0 - lerp(head.visual_y_offset, tail.visual_y_offset, frac),
+            transform=transform.to_screen_transform(),
+            note_alpha=lerp(head.visual_note_alpha, tail.visual_note_alpha, frac),
+            style=self.segment_head.style,
+        )
 
     def draw_hitbox(self):
         if not Options.show_hitboxes:
@@ -454,12 +490,12 @@ class WatchSlideManager(WatchArchetype):
         )
         if not is_replay() and current_time < self.active_head.target_time + CONNECTOR_PARTICLE_ACTIVE_DELAY:
             connector_kind = ConnectorKind.NONE
-        match connector_kind:
+        match get_connector_base_kind(connector_kind):
             case (
                 ConnectorKind.ACTIVE_NORMAL
                 | ConnectorKind.ACTIVE_CRITICAL
-                | ConnectorKind.ACTIVE_FAKE_NORMAL
-                | ConnectorKind.ACTIVE_FAKE_CRITICAL
+                | ConnectorKind.FAKE_ACTIVE_NORMAL
+                | ConnectorKind.FAKE_ACTIVE_CRITICAL
             ):
                 replace = connector_kind != self.last_kind
                 self.last_kind = connector_kind
@@ -520,13 +556,14 @@ class WatchSlideManager(WatchArchetype):
 
         if current_time + delta_time() > self.active_tail.despawn_time():
             return
-        match info.connector_kind:
+        match get_connector_base_kind(info.connector_kind):
             case (
                 ConnectorKind.ACTIVE_NORMAL
                 | ConnectorKind.ACTIVE_CRITICAL
-                | ConnectorKind.ACTIVE_FAKE_NORMAL
-                | ConnectorKind.ACTIVE_FAKE_CRITICAL
+                | ConnectorKind.FAKE_ACTIVE_NORMAL
+                | ConnectorKind.FAKE_ACTIVE_CRITICAL
                 | ConnectorKind.DAMAGE
+                | ConnectorKind.FAKE_DAMAGE
             ) if self.visual_size > 0:
                 draw_slide_note_head(
                     self.active_head.kind,
@@ -537,6 +574,7 @@ class WatchSlideManager(WatchArchetype):
                     1.0 - self.visual_y_offset,
                     transform=head_transform,
                     note_alpha=segment_note_alpha,
+                    style=self.active_head.style,
                 )
             case _:
                 pass

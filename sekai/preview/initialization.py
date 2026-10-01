@@ -11,7 +11,6 @@ from sekai.lib.baseevent import init_event_list
 from sekai.lib.layer import ZIndexes, get_z, layers
 from sekai.lib.layout import CameraInfo, get_camera_info, get_next_camera_event_time
 from sekai.lib.level_config import EngineRevision, LevelConfig, init_level_config
-from sekai.lib.particle import init_particles
 from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.ui import init_ui
 from sekai.preview import note
@@ -46,7 +45,6 @@ class PreviewInitialization(PreviewArchetype):
         init_level_config(self.revision)
         init_skin()
         init_ui()
-        init_particles()
 
         if not ActiveSkin.lane_background_preview.is_available:
             LevelConfig.dynamic_stages = False

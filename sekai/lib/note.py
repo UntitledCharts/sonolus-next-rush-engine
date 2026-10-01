@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from enum import IntEnum, auto
 from math import ceil, floor
-from typing import Literal, assert_never, cast
+from typing import assert_never, cast
 
 from sonolus.script.archetype import EntityRef, HapticType, PlayArchetype, WatchArchetype, get_archetype_by_name
 from sonolus.script.array import Dim
@@ -36,7 +36,14 @@ from sekai.lib.buckets import (
     Buckets,
     SekaiWindow,
 )
-from sekai.lib.connector import ActiveConnectorKind, ConnectorKind, get_active_connector_z_offset
+from sekai.lib.connector import (
+    ActiveConnectorKind,
+    ConnectorKind,
+    DamageConnectorKind,
+    get_active_connector_z_offset,
+    get_connector_base_kind,
+    get_connector_style,
+)
 from sekai.lib.ease import EaseType, ease, safe_unlerp_clamped
 from sekai.lib.effect import EMPTY_EFFECT, SFX_DISTANCE, Effects, first_available_effect
 from sekai.lib.layer import (
@@ -77,11 +84,12 @@ from sekai.lib.layout import (
     visible_lane_range_at,
 )
 from sekai.lib.level_config import LevelConfig
+from sekai.lib.note_style import NoteStyle, NoteVisualFamily
 from sekai.lib.options import Options, ScoreMode, Version, VibrateMode
 from sekai.lib.particle import (
     EMPTY_NOTE_PARTICLE_SET,
-    ActiveParticles,
     NoteParticleSet,
+    styled_note_particles,
 )
 from sekai.lib.particle_manager import (
     ParticleManageKind,
@@ -96,6 +104,7 @@ from sekai.lib.skin import (
     BodyRenderType,
     BodySpriteSet,
     NoteSpriteSet,
+    styled_note_sprites,
 )
 from sekai.lib.slot_effect import (
     SLOT_EFFECT_DURATION,
@@ -357,9 +366,10 @@ def draw_note(
     target_time: float,
     transform: StageScreenTransform,
     note_alpha: float,
+    style: NoteStyle = NoteStyle.DEFAULT,
 ):
     travel = approach(visual_progress)
-    sprite_set = get_note_sprite_set(kind, direction)
+    sprite_set = get_note_sprite_set(kind, direction, style)
     draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha)
     draw_note_arrow(sprite_set.arrow, kind, lane, size, travel, target_time, direction, transform, note_alpha)
     draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, note_alpha)
@@ -367,7 +377,7 @@ def draw_note(
 
 def draw_slide_note_head(
     kind: NoteKind,
-    connector_kind: ActiveConnectorKind | Literal[ConnectorKind.DAMAGE],
+    connector_kind: ActiveConnectorKind | DamageConnectorKind,
     lane: float,
     size: float,
     target_time: float,
@@ -375,22 +385,27 @@ def draw_slide_note_head(
     *,
     transform: StageScreenTransform,
     note_alpha: float,
+    style: NoteStyle = NoteStyle.DEFAULT,
 ):
     if hidden_amount() > 0:
         return
     if note_alpha <= 0:
         return
+    connector_style = get_connector_style(connector_kind)
+    if connector_style != NoteStyle.DEFAULT:
+        style = connector_style
+    connector_kind = get_connector_base_kind(connector_kind)
     match connector_kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             kind = note_kind_as_normal(kind)
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             kind = note_kind_as_critical(kind)
-        case ConnectorKind.DAMAGE:
+        case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
             pass  # Keep kind as is
         case _:
             assert_never(connector_kind)
     travel = approach(visual_progress)
-    sprite_set = get_note_sprite_set(kind, FlickDirection.UP_OMNI)
+    sprite_set = get_note_sprite_set(kind, FlickDirection.UP_OMNI, style)
     etc = get_active_connector_z_offset(connector_kind, False)
     draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha, etc=etc)
     draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, note_alpha, etc=etc)
@@ -472,37 +487,36 @@ def note_kind_as_critical(kind: NoteKind) -> NoteKind:
             return kind
 
 
-def get_note_sprite_set(kind: NoteKind, direction: FlickDirection) -> NoteSpriteSet:
-    result = +NoteSpriteSet
+def get_note_visual_family(kind: NoteKind, direction: FlickDirection) -> NoteVisualFamily:
     match kind:
         case NoteKind.NORM_TAP:
-            result @= ActiveSkin.normal_note
+            return NoteVisualFamily.NORMAL_NOTE
         case NoteKind.CRIT_TAP:
-            result @= ActiveSkin.critical_note
+            return NoteVisualFamily.CRITICAL_NOTE
         case NoteKind.NORM_FLICK | NoteKind.NORM_HEAD_FLICK | NoteKind.NORM_TAIL_FLICK:
             if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
-                result @= ActiveSkin.flick_note
+                return NoteVisualFamily.FLICK_NOTE
             else:
-                result @= ActiveSkin.down_flick_note
+                return NoteVisualFamily.DOWN_FLICK_NOTE
         case NoteKind.CRIT_FLICK | NoteKind.CRIT_HEAD_FLICK | NoteKind.CRIT_TAIL_FLICK:
             if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
-                result @= ActiveSkin.critical_flick_note
+                return NoteVisualFamily.CRITICAL_FLICK_NOTE
             else:
-                result @= ActiveSkin.critical_down_flick_note
+                return NoteVisualFamily.CRITICAL_DOWN_FLICK_NOTE
         case NoteKind.NORM_TRACE | NoteKind.NORM_HEAD_TRACE | NoteKind.NORM_TAIL_TRACE:
-            result @= ActiveSkin.trace_note
+            return NoteVisualFamily.TRACE_NOTE
         case NoteKind.CRIT_TRACE | NoteKind.CRIT_HEAD_TRACE | NoteKind.CRIT_TAIL_TRACE:
-            result @= ActiveSkin.critical_trace_note
+            return NoteVisualFamily.CRITICAL_TRACE_NOTE
         case NoteKind.NORM_TRACE_FLICK | NoteKind.NORM_HEAD_TRACE_FLICK | NoteKind.NORM_TAIL_TRACE_FLICK:
             if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
-                result @= ActiveSkin.trace_flick_note
+                return NoteVisualFamily.TRACE_FLICK_NOTE
             else:
-                result @= ActiveSkin.trace_down_flick_note
+                return NoteVisualFamily.TRACE_DOWN_FLICK_NOTE
         case NoteKind.CRIT_TRACE_FLICK | NoteKind.CRIT_HEAD_TRACE_FLICK | NoteKind.CRIT_TAIL_TRACE_FLICK:
             if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
-                result @= ActiveSkin.critical_trace_flick_note
+                return NoteVisualFamily.CRITICAL_TRACE_FLICK_NOTE
             else:
-                result @= ActiveSkin.critical_trace_down_flick_note
+                return NoteVisualFamily.CRITICAL_TRACE_DOWN_FLICK_NOTE
         case (
             NoteKind.NORM_RELEASE
             | NoteKind.NORM_HEAD_TAP
@@ -510,7 +524,7 @@ def get_note_sprite_set(kind: NoteKind, direction: FlickDirection) -> NoteSprite
             | NoteKind.NORM_TAIL_TAP
             | NoteKind.NORM_TAIL_RELEASE
         ):
-            result @= ActiveSkin.slide_note
+            return NoteVisualFamily.SLIDE_NOTE
         case (
             NoteKind.CRIT_RELEASE
             | NoteKind.CRIT_HEAD_TAP
@@ -518,32 +532,31 @@ def get_note_sprite_set(kind: NoteKind, direction: FlickDirection) -> NoteSprite
             | NoteKind.CRIT_TAIL_TAP
             | NoteKind.CRIT_TAIL_RELEASE
         ):
-            result @= ActiveSkin.critical_slide_note
+            return NoteVisualFamily.CRITICAL_SLIDE_NOTE
         case NoteKind.NORM_TICK:
-            result @= ActiveSkin.normal_slide_tick_note
+            return NoteVisualFamily.NORMAL_SLIDE_TICK_NOTE
         case NoteKind.CRIT_TICK:
-            result @= ActiveSkin.critical_slide_tick_note
-        case NoteKind.HIDE_TICK | NoteKind.ANCHOR | NoteKind.HIDE_DAMAGE_TICK:
-            result @= EMPTY_NOTE_SPRITE_SET
+            return NoteVisualFamily.CRITICAL_SLIDE_TICK_NOTE
         case NoteKind.DAMAGE:
-            result @= ActiveSkin.damage_note
+            return NoteVisualFamily.DAMAGE_NOTE
         case _:
             assert_never(kind)
+
+
+def get_note_sprite_set(
+    kind: NoteKind, direction: FlickDirection, style: NoteStyle = NoteStyle.DEFAULT
+) -> NoteSpriteSet:
+    result = +NoteSpriteSet
+    if kind in {NoteKind.HIDE_TICK, NoteKind.HIDE_DAMAGE_TICK, NoteKind.ANCHOR}:
+        result @= EMPTY_NOTE_SPRITE_SET
+    else:
+        result @= styled_note_sprites(get_note_visual_family(kind, direction), style)
     return result
 
 
 def get_note_body_layer(kind: NoteKind) -> Layer:
     result = +Layer
     match kind:
-        case (
-            NoteKind.NORM_FLICK
-            | NoteKind.CRIT_FLICK
-            | NoteKind.NORM_HEAD_FLICK
-            | NoteKind.CRIT_HEAD_FLICK
-            | NoteKind.NORM_TAIL_FLICK
-            | NoteKind.CRIT_TAIL_FLICK
-        ):
-            result @= layers.note_flick_body
         case (
             NoteKind.NORM_TRACE
             | NoteKind.CRIT_TRACE
@@ -680,63 +693,14 @@ def get_flick_layer(kind: NoteKind) -> float:
             return LAYER_NOTE_ARROW
 
 
-def get_note_particles(kind: NoteKind, direction: FlickDirection) -> NoteParticleSet:
+def get_note_particles(
+    kind: NoteKind, direction: FlickDirection, style: NoteStyle = NoteStyle.DEFAULT
+) -> NoteParticleSet:
     result = +NoteParticleSet
-    match kind:
-        case NoteKind.NORM_TAP:
-            result @= ActiveParticles.normal_note
-        case (
-            NoteKind.NORM_RELEASE
-            | NoteKind.NORM_HEAD_TAP
-            | NoteKind.NORM_HEAD_RELEASE
-            | NoteKind.NORM_TAIL_TAP
-            | NoteKind.NORM_TAIL_RELEASE
-        ):
-            result @= ActiveParticles.slide_note
-        case NoteKind.NORM_FLICK | NoteKind.NORM_HEAD_FLICK | NoteKind.NORM_TAIL_FLICK:
-            if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
-                result @= ActiveParticles.flick_note
-            else:
-                result @= ActiveParticles.down_flick_note
-        case NoteKind.NORM_TRACE | NoteKind.NORM_HEAD_TRACE | NoteKind.NORM_TAIL_TRACE:
-            result @= ActiveParticles.trace_note
-        case NoteKind.NORM_TRACE_FLICK | NoteKind.NORM_HEAD_TRACE_FLICK | NoteKind.NORM_TAIL_TRACE_FLICK:
-            if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
-                result @= ActiveParticles.trace_flick_note
-            else:
-                result @= ActiveParticles.trace_down_flick_note
-        case NoteKind.CRIT_TAP:
-            result @= ActiveParticles.critical_note
-        case (
-            NoteKind.CRIT_RELEASE
-            | NoteKind.CRIT_HEAD_TAP
-            | NoteKind.CRIT_HEAD_RELEASE
-            | NoteKind.CRIT_TAIL_TAP
-            | NoteKind.CRIT_TAIL_RELEASE
-        ):
-            result @= ActiveParticles.critical_slide_note
-        case NoteKind.CRIT_FLICK | NoteKind.CRIT_HEAD_FLICK | NoteKind.CRIT_TAIL_FLICK:
-            if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
-                result @= ActiveParticles.critical_flick_note
-            else:
-                result @= ActiveParticles.critical_down_flick_note
-        case NoteKind.CRIT_TRACE | NoteKind.CRIT_HEAD_TRACE | NoteKind.CRIT_TAIL_TRACE:
-            result @= ActiveParticles.critical_trace_note
-        case NoteKind.CRIT_TRACE_FLICK | NoteKind.CRIT_HEAD_TRACE_FLICK | NoteKind.CRIT_TAIL_TRACE_FLICK:
-            if direction in {FlickDirection.UP_OMNI, FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT}:
-                result @= ActiveParticles.critical_trace_flick_note
-            else:
-                result @= ActiveParticles.critical_trace_down_flick_note
-        case NoteKind.NORM_TICK:
-            result @= ActiveParticles.normal_slide_tick_note
-        case NoteKind.CRIT_TICK:
-            result @= ActiveParticles.critical_slide_tick_note
-        case NoteKind.HIDE_TICK | NoteKind.HIDE_DAMAGE_TICK | NoteKind.ANCHOR:
-            result @= EMPTY_NOTE_PARTICLE_SET
-        case NoteKind.DAMAGE:
-            result @= ActiveParticles.damage_note
-        case _:
-            assert_never(kind)
+    if kind in {NoteKind.HIDE_TICK, NoteKind.HIDE_DAMAGE_TICK, NoteKind.ANCHOR}:
+        result @= EMPTY_NOTE_PARTICLE_SET
+    else:
+        result @= styled_note_particles(get_note_visual_family(kind, direction), style)
     return result
 
 
@@ -895,6 +859,7 @@ def play_note_hit_effects(
     lane_particles: bool = True,
     *,
     transform: StageScreenTransform,
+    style: NoteStyle = NoteStyle.DEFAULT,
 ):
     # Damage with overridden sfx can play, so this goes before the damage check
     sfx = get_note_effect(effect_kind, judgment)
@@ -917,6 +882,7 @@ def play_note_hit_effects(
                 managed=False,
                 lane_particles=lane_particles,
                 transform=transform,
+                style=style,
             )
         elif not is_watch():
             schedule_note_particles(
@@ -933,6 +899,7 @@ def play_note_hit_effects(
                 group_id=slot_effect_group_id,
                 lane_particles=lane_particles,
                 transform=transform,
+                style=style,
             )
     if Options.slot_effect_enabled and not is_watch():
         schedule_note_slot_effects(
@@ -948,6 +915,7 @@ def play_note_hit_effects(
             group_id=slot_effect_group_id,
             single_line=single_line,
             transform=transform,
+            style=style,
         )
 
 
@@ -966,6 +934,7 @@ def schedule_note_particles(
     lane_particles: bool = True,
     *,
     transform: StageScreenTransform,
+    style: NoteStyle = NoteStyle.DEFAULT,
 ):
     if is_tutorial():
         return
@@ -985,6 +954,7 @@ def schedule_note_particles(
         group_id=group_id,
         lane_particles=lane_particles,
         transform=transform,
+        style=style,
     )
 
 
@@ -1002,6 +972,7 @@ def handle_note_particles(
     group_id: float = 0.0,
     lane_particles: bool = True,
     transform: StageScreenTransform = IDENTITY_STAGE_SCREEN_TRANSFORM,
+    style: NoteStyle = NoteStyle.DEFAULT,
 ):
     if size <= 0:
         return
@@ -1016,7 +987,7 @@ def handle_note_particles(
     def billboard(q, anchor_lane: float = lane, anchor_offset: float = y_offset):
         return transform.transform_billboard(q, transformed_vec_at(anchor_lane, approach(1 - anchor_offset)))
 
-    particles = get_note_particles(kind, direction)
+    particles = get_note_particles(kind, direction, style)
     speed = Options.effect_animation_speed
     if Options.note_effect_enabled:
         linear_particle = particles.get_linear(judgment)
@@ -1366,12 +1337,13 @@ def schedule_note_slot_effects(
     single_line: bool = False,
     *,
     transform: StageScreenTransform,
+    style: NoteStyle = NoteStyle.DEFAULT,
 ):
     if is_tutorial():
         return
     if not Options.slot_effect_enabled:
         return
-    sprite_set = get_note_sprite_set(kind, direction)
+    sprite_set = get_note_sprite_set(kind, direction, style)
     e = 1e-6
     slot_sprite = sprite_set.slot
     if slot_sprite.is_available and not single_line and size > 0:
@@ -1415,8 +1387,9 @@ def draw_tutorial_note_slot_effects(
     pivot_lane: float = 0.0,
     half_offset: bool = False,
     single_line: bool = False,
+    style: NoteStyle = NoteStyle.DEFAULT,
 ):
-    sprite_set = get_note_sprite_set(kind, direction)
+    sprite_set = get_note_sprite_set(kind, direction, style)
     slot_sprite = sprite_set.slot
     if (
         slot_sprite.is_available

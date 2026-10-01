@@ -187,6 +187,16 @@ Comprised of many archetypes according to the following naming scheme:
 * **stage (ref?[Stage])**: An optional reference to the **Stage** entity this note belongs to.
 * **lane (float)**: The lane for the center of the note. When **stage** is set, this is interpreted relative to the pivot's lane at this note's beat (positive if the note is to the right of the pivot). When **stage** is not set, this is centered at 0 with typical values from -5.5 to 5.5 (the edges of the stage are at lane -6 and 6).
 * **size (float)**: The size in lanes of *half* the note. E.g. a note of size 1 would take up two lanes and have an extent of (lane - size) to (lane + size). Typically ranges from 0.5 to 6.
+* **style (NoteStyle)**: The note and effect color. Defaults to `DEFAULT`. Missing colored assets use the note kind's original assets. Takes on one of the following values:
+  * DEFAULT = 0
+  * NEUTRAL = 1
+  * RED = 2
+  * GREEN = 3
+  * BLUE = 4
+  * YELLOW = 5
+  * PURPLE = 6
+  * CYAN = 7
+  * BLACK = 8
 * **direction (Direction)**: The direction of the note, for flicks. Has no effect on other notes. Takes on one of the following values:
   * UP_OMNI = 0
   * UP_LEFT = 1
@@ -213,6 +223,12 @@ Comprised of many archetypes according to the following naming scheme:
   * FAKE_ACTIVE_NORMAL = 51
   * FAKE_ACTIVE_CRITICAL = 52
   * FAKE_DAMAGE = 53
+  * ACTIVE_NORMAL_NEUTRAL .. ACTIVE_NORMAL_BLACK = 11 .. 18
+  * ACTIVE_CRITICAL_NEUTRAL .. ACTIVE_CRITICAL_BLACK = 21 .. 28
+  * DAMAGE_NEUTRAL .. DAMAGE_BLACK = 31 .. 38
+  * FAKE_ACTIVE_NORMAL_NEUTRAL .. FAKE_ACTIVE_NORMAL_BLACK = 61 .. 68
+  * FAKE_ACTIVE_CRITICAL_NEUTRAL .. FAKE_ACTIVE_CRITICAL_BLACK = 71 .. 78
+  * FAKE_DAMAGE_NEUTRAL .. FAKE_DAMAGE_BLACK = 81 .. 88
   * GUIDE_NEUTRAL = 101
   * GUIDE_RED = 102
   * GUIDE_GREEN = 103

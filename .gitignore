@@ -14,3 +14,4 @@ wheels/
 js/node_modules/
 
 resources/*.scp
+.cache/

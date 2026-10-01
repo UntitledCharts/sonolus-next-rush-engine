@@ -14,6 +14,8 @@ Requires Python 3.14 or newer.
 
 ## Custom Resources
 
+`<Color>` = `{Neutral, Red, Green, Blue, Yellow, Purple, Cyan, Black}`.
+
 ### Skin Sprites
 
 For each role below, the engine picks the first available sprite in the listed
@@ -32,8 +34,6 @@ Shorthand used in the tables:
   `Sekai Flick Arrow {Up, Up Left, Down, Down Left} {1..6}` = 4 \* 6 = 24 sprites.
 
 #### Stage
-
-`<Color>` = `{Neutral, Red, Green, Blue, Yellow, Purple, Cyan, Black}`.
 
 | Role                     | Sprite                                                              |
 | ------------------------ | ------------------------------------------------------------------- |
@@ -154,6 +154,24 @@ Shorthand used in the tables:
 | Damage           | `Sekai Damage Slide Connection` -> `NOTE_CONNECTION_PURPLE_SEAMLESS`      |
 | Damage (Touched) | `Sekai Damage Slide Connection Active` -> `NOTE_CONNECTION_RED_SEAMLESS`  |
 
+#### Color Variants
+
+Missing or incomplete sets use the default sprites for the note or connector.
+
+| Role                  | Sprite | Required Set |
+|-----------------------|--------|--------------|
+| Note Bodies           | `Sekai {Normal, Slide, Flick, Down Flick, Damage} Note {Left, Middle, Right} <Color>` | All 3 slices |
+| Critical Note Bodies  | `Sekai {Critical, Critical Slide, Critical Flick, Critical Down Flick} Note {Left, Middle, Right} <Color>` | All 3 slices |
+| Trace Bodies          | `Sekai {Normal Trace, Trace Flick, Trace Down Flick} Note {Left, Middle, Right} <Color>` | All 3 slices |
+| Critical Trace Bodies | `Sekai {Critical Trace, Critical Trace Flick, Critical Trace Down Flick} Note {Left, Middle, Right} <Color>` | All 3 slices |
+| Slide Tick Diamonds   | `Sekai {Normal, Critical} Slide Diamond <Color>` | Individual |
+| Trace Diamonds        | `Sekai {Normal Trace, Trace Flick, Trace Down Flick, Critical Trace, Critical Trace Flick, Critical Trace Down Flick} Diamond <Color>` | Individual |
+| Slots & Slot Glows    | `Sekai {Slot, Slot Glow} {Normal, Slide, Flick, Down Flick, Critical, Critical Slide, Critical Flick, Critical Down Flick} <Color>` | Individual |
+| Flick Arrows          | `Sekai {Flick Arrow, Critical Flick Arrow} {Up, Up Left, Down, Down Left} {1..6} <Color>` | All 4 directions and 6 widths |
+| Active Connectors     | `Sekai {Normal, Critical} Active Slide Connection {Normal, Active} <Color>` | Both states |
+| Connector Slot Glows  | `Sekai {Normal, Critical} Slide Slot Glow <Color>` | Individual |
+| Damage Connectors     | `Sekai Damage Slide Connection <Color>`, `Sekai Damage Slide Connection Active <Color>` | Both states |
+
 ### Effect Clips
 
 | Name                   |
@@ -255,3 +273,19 @@ Shorthand used in the tables:
 | `Sekai Super Fever Lane`                      |
 | `Sekai Super Fever Effect`                    |
 | `Sekai Fever Border`                          |
+
+#### Color Variants
+
+Each missing colored effect uses its existing default. Trace flicks share the
+corresponding flick directional and lane effects.
+
+| Role                | Name |
+|---------------------|------|
+| Note Hits           | `Sekai {Normal, Slide, Flick, Down Flick} Note {Circular, Linear, Slot Linear} <Color>` |
+| Critical Note Hits  | `Sekai {Critical, Critical Slide, Critical Flick, Critical Down Flick} Note {Circular, Linear, Slot Linear} <Color>` |
+| Flick Directions    | `Sekai {Flick Note, Down Flick Note, Critical Note, Critical Down Flick Note} Directional <Color>` |
+| Lane Effects        | `Sekai {Note, Slide, Flick, Down Flick, Critical, Critical Slide, Critical Flick, Critical Down Flick} Lane Linear <Color>` |
+| Trace Hits          | `Sekai {Normal, Critical} Trace Note {Circular, Linear} <Color>` |
+| Slide Ticks         | `Sekai {Normal, Critical} Slide Tick Note <Color>` |
+| Damage Hits         | `Sekai Damage Note {Circular, Linear} <Color>` |
+| Slide Connectors    | `Sekai {Normal, Critical} Slide Connector {Circular, Linear, Trail Linear, Slot Linear} <Color>` |

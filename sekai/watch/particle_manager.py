@@ -7,6 +7,7 @@ from sonolus.script.runtime import is_skip
 from sekai.lib import archetype_names
 from sekai.lib.layout import FlickDirection, StageScreenTransform
 from sekai.lib.note import NoteEffectKind, NoteKind, handle_note_particles
+from sekai.lib.note_style import NoteStyle
 from sekai.lib.particle_manager import clear_particles
 
 
@@ -14,6 +15,7 @@ class ParticleManager(WatchArchetype):
     name = archetype_names.PARTICLE_MANAGER
 
     kind: NoteKind = entity_memory()
+    style: NoteStyle = entity_memory()
     effect_kind: NoteEffectKind = entity_memory()
     lane: float = entity_memory()
     size: float = entity_memory()
@@ -51,6 +53,7 @@ class ParticleManager(WatchArchetype):
             group_id=self.group_id,
             lane_particles=self.lane_particles,
             transform=self.transform,
+            style=self.style,
         )
         if is_skip():
             clear_particles()

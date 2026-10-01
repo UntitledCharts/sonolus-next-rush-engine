@@ -29,6 +29,7 @@ from sekai.lib.connector import (
     draw_connector,
     draw_connector_slot_glow_effect,
     get_connector_alpha_option,
+    get_connector_base_kind,
     get_connector_fractions,
     get_connector_input_leniency,
     get_connector_interp_frac,
@@ -279,7 +280,7 @@ class Connector(PlayArchetype):
             segment_tail = self.segment_tail
             if self.active_head_ref.index > 0:
                 active_head = self.active_head
-                if self.kind == ConnectorKind.DAMAGE:
+                if get_connector_base_kind(self.kind) == ConnectorKind.DAMAGE:
                     # Damage connectors do not get the initial grace period for staying active.
                     if self.active_connector_info.is_active:
                         visual_state = ConnectorVisualState.ACTIVE
@@ -313,6 +314,7 @@ class Connector(PlayArchetype):
                     and time() >= active_tail.target_time
                 ):
                     return
+            self.draw_fake_damage_head()
             if get_connector_alpha_option(self.kind) <= 0:
                 return
             head_note_alpha = head.visual_note_alpha
@@ -398,6 +400,40 @@ class Connector(PlayArchetype):
                 head_mask=head_mask,
                 tail_mask=tail_mask,
             )
+
+    def draw_fake_damage_head(self):
+        if (
+            get_connector_base_kind(self.kind) != ConnectorKind.FAKE_DAMAGE
+            or self.active_head_ref.index > 0
+            or Options.disable_fake_notes
+            or not self.visual_active_interval.start <= time() < self.visual_active_interval.end
+        ):
+            return
+        lane, size = self.current_visual_head_extents(time())
+        if size <= 0:
+            return
+        head = self.head
+        tail = self.tail
+        frac, transform_frac = get_connector_fractions(
+            self.ease_type,
+            head.target_time,
+            head.head_ease_frac,
+            tail.target_time,
+            tail.tail_ease_frac,
+            time(),
+        )
+        transform = blend_stage_transform(head.visual_stage_transform(), tail.visual_stage_transform(), transform_frac)
+        draw_slide_note_head(
+            self.segment_head.kind,
+            self.kind,
+            lane,
+            size,
+            self.segment_head.target_time,
+            1.0 - lerp(head.visual_y_offset, tail.visual_y_offset, frac),
+            transform=transform.to_screen_transform(),
+            note_alpha=lerp(head.visual_note_alpha, tail.visual_note_alpha, frac),
+            style=self.segment_head.style,
+        )
 
     def draw_hitbox(self):
         if not Options.allow_debug_options_in_play_mode or not Options.show_hitboxes:
@@ -539,12 +575,12 @@ class SlideManager(PlayArchetype):
             return
 
         info = self.active_head.active_connector_info
-        match info.connector_kind:
+        match get_connector_base_kind(info.connector_kind):
             case (
                 ConnectorKind.ACTIVE_NORMAL
                 | ConnectorKind.ACTIVE_CRITICAL
-                | ConnectorKind.ACTIVE_FAKE_NORMAL
-                | ConnectorKind.ACTIVE_FAKE_CRITICAL
+                | ConnectorKind.FAKE_ACTIVE_NORMAL
+                | ConnectorKind.FAKE_ACTIVE_CRITICAL
             ) if info.is_active:
                 if self.sfx_active and connector_sfx_same_group(info.connector_kind, self.sfx_kind):
                     return
@@ -580,12 +616,12 @@ class SlideManager(PlayArchetype):
             return
         segment_transform, segment_note_alpha = self.active_segment_transform_and_note_alpha()
         head_transform = segment_transform.to_screen_transform()
-        match info.connector_kind:
+        match get_connector_base_kind(info.connector_kind):
             case (
                 ConnectorKind.ACTIVE_NORMAL
                 | ConnectorKind.ACTIVE_CRITICAL
-                | ConnectorKind.ACTIVE_FAKE_NORMAL
-                | ConnectorKind.ACTIVE_FAKE_CRITICAL
+                | ConnectorKind.FAKE_ACTIVE_NORMAL
+                | ConnectorKind.FAKE_ACTIVE_CRITICAL
             ) if info.is_active:
                 if current_time < info.active_start_time + CONNECTOR_PARTICLE_ACTIVE_DELAY:
                     destroy_looped_particle(self.circular_particle)
@@ -656,13 +692,14 @@ class SlideManager(PlayArchetype):
                 if self.last_effect_kind != ConnectorKind.NONE:
                     connector_effect_kind_stream[adj_time] = ConnectorKind.NONE
                     self.last_effect_kind = ConnectorKind.NONE
-        match info.connector_kind:
+        match get_connector_base_kind(info.connector_kind):
             case (
                 ConnectorKind.ACTIVE_NORMAL
                 | ConnectorKind.ACTIVE_CRITICAL
-                | ConnectorKind.ACTIVE_FAKE_NORMAL
-                | ConnectorKind.ACTIVE_FAKE_CRITICAL
+                | ConnectorKind.FAKE_ACTIVE_NORMAL
+                | ConnectorKind.FAKE_ACTIVE_CRITICAL
                 | ConnectorKind.DAMAGE
+                | ConnectorKind.FAKE_DAMAGE
             ) if self.visual_size > 0:
                 draw_slide_note_head(
                     self.active_head.kind,
@@ -673,6 +710,7 @@ class SlideManager(PlayArchetype):
                     1.0 - self.visual_y_offset,
                     transform=head_transform,
                     note_alpha=segment_note_alpha,
+                    style=self.active_head.style,
                 )
             case _:
                 pass
@@ -680,12 +718,12 @@ class SlideManager(PlayArchetype):
     def activate_sfx_if_needed(self, kind: ConnectorKind, event_time: float):
         if self.sfx_active:
             return
-        match kind:
+        match get_connector_base_kind(kind):
             case (
                 ConnectorKind.ACTIVE_NORMAL
                 | ConnectorKind.ACTIVE_CRITICAL
-                | ConnectorKind.ACTIVE_FAKE_NORMAL
-                | ConnectorKind.ACTIVE_FAKE_CRITICAL
+                | ConnectorKind.FAKE_ACTIVE_NORMAL
+                | ConnectorKind.FAKE_ACTIVE_CRITICAL
             ):
                 times = activate_connector_sfx(
                     kind,
@@ -716,12 +754,12 @@ class SlideManager(PlayArchetype):
     def deactivate_sfx_if_needed(self, event_time: float):
         if not self.sfx_active:
             return
-        match self.sfx_kind:
+        match get_connector_base_kind(self.sfx_kind):
             case (
                 ConnectorKind.ACTIVE_NORMAL
                 | ConnectorKind.ACTIVE_CRITICAL
-                | ConnectorKind.ACTIVE_FAKE_NORMAL
-                | ConnectorKind.ACTIVE_FAKE_CRITICAL
+                | ConnectorKind.FAKE_ACTIVE_NORMAL
+                | ConnectorKind.FAKE_ACTIVE_CRITICAL
             ):
                 times = deactivate_connector_sfx(
                     self.sfx_kind,
@@ -751,10 +789,10 @@ class SlideManager(PlayArchetype):
         self.sfx_kind = ConnectorKind.NONE
 
     def write_sfx_times(self, kind: ConnectorKind, event_time: float, times: ConnectorSfxTimes):
-        match kind:
-            case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+        match get_connector_base_kind(kind):
+            case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
                 Streams.connector_normal_sfx_times[0][event_time] = times
-            case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+            case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
                 Streams.connector_critical_sfx_times[0][event_time] = times
             case _:
                 pass
@@ -803,11 +841,11 @@ class SlideManager(PlayArchetype):
 
 
 def connector_sfx_same_group(kind: ConnectorKind, active_kind: ConnectorKind) -> bool:
-    match active_kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
-            return kind in {ConnectorKind.ACTIVE_NORMAL, ConnectorKind.ACTIVE_FAKE_NORMAL}
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
-            return kind in {ConnectorKind.ACTIVE_CRITICAL, ConnectorKind.ACTIVE_FAKE_CRITICAL}
+    match get_connector_base_kind(active_kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
+            return get_connector_base_kind(kind) in {ConnectorKind.ACTIVE_NORMAL, ConnectorKind.FAKE_ACTIVE_NORMAL}
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
+            return get_connector_base_kind(kind) in {ConnectorKind.ACTIVE_CRITICAL, ConnectorKind.FAKE_ACTIVE_CRITICAL}
         case (
             ConnectorKind.NONE
             | ConnectorKind.GUIDE_NEUTRAL

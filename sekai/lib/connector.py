@@ -1,6 +1,6 @@
 from enum import IntEnum
 from math import ceil, cos, floor, inf, pi, sin, sqrt
-from typing import Literal, Self, assert_never
+from typing import Literal, Self, assert_never, cast
 
 from sonolus.script.archetype import EntityRef
 from sonolus.script.array import Dim
@@ -42,9 +42,15 @@ from sekai.lib.layout import (
     transformed_vec_at,
 )
 from sekai.lib.level_config import LevelConfig
+from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options, Version
-from sekai.lib.particle import ActiveParticles
-from sekai.lib.skin import ActiveConnectorSpriteSet, ActiveSkin
+from sekai.lib.particle import ActiveParticles, get_styled_connector_particles
+from sekai.lib.skin import (
+    ActiveConnectorSpriteSet,
+    ActiveSkin,
+    get_styled_active_connector_sprites,
+    get_styled_damage_connector_sprites,
+)
 from sekai.lib.stage import VisualMask
 from sekai.lib.timescale import iter_timescale_changes_in_group_from_time
 
@@ -120,9 +126,58 @@ class ConnectorKind(IntEnum):
     ACTIVE_NORMAL = 1
     ACTIVE_CRITICAL = 2
     DAMAGE = 3
-    ACTIVE_FAKE_NORMAL = 51
-    ACTIVE_FAKE_CRITICAL = 52
+    FAKE_ACTIVE_NORMAL = 51
+    FAKE_ACTIVE_CRITICAL = 52
     FAKE_DAMAGE = 53
+
+    ACTIVE_NORMAL_NEUTRAL = 11
+    ACTIVE_NORMAL_RED = 12
+    ACTIVE_NORMAL_GREEN = 13
+    ACTIVE_NORMAL_BLUE = 14
+    ACTIVE_NORMAL_YELLOW = 15
+    ACTIVE_NORMAL_PURPLE = 16
+    ACTIVE_NORMAL_CYAN = 17
+    ACTIVE_NORMAL_BLACK = 18
+    ACTIVE_CRITICAL_NEUTRAL = 21
+    ACTIVE_CRITICAL_RED = 22
+    ACTIVE_CRITICAL_GREEN = 23
+    ACTIVE_CRITICAL_BLUE = 24
+    ACTIVE_CRITICAL_YELLOW = 25
+    ACTIVE_CRITICAL_PURPLE = 26
+    ACTIVE_CRITICAL_CYAN = 27
+    ACTIVE_CRITICAL_BLACK = 28
+    DAMAGE_NEUTRAL = 31
+    DAMAGE_RED = 32
+    DAMAGE_GREEN = 33
+    DAMAGE_BLUE = 34
+    DAMAGE_YELLOW = 35
+    DAMAGE_PURPLE = 36
+    DAMAGE_CYAN = 37
+    DAMAGE_BLACK = 38
+    FAKE_ACTIVE_NORMAL_NEUTRAL = 61
+    FAKE_ACTIVE_NORMAL_RED = 62
+    FAKE_ACTIVE_NORMAL_GREEN = 63
+    FAKE_ACTIVE_NORMAL_BLUE = 64
+    FAKE_ACTIVE_NORMAL_YELLOW = 65
+    FAKE_ACTIVE_NORMAL_PURPLE = 66
+    FAKE_ACTIVE_NORMAL_CYAN = 67
+    FAKE_ACTIVE_NORMAL_BLACK = 68
+    FAKE_ACTIVE_CRITICAL_NEUTRAL = 71
+    FAKE_ACTIVE_CRITICAL_RED = 72
+    FAKE_ACTIVE_CRITICAL_GREEN = 73
+    FAKE_ACTIVE_CRITICAL_BLUE = 74
+    FAKE_ACTIVE_CRITICAL_YELLOW = 75
+    FAKE_ACTIVE_CRITICAL_PURPLE = 76
+    FAKE_ACTIVE_CRITICAL_CYAN = 77
+    FAKE_ACTIVE_CRITICAL_BLACK = 78
+    FAKE_DAMAGE_NEUTRAL = 81
+    FAKE_DAMAGE_RED = 82
+    FAKE_DAMAGE_GREEN = 83
+    FAKE_DAMAGE_BLUE = 84
+    FAKE_DAMAGE_YELLOW = 85
+    FAKE_DAMAGE_PURPLE = 86
+    FAKE_DAMAGE_CYAN = 87
+    FAKE_DAMAGE_BLACK = 88
 
     GUIDE_NEUTRAL = 101
     GUIDE_RED = 102
@@ -149,8 +204,61 @@ class SegmentPresentation(IntEnum):
 ActiveConnectorKind = Literal[
     ConnectorKind.ACTIVE_NORMAL,
     ConnectorKind.ACTIVE_CRITICAL,
-    ConnectorKind.ACTIVE_FAKE_NORMAL,
-    ConnectorKind.ACTIVE_FAKE_CRITICAL,
+    ConnectorKind.FAKE_ACTIVE_NORMAL,
+    ConnectorKind.FAKE_ACTIVE_CRITICAL,
+    ConnectorKind.ACTIVE_NORMAL_NEUTRAL,
+    ConnectorKind.ACTIVE_NORMAL_RED,
+    ConnectorKind.ACTIVE_NORMAL_GREEN,
+    ConnectorKind.ACTIVE_NORMAL_BLUE,
+    ConnectorKind.ACTIVE_NORMAL_YELLOW,
+    ConnectorKind.ACTIVE_NORMAL_PURPLE,
+    ConnectorKind.ACTIVE_NORMAL_CYAN,
+    ConnectorKind.ACTIVE_NORMAL_BLACK,
+    ConnectorKind.ACTIVE_CRITICAL_NEUTRAL,
+    ConnectorKind.ACTIVE_CRITICAL_RED,
+    ConnectorKind.ACTIVE_CRITICAL_GREEN,
+    ConnectorKind.ACTIVE_CRITICAL_BLUE,
+    ConnectorKind.ACTIVE_CRITICAL_YELLOW,
+    ConnectorKind.ACTIVE_CRITICAL_PURPLE,
+    ConnectorKind.ACTIVE_CRITICAL_CYAN,
+    ConnectorKind.ACTIVE_CRITICAL_BLACK,
+    ConnectorKind.FAKE_ACTIVE_NORMAL_NEUTRAL,
+    ConnectorKind.FAKE_ACTIVE_NORMAL_RED,
+    ConnectorKind.FAKE_ACTIVE_NORMAL_GREEN,
+    ConnectorKind.FAKE_ACTIVE_NORMAL_BLUE,
+    ConnectorKind.FAKE_ACTIVE_NORMAL_YELLOW,
+    ConnectorKind.FAKE_ACTIVE_NORMAL_PURPLE,
+    ConnectorKind.FAKE_ACTIVE_NORMAL_CYAN,
+    ConnectorKind.FAKE_ACTIVE_NORMAL_BLACK,
+    ConnectorKind.FAKE_ACTIVE_CRITICAL_NEUTRAL,
+    ConnectorKind.FAKE_ACTIVE_CRITICAL_RED,
+    ConnectorKind.FAKE_ACTIVE_CRITICAL_GREEN,
+    ConnectorKind.FAKE_ACTIVE_CRITICAL_BLUE,
+    ConnectorKind.FAKE_ACTIVE_CRITICAL_YELLOW,
+    ConnectorKind.FAKE_ACTIVE_CRITICAL_PURPLE,
+    ConnectorKind.FAKE_ACTIVE_CRITICAL_CYAN,
+    ConnectorKind.FAKE_ACTIVE_CRITICAL_BLACK,
+]
+
+DamageConnectorKind = Literal[
+    ConnectorKind.DAMAGE,
+    ConnectorKind.FAKE_DAMAGE,
+    ConnectorKind.DAMAGE_NEUTRAL,
+    ConnectorKind.DAMAGE_RED,
+    ConnectorKind.DAMAGE_GREEN,
+    ConnectorKind.DAMAGE_BLUE,
+    ConnectorKind.DAMAGE_YELLOW,
+    ConnectorKind.DAMAGE_PURPLE,
+    ConnectorKind.DAMAGE_CYAN,
+    ConnectorKind.DAMAGE_BLACK,
+    ConnectorKind.FAKE_DAMAGE_NEUTRAL,
+    ConnectorKind.FAKE_DAMAGE_RED,
+    ConnectorKind.FAKE_DAMAGE_GREEN,
+    ConnectorKind.FAKE_DAMAGE_BLUE,
+    ConnectorKind.FAKE_DAMAGE_YELLOW,
+    ConnectorKind.FAKE_DAMAGE_PURPLE,
+    ConnectorKind.FAKE_DAMAGE_CYAN,
+    ConnectorKind.FAKE_DAMAGE_BLACK,
 ]
 
 GuideConnectorKind = Literal[
@@ -194,32 +302,59 @@ class ConnectorMaskStatus(IntEnum):
     INSIDE = 1
 
 
+def get_connector_base_kind(kind: ConnectorKind) -> ConnectorKind:
+    if ConnectorKind.ACTIVE_NORMAL_NEUTRAL <= kind <= ConnectorKind.ACTIVE_NORMAL_BLACK:
+        return ConnectorKind.ACTIVE_NORMAL
+    if ConnectorKind.ACTIVE_CRITICAL_NEUTRAL <= kind <= ConnectorKind.ACTIVE_CRITICAL_BLACK:
+        return ConnectorKind.ACTIVE_CRITICAL
+    if ConnectorKind.DAMAGE_NEUTRAL <= kind <= ConnectorKind.DAMAGE_BLACK:
+        return ConnectorKind.DAMAGE
+    if ConnectorKind.FAKE_ACTIVE_NORMAL_NEUTRAL <= kind <= ConnectorKind.FAKE_ACTIVE_NORMAL_BLACK:
+        return ConnectorKind.FAKE_ACTIVE_NORMAL
+    if ConnectorKind.FAKE_ACTIVE_CRITICAL_NEUTRAL <= kind <= ConnectorKind.FAKE_ACTIVE_CRITICAL_BLACK:
+        return ConnectorKind.FAKE_ACTIVE_CRITICAL
+    if ConnectorKind.FAKE_DAMAGE_NEUTRAL <= kind <= ConnectorKind.FAKE_DAMAGE_BLACK:
+        return ConnectorKind.FAKE_DAMAGE
+    return kind
+
+
+def get_connector_style(kind: ConnectorKind) -> NoteStyle:
+    """Return the note color override, or DEFAULT for guides and uncolored kinds."""
+    if get_connector_base_kind(kind) != kind:
+        return cast(NoteStyle, kind % 10)
+    return NoteStyle.DEFAULT
+
+
 def is_fake_active_connector(kind: ConnectorKind) -> bool:
-    return kind in {ConnectorKind.ACTIVE_FAKE_NORMAL, ConnectorKind.ACTIVE_FAKE_CRITICAL}
+    return get_connector_base_kind(kind) in {ConnectorKind.FAKE_ACTIVE_NORMAL, ConnectorKind.FAKE_ACTIVE_CRITICAL}
 
 
 def is_fake_connector(kind: ConnectorKind) -> bool:
-    return is_fake_active_connector(kind) or kind == ConnectorKind.FAKE_DAMAGE
+    return is_fake_active_connector(kind) or get_connector_base_kind(kind) == ConnectorKind.FAKE_DAMAGE
 
 
 def should_show_connector_hitbox(kind: ConnectorKind) -> bool:
     # Damage connectors handle input, but their ticks already show the input bounds.
-    return kind in {ConnectorKind.ACTIVE_NORMAL, ConnectorKind.ACTIVE_CRITICAL}
+    return get_connector_base_kind(kind) in {ConnectorKind.ACTIVE_NORMAL, ConnectorKind.ACTIVE_CRITICAL}
 
 
 def get_connector_input_leniency(kind: ConnectorKind) -> float:
-    if kind == ConnectorKind.DAMAGE:
+    if get_connector_base_kind(kind) == ConnectorKind.DAMAGE:
         return 0.0
     return CONNECTOR_LENIENCY
 
 
 def get_active_connector_sprites(kind: ActiveConnectorKind) -> ActiveConnectorSpriteSet:
     result = +ActiveConnectorSpriteSet
-    match kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+    match get_connector_base_kind(kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             result @= ActiveSkin.active_slide_connector
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+            if get_connector_style(kind) != NoteStyle.DEFAULT:
+                result @= get_styled_active_connector_sprites(get_connector_style(kind), False)
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             result @= ActiveSkin.critical_active_slide_connector
+            if get_connector_style(kind) != NoteStyle.DEFAULT:
+                result @= get_styled_active_connector_sprites(get_connector_style(kind), True)
         case _:
             assert_never(kind)
     return result
@@ -227,7 +362,7 @@ def get_active_connector_sprites(kind: ActiveConnectorKind) -> ActiveConnectorSp
 
 def get_guide_connector_sprite(kind: GuideConnectorKind) -> Sprite:
     result = +Sprite
-    match kind:
+    match get_connector_base_kind(kind):
         case ConnectorKind.GUIDE_NEUTRAL:
             result @= ActiveSkin.guide_neutral
         case ConnectorKind.GUIDE_RED:
@@ -249,15 +384,19 @@ def get_guide_connector_sprite(kind: GuideConnectorKind) -> Sprite:
     return result
 
 
-def get_damage_connector_sprite() -> Sprite:
+def get_damage_connector_sprite(kind: ConnectorKind = ConnectorKind.DAMAGE) -> Sprite:
     result = +Sprite
     result @= ActiveSkin.damage_slide_connector
+    if get_connector_style(kind) != NoteStyle.DEFAULT:
+        result @= get_styled_damage_connector_sprites(get_connector_style(kind)).connection.normal
     return result
 
 
-def get_damage_connector_active_sprite() -> Sprite:
+def get_damage_connector_active_sprite(kind: ConnectorKind = ConnectorKind.DAMAGE) -> Sprite:
     result = +Sprite
     result @= ActiveSkin.damage_slide_connector_active
+    if get_connector_style(kind) != NoteStyle.DEFAULT:
+        result @= get_styled_damage_connector_sprites(get_connector_style(kind)).connection.active
     return result
 
 
@@ -265,12 +404,12 @@ def get_connector_z(
     kind: ConnectorKind, target_time: float, lane: float, active: bool, layer: ConnectorLayer, *, elevation: float = 0.0
 ) -> ZIndexes:
     result = +ZIndexes
-    match kind:
+    match get_connector_base_kind(kind):
         case (
             ConnectorKind.ACTIVE_NORMAL
-            | ConnectorKind.ACTIVE_FAKE_NORMAL
+            | ConnectorKind.FAKE_ACTIVE_NORMAL
             | ConnectorKind.ACTIVE_CRITICAL
-            | ConnectorKind.ACTIVE_FAKE_CRITICAL
+            | ConnectorKind.FAKE_ACTIVE_CRITICAL
         ):
             match layer:
                 case ConnectorLayer.TOP:
@@ -381,13 +520,11 @@ def get_guide_connector_layer_z(
     return result
 
 
-def get_active_connector_z_offset(
-    kind: ActiveConnectorKind | Literal[ConnectorKind.DAMAGE, ConnectorKind.FAKE_DAMAGE], active: bool
-) -> int:
-    match kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+def get_active_connector_z_offset(kind: ActiveConnectorKind | DamageConnectorKind, active: bool) -> int:
+    match get_connector_base_kind(kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             return 3 - active
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             return 1 - active
         case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
             return 9 - active
@@ -396,12 +533,12 @@ def get_active_connector_z_offset(
 
 
 def get_connector_alpha_option(kind: ConnectorKind) -> float:
-    match kind:
+    match get_connector_base_kind(kind):
         case (
             ConnectorKind.ACTIVE_NORMAL
-            | ConnectorKind.ACTIVE_FAKE_NORMAL
+            | ConnectorKind.FAKE_ACTIVE_NORMAL
             | ConnectorKind.ACTIVE_CRITICAL
-            | ConnectorKind.ACTIVE_FAKE_CRITICAL
+            | ConnectorKind.FAKE_ACTIVE_CRITICAL
         ):
             return Options.slide_alpha
         case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
@@ -424,12 +561,12 @@ def get_connector_alpha_option(kind: ConnectorKind) -> float:
 
 
 def get_connector_quality_option(kind: ConnectorKind) -> float:
-    match kind:
+    match get_connector_base_kind(kind):
         case (
             ConnectorKind.ACTIVE_NORMAL
-            | ConnectorKind.ACTIVE_FAKE_NORMAL
+            | ConnectorKind.FAKE_ACTIVE_NORMAL
             | ConnectorKind.ACTIVE_CRITICAL
-            | ConnectorKind.ACTIVE_FAKE_CRITICAL
+            | ConnectorKind.FAKE_ACTIVE_CRITICAL
         ):
             return Options.slide_quality
         case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
@@ -515,12 +652,12 @@ def draw_connector(
 
     normal_sprite = Sprite(-1)
     active_sprite = Sprite(-1)
-    match kind:
+    match get_connector_base_kind(kind):
         case (
             ConnectorKind.ACTIVE_NORMAL
             | ConnectorKind.ACTIVE_CRITICAL
-            | ConnectorKind.ACTIVE_FAKE_NORMAL
-            | ConnectorKind.ACTIVE_FAKE_CRITICAL
+            | ConnectorKind.FAKE_ACTIVE_NORMAL
+            | ConnectorKind.FAKE_ACTIVE_CRITICAL
         ):
             sprites = get_active_connector_sprites(kind)
             normal_sprite @= sprites.connection.normal
@@ -538,20 +675,20 @@ def draw_connector(
             sprites = get_guide_connector_sprite(kind)
             normal_sprite @= sprites
         case ConnectorKind.DAMAGE:
-            normal_sprite @= get_damage_connector_sprite()
-            active_sprite @= get_damage_connector_active_sprite()
+            normal_sprite @= get_damage_connector_sprite(kind)
+            active_sprite @= get_damage_connector_active_sprite(kind)
         case ConnectorKind.FAKE_DAMAGE:
-            normal_sprite @= get_damage_connector_sprite()
+            normal_sprite @= get_damage_connector_sprite(kind)
         case ConnectorKind.NONE:
             return
         case _:
             assert_never(kind)
 
-    match kind:
+    match get_connector_base_kind(kind):
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_CRITICAL:
             segment_head_alpha = 1.0
             segment_tail_alpha = 1.0
-        case ConnectorKind.ACTIVE_FAKE_NORMAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+        case ConnectorKind.FAKE_ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             segment_head_alpha = 1.0
             segment_tail_alpha = 1.0
             if visual_state == ConnectorVisualState.INACTIVE:
@@ -565,11 +702,15 @@ def draw_connector(
             | ConnectorKind.GUIDE_PURPLE
             | ConnectorKind.GUIDE_CYAN
             | ConnectorKind.GUIDE_BLACK
-            | ConnectorKind.FAKE_DAMAGE
         ):
             visual_state = ConnectorVisualState.WAITING
+        case ConnectorKind.FAKE_DAMAGE:
+            segment_head_alpha = 1.0
+            segment_tail_alpha = 1.0
+            visual_state = ConnectorVisualState.WAITING
         case ConnectorKind.DAMAGE:
-            pass
+            segment_head_alpha = 1.0
+            segment_tail_alpha = 1.0
         case _:
             assert_never(kind)
 
@@ -1557,14 +1698,14 @@ def activate_connector_sfx(
 ) -> ConnectorSfxTimes:
     sfx_time = clamp(event_time, active_head_target_time, active_tail_target_time)
     result = +ConnectorSfxTimes
-    match kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+    match get_connector_base_kind(kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             if ConnectorSfxState.normal_inactive_time == CONNECTOR_SFX_INACTIVE_TIME_INIT:
                 ConnectorSfxState.normal_inactive_time = sfx_time
             ConnectorSfxState.normal_active_time = sfx_time
             result.active_time = ConnectorSfxState.normal_active_time
             result.inactive_time = ConnectorSfxState.normal_inactive_time
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             if ConnectorSfxState.critical_inactive_time == CONNECTOR_SFX_INACTIVE_TIME_INIT:
                 ConnectorSfxState.critical_inactive_time = sfx_time
             ConnectorSfxState.critical_active_time = sfx_time
@@ -1583,12 +1724,12 @@ def deactivate_connector_sfx(
 ) -> ConnectorSfxTimes:
     sfx_time = clamp(event_time, active_head_target_time, active_tail_target_time)
     result = +ConnectorSfxTimes
-    match kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+    match get_connector_base_kind(kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             ConnectorSfxState.normal_inactive_time = sfx_time
             result.active_time = ConnectorSfxState.normal_active_time
             result.inactive_time = ConnectorSfxState.normal_inactive_time
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             ConnectorSfxState.critical_inactive_time = sfx_time
             result.active_time = ConnectorSfxState.critical_active_time
             result.inactive_time = ConnectorSfxState.critical_inactive_time
@@ -1602,11 +1743,11 @@ def connector_sfx_is_active(times: ConnectorSfxTimes) -> bool:
 
 
 def connector_sfx_matches_kind(kind: ConnectorKind, sfx_kind: ActiveConnectorKind) -> bool:
-    match sfx_kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
-            return kind in {ConnectorKind.ACTIVE_NORMAL, ConnectorKind.ACTIVE_FAKE_NORMAL}
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
-            return kind in {ConnectorKind.ACTIVE_CRITICAL, ConnectorKind.ACTIVE_FAKE_CRITICAL}
+    match get_connector_base_kind(sfx_kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
+            return get_connector_base_kind(kind) in {ConnectorKind.ACTIVE_NORMAL, ConnectorKind.FAKE_ACTIVE_NORMAL}
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
+            return get_connector_base_kind(kind) in {ConnectorKind.ACTIVE_CRITICAL, ConnectorKind.FAKE_ACTIVE_CRITICAL}
         case _:
             assert_never(sfx_kind)
 
@@ -1639,11 +1780,15 @@ def update_circular_connector_particle(
     layout = transform.transform_quad(layout_circular_effect(lane, w=3.5, h=2.1, y_offset=y_offset))
     if replace or handle.id == 0:
         particle = +Particle(-1)
-        match kind:
-            case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+        match get_connector_base_kind(kind):
+            case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
                 particle @= ActiveParticles.normal_slide_connector.circular
-            case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+                if get_connector_style(kind) != NoteStyle.DEFAULT:
+                    particle @= get_styled_connector_particles(get_connector_style(kind), False).circular
+            case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
                 particle @= ActiveParticles.critical_slide_connector.circular
+                if get_connector_style(kind) != NoteStyle.DEFAULT:
+                    particle @= get_styled_connector_particles(get_connector_style(kind), True).circular
             case _:
                 assert_never(kind)
         replace_looped_particle(handle, particle, layout, duration=1 / Options.effect_animation_speed)
@@ -1667,11 +1812,15 @@ def update_linear_connector_particle(
     )
     particle = +Particle
     if replace or handle.id == 0:
-        match kind:
-            case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+        match get_connector_base_kind(kind):
+            case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
                 particle @= ActiveParticles.normal_slide_connector.linear
-            case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+                if get_connector_style(kind) != NoteStyle.DEFAULT:
+                    particle @= get_styled_connector_particles(get_connector_style(kind), False).linear
+            case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
                 particle @= ActiveParticles.critical_slide_connector.linear
+                if get_connector_style(kind) != NoteStyle.DEFAULT:
+                    particle @= get_styled_connector_particles(get_connector_style(kind), True).linear
             case _:
                 assert_never(kind)
         replace_looped_particle(handle, particle, layout, duration=1 / Options.effect_animation_speed)
@@ -1692,11 +1841,15 @@ def spawn_linear_connector_trail_particle(
         layout_linear_effect(lane, shear=0, y_offset=y_offset), transformed_vec_at(lane, approach(1 - y_offset))
     )
     particle = +Particle
-    match kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+    match get_connector_base_kind(kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             particle @= ActiveParticles.normal_slide_connector.trail_linear
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+            if get_connector_style(kind) != NoteStyle.DEFAULT:
+                particle @= get_styled_connector_particles(get_connector_style(kind), False).trail_linear
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             particle @= ActiveParticles.critical_slide_connector.trail_linear
+            if get_connector_style(kind) != NoteStyle.DEFAULT:
+                particle @= get_styled_connector_particles(get_connector_style(kind), True).trail_linear
         case _:
             assert_never(kind)
     particle.spawn(layout, duration=0.5 / Options.effect_animation_speed)
@@ -1713,11 +1866,15 @@ def spawn_connector_slot_particles(
     if not Options.note_effect_enabled:
         return
     particle = +Particle
-    match kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+    match get_connector_base_kind(kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             particle @= ActiveParticles.normal_slide_connector.slot_linear
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+            if get_connector_style(kind) != NoteStyle.DEFAULT:
+                particle @= get_styled_connector_particles(get_connector_style(kind), False).slot_linear
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             particle @= ActiveParticles.critical_slide_connector.slot_linear
+            if get_connector_style(kind) != NoteStyle.DEFAULT:
+                particle @= get_styled_connector_particles(get_connector_style(kind), True).slot_linear
         case _:
             assert_never(kind)
     for slot_lane in iter_slot_lanes(lane, size):
@@ -1742,11 +1899,15 @@ def draw_connector_slot_glow_effect(
     if not Options.slot_effect_enabled:
         return
     sprite = +Sprite
-    match kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+    match get_connector_base_kind(kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             sprite @= ActiveSkin.active_slide_connector.slot_glow
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+            if get_connector_style(kind) != NoteStyle.DEFAULT:
+                sprite @= get_styled_active_connector_sprites(get_connector_style(kind), False).slot_glow
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             sprite @= ActiveSkin.critical_active_slide_connector.slot_glow
+            if get_connector_style(kind) != NoteStyle.DEFAULT:
+                sprite @= get_styled_active_connector_sprites(get_connector_style(kind), True).slot_glow
         case _:
             assert_never(kind)
     height = (
@@ -1777,10 +1938,10 @@ def update_connector_sfx(
     if Options.auto_sfx:
         return
     effect = +Effect
-    match kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+    match get_connector_base_kind(kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             effect @= Effects.normal_hold
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             effect @= Effects.critical_hold
         case _:
             assert_never(kind)
@@ -1799,10 +1960,10 @@ def schedule_connector_sfx(
     if not Options.sfx_enabled:
         return
     effect = +Effect
-    match kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+    match get_connector_base_kind(kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             effect @= Effects.normal_hold
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             effect @= Effects.critical_hold
         case _:
             assert_never(kind)
@@ -1834,10 +1995,10 @@ def schedule_connector_sfx_between(
     if end_time <= start_time:
         return
     effect = +Effect
-    match kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_FAKE_NORMAL:
+    match get_connector_base_kind(kind):
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             effect @= Effects.normal_hold
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             effect @= Effects.critical_hold
         case _:
             assert_never(kind)

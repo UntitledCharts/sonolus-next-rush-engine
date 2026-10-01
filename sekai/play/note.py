@@ -72,6 +72,7 @@ from sekai.lib.note import (
     play_note_hit_effects,
     schedule_note_auto_sfx,
 )
+from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
 from sekai.lib.stage import (
     DivisionParity,
@@ -116,6 +117,7 @@ class BaseNote(PlayArchetype):
     lane: float = imported()
     size: float = imported()
     direction: FlickDirection = imported()
+    style: NoteStyle = imported()
     active_head_ref: EntityRef[BaseNote] = imported(name="activeHead")
     is_attached: bool = imported(name="isAttached")
     connector_ease: EaseType = imported(name="connectorEase")
@@ -134,9 +136,8 @@ class BaseNote(PlayArchetype):
     # Score order is independent of the imported slide next/prev links.
     score_next_ref: EntityRef[BaseNote] = entity_data()
     kind: NoteKind = entity_data()
-    # 0: untouched, 1: initialized for score sorting, 2: stage/timeline geometry ready.
+    # 0: untouched, 1: score data ready, 2: geometry ready, 3: preprocessing complete.
     data_init_done: int = entity_data()
-    preprocess_done: bool = entity_data()
     rel_lane: float = entity_data()
     target_time: float = entity_data()
     visual_start_time: float = entity_memory()
@@ -186,6 +187,10 @@ class BaseNote(PlayArchetype):
     played_hit_effects: bool = exported()
 
     @property
+    def preprocess_done(self) -> bool:
+        return self.data_init_done == 3
+
+    @property
     def judgment_window(self) -> SekaiWindow:
         return get_note_window(self.kind, self.active_head_ref.index > 0 or self.is_attached)
 
@@ -224,7 +229,7 @@ class BaseNote(PlayArchetype):
     def init_geometry(self):
         # Initialization resolves note data before stages and timescale groups preprocess.
         # Resolve geometry afterward, including anchors whose own callback runs later.
-        if self.data_init_done == 2:
+        if self.data_init_done >= 2:
             return
         self.target_position = locate_target(self.timescale_group, self.target_time)
 
@@ -313,7 +318,7 @@ class BaseNote(PlayArchetype):
         # A hidden note can still be an endpoint of a visible connector.
         self.spawn_eligibility_time = min(natural_start_time, start_time)
         self.scheduled_spawn_time = start_time
-        self.preprocess_done = True
+        self.data_init_done = 3
 
     def _basic_extend_stage_window(self, start_time: float, end_time: float):
         if self.stage_ref.index > 0:
@@ -499,6 +504,7 @@ class BaseNote(PlayArchetype):
                 self.target_time,
                 transform=self.visual_stage_transform().to_screen_transform(),
                 note_alpha=note_alpha,
+                style=self.style,
             )
         else:
             draw_note(
@@ -510,6 +516,7 @@ class BaseNote(PlayArchetype):
                 self.target_time,
                 transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
                 note_alpha=note_alpha,
+                style=self.style,
             )
 
     def draw_hitbox(self):
@@ -660,6 +667,7 @@ class BaseNote(PlayArchetype):
                 single_line=self.visual_single_line,
                 lane_particles=self.visual_lane_particles,
                 transform=self.visual_stage_transform().to_screen_transform(),
+                style=self.style,
             )
         if self.is_scored:
             self.result.haptic = get_note_haptic_feedback(self.kind, self.result.judgment)

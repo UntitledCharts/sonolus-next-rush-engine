@@ -15,6 +15,7 @@ from sonolus.script.vec import Vec2
 from sekai.lib import initialization, layout, particle_manager
 from sekai.lib import note as note_lib
 from sekai.lib.ease import EaseType
+from sekai.lib.note_style import NoteStyle
 from sekai.lib.stage import VisualMask, masked_note_extents_by_limits
 from sekai.play import connector as play_connector
 from sekai.play import initialization as play_initialization
@@ -98,12 +99,8 @@ class MaskedEffectTests(unittest.TestCase):
             patch.object(particle_manager, "ParticleHandler", handler),
             patch.object(particle_manager, "purge_particle_chunk") as purge,
         ):
-            first = particle_manager.begin_particle_chunk(
-                particle, 1, particle_manager.ParticleManageKind.MULTI
-            )
-            second = particle_manager.begin_particle_chunk(
-                particle, 7, particle_manager.ParticleManageKind.MULTI
-            )
+            first = particle_manager.begin_particle_chunk(particle, 1, particle_manager.ParticleManageKind.MULTI)
+            second = particle_manager.begin_particle_chunk(particle, 7, particle_manager.ParticleManageKind.MULTI)
         assert first != second
         assert purge.call_args_list[0].args != purge.call_args_list[1].args
 
@@ -111,6 +108,7 @@ class MaskedEffectTests(unittest.TestCase):
         fake = SimpleNamespace(
             should_play_hit_effects=True,
             kind=note_lib.NoteKind.NORM_TAP,
+            style=NoteStyle.BLUE,
             effect_kind=note_lib.NoteEffectKind.DEFAULT,
             is_scored=False,
             visual_lane=0,
@@ -133,6 +131,7 @@ class MaskedEffectTests(unittest.TestCase):
         ):
             play_note.BaseNote.terminate(fake)
         assert effects.call_args.args[2:4] == (0, 1)
+        assert effects.call_args.kwargs["style"] == NoteStyle.BLUE
 
     def test_watch_slots_and_glow_use_masked_width(self):
         division = SimpleNamespace(start=SimpleNamespace(parity=0, size=1))
@@ -156,6 +155,7 @@ class MaskedEffectTests(unittest.TestCase):
             rel_lane=0,
             size=6,
             kind=note_lib.NoteKind.NORM_TAP,
+            style=NoteStyle.BLUE,
             direction=layout.FlickDirection.UP_OMNI,
             judgment=Judgment.PERFECT,
             index=1,
@@ -208,6 +208,7 @@ class MaskedEffectTests(unittest.TestCase):
                     fake = SimpleNamespace(
                         is_scored=True,
                         kind=note_lib.NoteKind.NORM_TAP,
+                        style=NoteStyle.BLUE,
                         effect_kind=note_lib.NoteEffectKind.DEFAULT,
                         calc_time=4,
                         stage_ref=SimpleNamespace(index=0),
@@ -230,6 +231,7 @@ class MaskedEffectTests(unittest.TestCase):
                         watch_note.WatchBaseNote.spawn_note_particles(fake)
                     expected = masked_note_extents_by_limits(0, 6, mask.left, mask.right, True)
                     assert schedule.call_args.args[2:4] == expected
+                    assert schedule.call_args.kwargs["style"] == NoteStyle.BLUE
 
     def test_fully_masked_notes_emit_no_particles(self):
         for lane in (0, 0.25, -1.75):

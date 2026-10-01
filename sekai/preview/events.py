@@ -22,7 +22,7 @@ class PreviewSkill(PreviewArchetype):
 
     time: float = entity_data()
 
-    next_ref: EntityRef[PreviewSkill] = shared_memory()  # noqa: F821
+    next_ref: EntityRef[PreviewSkill] = shared_memory()
     num: int = shared_memory()
 
     def preprocess(self):

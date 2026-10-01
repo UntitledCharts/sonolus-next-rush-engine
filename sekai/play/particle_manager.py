@@ -9,12 +9,14 @@ from sonolus.script.bucket import Judgment
 from sekai.lib import archetype_names
 from sekai.lib.layout import FlickDirection, StageScreenTransform
 from sekai.lib.note import NoteEffectKind, NoteKind, handle_note_particles
+from sekai.lib.note_style import NoteStyle
 
 
 class ParticleManager(PlayArchetype):
     name = archetype_names.PARTICLE_MANAGER
 
     kind: NoteKind = entity_memory()
+    style: NoteStyle = entity_memory()
     effect_kind: NoteEffectKind = entity_memory()
     lane: float = entity_memory()
     size: float = entity_memory()
@@ -44,6 +46,7 @@ class ParticleManager(PlayArchetype):
             group_id=self.group_id,
             lane_particles=self.lane_particles,
             transform=self.transform,
+            style=self.style,
         )
 
     def update_parallel(self):

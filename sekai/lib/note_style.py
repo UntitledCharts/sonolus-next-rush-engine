@@ -1,0 +1,33 @@
+from enum import IntEnum
+
+
+class NoteStyle(IntEnum):
+    DEFAULT = 0
+    NEUTRAL = 1
+    RED = 2
+    GREEN = 3
+    BLUE = 4
+    YELLOW = 5
+    PURPLE = 6
+    CYAN = 7
+    BLACK = 8
+
+
+class NoteVisualFamily(IntEnum):
+    NORMAL_NOTE = 0
+    SLIDE_NOTE = 1
+    FLICK_NOTE = 2
+    DOWN_FLICK_NOTE = 3
+    CRITICAL_NOTE = 4
+    CRITICAL_SLIDE_NOTE = 5
+    CRITICAL_FLICK_NOTE = 6
+    CRITICAL_DOWN_FLICK_NOTE = 7
+    TRACE_NOTE = 8
+    TRACE_FLICK_NOTE = 9
+    TRACE_DOWN_FLICK_NOTE = 10
+    CRITICAL_TRACE_NOTE = 11
+    CRITICAL_TRACE_FLICK_NOTE = 12
+    CRITICAL_TRACE_DOWN_FLICK_NOTE = 13
+    NORMAL_SLIDE_TICK_NOTE = 14
+    CRITICAL_SLIDE_TICK_NOTE = 15
+    DAMAGE_NOTE = 16

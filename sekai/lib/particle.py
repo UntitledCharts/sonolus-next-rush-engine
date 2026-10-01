@@ -1,9 +1,13 @@
+from sonolus.script.array import Array, Dim
 from sonolus.script.bucket import Judgment
 from sonolus.script.globals import level_data
-from sonolus.script.particle import Particle, StandardParticle, particle, particles
+from sonolus.script.particle import Particle, ParticleGroup, StandardParticle, particle, particle_group, particles
 from sonolus.script.record import Record
 
+from sekai.lib.note_style import NoteStyle, NoteVisualFamily
 from sekai.lib.options import Version
+
+PARTICLE_COLORS = ("Neutral", "Red", "Green", "Blue", "Yellow", "Purple", "Cyan", "Black")
 
 
 @particles
@@ -151,6 +155,163 @@ class BaseParticles:
     v1: Particle = particle("Never delete the sekai version checker=v1")
     lightweight: Particle = particle("Lightweight=True")
 
+    colored_normal_note_circular: ParticleGroup = particle_group(
+        f"Sekai Normal Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_note_linear: ParticleGroup = particle_group(
+        f"Sekai Normal Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_note_lane_linear: ParticleGroup = particle_group(
+        f"Sekai Note Lane Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_note_slot_linear: ParticleGroup = particle_group(
+        f"Sekai Normal Note Slot Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_slide_note_circular: ParticleGroup = particle_group(
+        f"Sekai Slide Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_slide_note_linear: ParticleGroup = particle_group(
+        f"Sekai Slide Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_slide_note_lane_linear: ParticleGroup = particle_group(
+        f"Sekai Slide Lane Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_slide_note_slot_linear: ParticleGroup = particle_group(
+        f"Sekai Slide Note Slot Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_flick_note_circular: ParticleGroup = particle_group(
+        f"Sekai Flick Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_flick_note_linear: ParticleGroup = particle_group(
+        f"Sekai Flick Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_flick_note_directional: ParticleGroup = particle_group(
+        f"Sekai Flick Note Directional {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_flick_note_lane_linear: ParticleGroup = particle_group(
+        f"Sekai Flick Lane Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_flick_note_slot_linear: ParticleGroup = particle_group(
+        f"Sekai Flick Note Slot Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_down_flick_note_circular: ParticleGroup = particle_group(
+        f"Sekai Down Flick Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_down_flick_note_linear: ParticleGroup = particle_group(
+        f"Sekai Down Flick Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_down_flick_note_directional: ParticleGroup = particle_group(
+        f"Sekai Down Flick Note Directional {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_down_flick_note_lane_linear: ParticleGroup = particle_group(
+        f"Sekai Down Flick Lane Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_down_flick_note_slot_linear: ParticleGroup = particle_group(
+        f"Sekai Down Flick Note Slot Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_note_circular: ParticleGroup = particle_group(
+        f"Sekai Critical Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_note_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_note_lane_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Lane Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_note_slot_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Note Slot Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_slide_note_circular: ParticleGroup = particle_group(
+        f"Sekai Critical Slide Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_slide_note_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Slide Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_slide_note_lane_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Slide Lane Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_slide_note_slot_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Slide Note Slot Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_flick_note_circular: ParticleGroup = particle_group(
+        f"Sekai Critical Flick Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_flick_note_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Flick Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_note_directional: ParticleGroup = particle_group(
+        f"Sekai Critical Note Directional {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_flick_note_lane_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Flick Lane Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_flick_note_slot_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Flick Note Slot Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_down_flick_note_circular: ParticleGroup = particle_group(
+        f"Sekai Critical Down Flick Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_down_flick_note_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Down Flick Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_down_flick_note_directional: ParticleGroup = particle_group(
+        f"Sekai Critical Down Flick Note Directional {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_down_flick_note_lane_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Down Flick Lane Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_down_flick_note_slot_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Down Flick Note Slot Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_trace_note_linear: ParticleGroup = particle_group(
+        f"Sekai Normal Trace Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_trace_note_circular: ParticleGroup = particle_group(
+        f"Sekai Normal Trace Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_trace_note_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Trace Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_trace_note_circular: ParticleGroup = particle_group(
+        f"Sekai Critical Trace Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_slide_tick_note: ParticleGroup = particle_group(
+        f"Sekai Normal Slide Tick Note {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_slide_tick_note: ParticleGroup = particle_group(
+        f"Sekai Critical Slide Tick Note {color}" for color in PARTICLE_COLORS
+    )
+    colored_damage_note_circular: ParticleGroup = particle_group(
+        f"Sekai Damage Note Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_damage_note_linear: ParticleGroup = particle_group(
+        f"Sekai Damage Note Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_slide_connector_circular: ParticleGroup = particle_group(
+        f"Sekai Normal Slide Connector Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_slide_connector_linear: ParticleGroup = particle_group(
+        f"Sekai Normal Slide Connector Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_slide_connector_trail_linear: ParticleGroup = particle_group(
+        f"Sekai Normal Slide Connector Trail Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_normal_slide_connector_slot_linear: ParticleGroup = particle_group(
+        f"Sekai Normal Slide Connector Slot Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_slide_connector_circular: ParticleGroup = particle_group(
+        f"Sekai Critical Slide Connector Circular {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_slide_connector_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Slide Connector Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_slide_connector_trail_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Slide Connector Trail Linear {color}" for color in PARTICLE_COLORS
+    )
+    colored_critical_slide_connector_slot_linear: ParticleGroup = particle_group(
+        f"Sekai Critical Slide Connector Slot Linear {color}" for color in PARTICLE_COLORS
+    )
+
 
 EMPTY_PARTICLE = Particle(-1)
 
@@ -222,6 +383,39 @@ class NoteParticleSet(Record):
         return result
 
 
+class ColoredNoteParticleSet(Record):
+    """Color-dependent effects; judgment variants are shared across colors."""
+
+    circular: Particle
+    linear: Particle
+    directional: Particle
+    tick: Particle
+    lane: Particle
+    lane_basic: Particle
+    slot_linear: Particle
+
+    @classmethod
+    def of(cls, particles: NoteParticleSet):
+        return cls(
+            circular=particles.circular,
+            linear=particles.linear,
+            directional=particles.directional,
+            tick=particles.tick,
+            lane=particles.lane,
+            lane_basic=particles.lane_basic,
+            slot_linear=particles.slot_linear,
+        )
+
+
+class JudgmentParticles(Record):
+    circular_great: Particle
+    circular_good: Particle
+    linear_great: Particle
+    linear_good: Particle
+    slot_linear_great: Particle
+    slot_linear_good: Particle
+
+
 class UIChecker(Record):
     v1: Particle
     v3: Particle
@@ -260,6 +454,139 @@ class ActiveConnectorParticleSet(Record):
     slot_linear: Particle
 
 
+def _note_color_sources(
+    *,
+    circular: ParticleGroup | None = None,
+    linear: ParticleGroup | None = None,
+    directional: ParticleGroup | None = None,
+    tick: ParticleGroup | None = None,
+    lane: ParticleGroup | None = None,
+    slot_linear: ParticleGroup | None = None,
+) -> NoteParticleSet:
+    """Return the first particle of each group, or EMPTY_PARTICLE for omitted groups."""
+    return NoteParticleSet(
+        circular=Particle(circular.start_id) if circular is not None else EMPTY_PARTICLE,
+        linear=Particle(linear.start_id) if linear is not None else EMPTY_PARTICLE,
+        directional=Particle(directional.start_id) if directional is not None else EMPTY_PARTICLE,
+        tick=Particle(tick.start_id) if tick is not None else EMPTY_PARTICLE,
+        lane=Particle(lane.start_id) if lane is not None else EMPTY_PARTICLE,
+        slot_linear=Particle(slot_linear.start_id) if slot_linear is not None else EMPTY_PARTICLE,
+        lane_basic=EMPTY_PARTICLE,
+        circular_great=EMPTY_PARTICLE,
+        circular_good=EMPTY_PARTICLE,
+        linear_great=EMPTY_PARTICLE,
+        linear_good=EMPTY_PARTICLE,
+        slot_linear_great=EMPTY_PARTICLE,
+        slot_linear_good=EMPTY_PARTICLE,
+    )
+
+
+# Source tables live in ROM; preprocessing selects available effects.
+COLORED_NOTE_PARTICLE_BASES = Array(
+    _note_color_sources(  # normal_note
+        circular=BaseParticles.colored_normal_note_circular,
+        linear=BaseParticles.colored_normal_note_linear,
+        lane=BaseParticles.colored_normal_note_lane_linear,
+        slot_linear=BaseParticles.colored_normal_note_slot_linear,
+    ),
+    _note_color_sources(  # slide_note
+        circular=BaseParticles.colored_slide_note_circular,
+        linear=BaseParticles.colored_slide_note_linear,
+        lane=BaseParticles.colored_normal_slide_note_lane_linear,
+        slot_linear=BaseParticles.colored_slide_note_slot_linear,
+    ),
+    _note_color_sources(  # flick_note
+        circular=BaseParticles.colored_flick_note_circular,
+        linear=BaseParticles.colored_flick_note_linear,
+        directional=BaseParticles.colored_flick_note_directional,
+        lane=BaseParticles.colored_normal_flick_note_lane_linear,
+        slot_linear=BaseParticles.colored_flick_note_slot_linear,
+    ),
+    _note_color_sources(  # down_flick_note
+        circular=BaseParticles.colored_down_flick_note_circular,
+        linear=BaseParticles.colored_down_flick_note_linear,
+        directional=BaseParticles.colored_down_flick_note_directional,
+        lane=BaseParticles.colored_normal_down_flick_note_lane_linear,
+        slot_linear=BaseParticles.colored_down_flick_note_slot_linear,
+    ),
+    _note_color_sources(  # critical_note
+        circular=BaseParticles.colored_critical_note_circular,
+        linear=BaseParticles.colored_critical_note_linear,
+        lane=BaseParticles.colored_critical_note_lane_linear,
+        slot_linear=BaseParticles.colored_critical_note_slot_linear,
+    ),
+    _note_color_sources(  # critical_slide_note
+        circular=BaseParticles.colored_critical_slide_note_circular,
+        linear=BaseParticles.colored_critical_slide_note_linear,
+        lane=BaseParticles.colored_critical_slide_note_lane_linear,
+        slot_linear=BaseParticles.colored_critical_slide_note_slot_linear,
+    ),
+    _note_color_sources(  # critical_flick_note
+        circular=BaseParticles.colored_critical_flick_note_circular,
+        linear=BaseParticles.colored_critical_flick_note_linear,
+        directional=BaseParticles.colored_critical_note_directional,
+        lane=BaseParticles.colored_critical_flick_note_lane_linear,
+        slot_linear=BaseParticles.colored_critical_flick_note_slot_linear,
+    ),
+    _note_color_sources(  # critical_down_flick_note
+        circular=BaseParticles.colored_critical_down_flick_note_circular,
+        linear=BaseParticles.colored_critical_down_flick_note_linear,
+        directional=BaseParticles.colored_critical_down_flick_note_directional,
+        lane=BaseParticles.colored_critical_down_flick_note_lane_linear,
+        slot_linear=BaseParticles.colored_critical_down_flick_note_slot_linear,
+    ),
+    _note_color_sources(  # trace_note
+        linear=BaseParticles.colored_trace_note_linear,
+        tick=BaseParticles.colored_trace_note_circular,
+    ),
+    _note_color_sources(  # trace_flick_note
+        directional=BaseParticles.colored_flick_note_directional,
+        lane=BaseParticles.colored_normal_flick_note_lane_linear,
+    ),
+    _note_color_sources(  # trace_down_flick_note
+        directional=BaseParticles.colored_down_flick_note_directional,
+        lane=BaseParticles.colored_normal_down_flick_note_lane_linear,
+    ),
+    _note_color_sources(  # critical_trace_note
+        linear=BaseParticles.colored_critical_trace_note_linear,
+        tick=BaseParticles.colored_critical_trace_note_circular,
+    ),
+    _note_color_sources(  # critical_trace_flick_note
+        directional=BaseParticles.colored_critical_note_directional,
+        lane=BaseParticles.colored_critical_flick_note_lane_linear,
+    ),
+    _note_color_sources(  # critical_trace_down_flick_note
+        directional=BaseParticles.colored_critical_down_flick_note_directional,
+        lane=BaseParticles.colored_critical_down_flick_note_lane_linear,
+    ),
+    _note_color_sources(  # normal_slide_tick_note
+        tick=BaseParticles.colored_normal_slide_tick_note,
+    ),
+    _note_color_sources(  # critical_slide_tick_note
+        tick=BaseParticles.colored_critical_slide_tick_note,
+    ),
+    _note_color_sources(  # damage_note
+        circular=BaseParticles.colored_damage_note_circular,
+        linear=BaseParticles.colored_damage_note_linear,
+    ),
+)
+
+COLORED_CONNECTOR_PARTICLE_BASES = Array(
+    ActiveConnectorParticleSet(
+        circular=Particle(BaseParticles.colored_normal_slide_connector_circular.start_id),
+        linear=Particle(BaseParticles.colored_normal_slide_connector_linear.start_id),
+        trail_linear=Particle(BaseParticles.colored_normal_slide_connector_trail_linear.start_id),
+        slot_linear=Particle(BaseParticles.colored_normal_slide_connector_slot_linear.start_id),
+    ),
+    ActiveConnectorParticleSet(
+        circular=Particle(BaseParticles.colored_critical_slide_connector_circular.start_id),
+        linear=Particle(BaseParticles.colored_critical_slide_connector_linear.start_id),
+        trail_linear=Particle(BaseParticles.colored_critical_slide_connector_trail_linear.start_id),
+        slot_linear=Particle(BaseParticles.colored_critical_slide_connector_slot_linear.start_id),
+    ),
+)
+
+
 def first_available_particle(*args: Particle) -> Particle:
     result = +EMPTY_PARTICLE
     for e in args:
@@ -272,6 +599,10 @@ def first_available_particle(*args: Particle) -> Particle:
 @level_data
 class ActiveParticles:
     lane: Particle
+
+    note_palette: Array[Array[ColoredNoteParticleSet, Dim[9]], Dim[17]]
+    note_judgments: Array[JudgmentParticles, Dim[17]]
+    connector_palette: Array[Array[ActiveConnectorParticleSet, Dim[9]], Dim[2]]
 
     normal_note: NoteParticleSet
     slide_note: NoteParticleSet
@@ -790,3 +1121,104 @@ def init_particles():
 
     ActiveParticles.ui_checker @= UIChecker(v1=BaseParticles.v1, v3=BaseParticles.v3)
     ActiveParticles.lightweight @= BaseParticles.lightweight
+
+    init_particle_palettes()
+
+
+def colored_particle(base: Particle, fallback: Particle, style: int) -> Particle:
+    result = +fallback
+    if base.id >= 0:
+        candidate = Particle(base.id + style - 1)
+        if candidate.is_available:
+            result @= candidate
+    return result
+
+
+def init_particle_palettes():
+    defaults = Array(
+        ActiveParticles.normal_note,
+        ActiveParticles.slide_note,
+        ActiveParticles.flick_note,
+        ActiveParticles.down_flick_note,
+        ActiveParticles.critical_note,
+        ActiveParticles.critical_slide_note,
+        ActiveParticles.critical_flick_note,
+        ActiveParticles.critical_down_flick_note,
+        ActiveParticles.trace_note,
+        ActiveParticles.trace_flick_note,
+        ActiveParticles.trace_down_flick_note,
+        ActiveParticles.critical_trace_note,
+        ActiveParticles.critical_trace_flick_note,
+        ActiveParticles.critical_trace_down_flick_note,
+        ActiveParticles.normal_slide_tick_note,
+        ActiveParticles.critical_slide_tick_note,
+        ActiveParticles.damage_note,
+    )
+    for family in range(len(defaults)):
+        fallback = defaults[family]
+        ActiveParticles.note_palette[family][0] @= ColoredNoteParticleSet.of(fallback)
+        ActiveParticles.note_judgments[family] @= JudgmentParticles(
+            circular_great=fallback.circular_great,
+            circular_good=fallback.circular_good,
+            linear_great=fallback.linear_great,
+            linear_good=fallback.linear_good,
+            slot_linear_great=fallback.slot_linear_great,
+            slot_linear_good=fallback.slot_linear_good,
+        )
+    ActiveParticles.connector_palette[0][0] @= ActiveParticles.normal_slide_connector
+    ActiveParticles.connector_palette[1][0] @= ActiveParticles.critical_slide_connector
+
+    for family in range(len(ActiveParticles.note_palette)):
+        base = COLORED_NOTE_PARTICLE_BASES[family]
+        fallback = ActiveParticles.note_palette[family][0]
+        for style in range(1, len(ActiveParticles.note_palette[family])):
+            ActiveParticles.note_palette[family][style] @= ColoredNoteParticleSet(
+                circular=colored_particle(base.circular, fallback.circular, style),
+                linear=colored_particle(base.linear, fallback.linear, style),
+                directional=colored_particle(base.directional, fallback.directional, style),
+                tick=colored_particle(base.tick, fallback.tick, style),
+                lane=colored_particle(base.lane, fallback.lane, style),
+                lane_basic=fallback.lane_basic,
+                slot_linear=colored_particle(base.slot_linear, fallback.slot_linear, style),
+            )
+
+    for family in range(len(ActiveParticles.connector_palette)):
+        base = COLORED_CONNECTOR_PARTICLE_BASES[family]
+        fallback = ActiveParticles.connector_palette[family][0]
+        for style in range(1, len(ActiveParticles.connector_palette[family])):
+            ActiveParticles.connector_palette[family][style] @= ActiveConnectorParticleSet(
+                circular=colored_particle(base.circular, fallback.circular, style),
+                linear=colored_particle(base.linear, fallback.linear, style),
+                trail_linear=colored_particle(base.trail_linear, fallback.trail_linear, style),
+                slot_linear=colored_particle(base.slot_linear, fallback.slot_linear, style),
+            )
+
+
+def styled_note_particles(family: NoteVisualFamily, style: NoteStyle) -> NoteParticleSet:
+    if style < NoteStyle.DEFAULT or style > NoteStyle.BLACK or style != int(style):
+        style = NoteStyle.DEFAULT
+    particles = ActiveParticles.note_palette[family][style]
+    judgments = ActiveParticles.note_judgments[family]
+    return NoteParticleSet(
+        circular=particles.circular,
+        circular_great=judgments.circular_great,
+        circular_good=judgments.circular_good,
+        linear=particles.linear,
+        linear_great=judgments.linear_great,
+        linear_good=judgments.linear_good,
+        directional=particles.directional,
+        tick=particles.tick,
+        lane=particles.lane,
+        lane_basic=particles.lane_basic,
+        slot_linear=particles.slot_linear,
+        slot_linear_great=judgments.slot_linear_great,
+        slot_linear_good=judgments.slot_linear_good,
+    )
+
+
+def get_styled_connector_particles(style: int, critical: bool) -> ActiveConnectorParticleSet:
+    if style < NoteStyle.DEFAULT or style > NoteStyle.BLACK or style != int(style):
+        style = NoteStyle.DEFAULT
+    if critical:
+        return ActiveParticles.connector_palette[1][style]
+    return ActiveParticles.connector_palette[0][style]

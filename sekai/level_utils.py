@@ -12,11 +12,12 @@ from sonolus.script.archetype import PlayArchetype
 from sonolus.script.level import Level, LevelData
 from sonolus.script.timing import TimescaleEase
 
-from sekai.lib.connector import ConnectorKind, ConnectorLayer, SegmentPresentation
+from sekai.lib.connector import ConnectorKind, ConnectorLayer, SegmentPresentation, get_connector_base_kind
 from sekai.lib.ease import EaseType
 from sekai.lib.layout import FlickDirection, StageTransformAnchor, ZoomVerticalAlign
 from sekai.lib.level_config import EngineRevision
 from sekai.lib.note import NoteKind
+from sekai.lib.note_style import NoteStyle
 from sekai.lib.stage import DivisionParity, JudgeLineColor, JudgeLineStyle, StageBorderStyle
 from sekai.lib.timescale import TransitionStyle
 from sekai.play.bpm_change import BpmChange
@@ -54,8 +55,8 @@ _ACTIVE_HOLD_SEGMENT_KINDS = frozenset(
     {
         ConnectorKind.ACTIVE_NORMAL,
         ConnectorKind.ACTIVE_CRITICAL,
-        ConnectorKind.ACTIVE_FAKE_NORMAL,
-        ConnectorKind.ACTIVE_FAKE_CRITICAL,
+        ConnectorKind.FAKE_ACTIVE_NORMAL,
+        ConnectorKind.FAKE_ACTIVE_CRITICAL,
     }
 )
 
@@ -199,6 +200,7 @@ class LevelNote:
     segment_presentation: SegmentPresentation = SegmentPresentation.DEFAULT
     connector_ease: EaseType = EaseType.LINEAR
     attach: LevelSlide | None = None
+    style: NoteStyle = NoteStyle.DEFAULT
 
 
 @dataclass
@@ -332,6 +334,7 @@ def build_level(
             "lane": level_note.lane,
             "size": level_note.size,
             "direction": level_note.direction,
+            "style": level_note.style,
             "connector_ease": level_note.connector_ease,
             "is_separator": level_note.is_separator or force_separator,
             "segment_kind": level_note.segment_kind,
@@ -392,7 +395,7 @@ def build_level(
                 segment_head_ref=seg_head.ref(),
                 segment_tail_ref=seg_tail.ref(),
             )
-            if seg_kind in _INPUT_TRACKED_SEGMENT_KINDS:
+            if get_connector_base_kind(seg_kind) in _INPUT_TRACKED_SEGMENT_KINDS:
                 section_head_idx, section_tail_idx = section_by_span_head[seg_head_idx]
                 connector.active_head_ref = built[section_head_idx].ref()
                 connector.active_tail_ref = built[section_tail_idx].ref()
@@ -400,7 +403,7 @@ def build_level(
 
         # Link each tracked slide span to its active head.
         for span_head_idx, span_tail_idx in itertools.pairwise(separator_indices):
-            if slide.notes[span_head_idx].segment_kind not in _INPUT_TRACKED_SEGMENT_KINDS:
+            if get_connector_base_kind(slide.notes[span_head_idx].segment_kind) not in _INPUT_TRACKED_SEGMENT_KINDS:
                 continue
             section_head_idx = section_by_span_head[span_head_idx][0]
             for note_idx in range(span_head_idx, span_tail_idx + 1):
@@ -465,12 +468,12 @@ def _input_section_bounds(notes: list[LevelNote], separator_indices: list[int]) 
     def input_class(kind: ConnectorKind) -> int:
         # Fake holds are always active. Give them a separate class so sharing a head cannot mark
         # a real hold as active too.
-        match kind:
+        match get_connector_base_kind(kind):
             case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_CRITICAL:
                 return 1
             case ConnectorKind.DAMAGE:
                 return 2
-            case ConnectorKind.ACTIVE_FAKE_NORMAL | ConnectorKind.ACTIVE_FAKE_CRITICAL:
+            case ConnectorKind.FAKE_ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
                 return 3
             case _:
                 return 0
@@ -514,6 +517,7 @@ def _emit_damage_ticks(
                 lane=0.0,
                 size=0.0,
                 kind=NoteKind.HIDE_DAMAGE_TICK,
+                style=head_ln.style,
                 timescale_group=head_ln.timescale_group,
                 is_fake=head_ln.is_fake,
             )
@@ -526,13 +530,17 @@ def _emit_damage_ticks(
 
     for span_i, (span_head_idx, span_tail_idx) in enumerate(spans):
         head_ln = slide.notes[span_head_idx]
-        if head_ln.segment_kind != ConnectorKind.DAMAGE:
+        if get_connector_base_kind(head_ln.segment_kind) != ConnectorKind.DAMAGE:
             continue
         head_beat = head_ln.beat
         tail_beat = slide.notes[span_tail_idx].beat
-        prev_is_damage = span_i > 0 and slide.notes[spans[span_i - 1][0]].segment_kind == ConnectorKind.DAMAGE
+        prev_is_damage = (
+            span_i > 0
+            and get_connector_base_kind(slide.notes[spans[span_i - 1][0]].segment_kind) == ConnectorKind.DAMAGE
+        )
         next_is_damage = (
-            span_i + 1 < len(spans) and slide.notes[spans[span_i + 1][0]].segment_kind == ConnectorKind.DAMAGE
+            span_i + 1 < len(spans)
+            and get_connector_base_kind(slide.notes[spans[span_i + 1][0]].segment_kind) == ConnectorKind.DAMAGE
         )
         section_head_idx = section_by_span_head[span_head_idx][0]
         first_step = math.ceil(head_beat / _DAMAGE_TICK_STEP - _BEAT_EPSILON)
