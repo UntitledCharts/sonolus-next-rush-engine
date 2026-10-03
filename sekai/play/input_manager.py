@@ -159,6 +159,10 @@ def preassign_taps():
                     continue
                 if touch.time not in target_note.unadjusted_input_interval:
                     continue
+                # Trace flicks consume tap starts, but yield to other notes on the same beat.
+                # A touch inside both hitboxes is in their overlap, regardless of stage transforms.
+                if target_note.is_trace_flick and has_priority_tap(touch, target_note.beat):
+                    continue
                 score = (
                     segment_closeness_score(touch.position, target_note.hitbox.target) / DynamicLayout.w_scale
                     + (time() - target_note.target_time) / INPUT_SCORE_TIME_SCALE
@@ -193,6 +197,18 @@ def preassign_taps():
 
         if not any_assigned:
             break
+
+
+def has_priority_tap(touch: Touch, beat: float) -> bool:
+    for ref in note.NoteMemory.active_tap_input_notes:
+        target_note = ref.get()
+        if target_note.is_trace_flick or target_note.beat != beat or target_note.captured_touch_id != 0:
+            continue
+        if touch.time not in target_note.unadjusted_input_interval:
+            continue
+        if target_note.hitbox.bounds.contains_point(touch.position):
+            return True
+    return False
 
 
 def preassign_releases():

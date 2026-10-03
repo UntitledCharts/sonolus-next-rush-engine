@@ -153,7 +153,8 @@ class BaseNote(PlayArchetype):
     perfect_window_end: float = entity_memory()
     damage_tick_input_start_time: float = entity_data()
 
-    # The id of the tap that activated this note, for tap notes and flicks or released the note, for release notes.
+    # The id of the tap consumed by this note, or the touch that released a release note.
+    # Trace flicks participate in tap allocation without requiring that tap for their flick motion.
     # This is set by the input manager rather than the note itself.
     captured_touch_id: int = shared_memory()
     captured_touch_time: float = shared_memory()
@@ -379,7 +380,7 @@ class BaseNote(PlayArchetype):
                 self.judge_wrong_way(self.best_touch_time)
             return
         if self.is_scored and time() in self.input_interval and self.captured_touch_id == 0:
-            if has_tap_input(self.kind):
+            if has_tap_input(self.kind) or self.is_trace_flick:
                 NoteMemory.active_tap_input_notes.append(self.ref())
             elif has_release_input(self.kind) and (
                 self.active_head_ref.index <= 0
