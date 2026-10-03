@@ -6,6 +6,8 @@ import {
     type ExtendedEntityDataField,
     extendedToLevelData,
 } from './extended/convert.js'
+import { isHolodoriLevelData } from './holodori/analyze.js'
+import { hldToLeveldata } from './holodori/convert.js'
 import { isLevelData } from './LevelData/analyze.js'
 import { detectMMWSType } from './mmw/analyze.js'
 import { mmwsToUSC, ucmmwsToLevelData } from './mmw/convert.js'
@@ -19,6 +21,7 @@ export {
     type ExtendedEntityData,
     type ExtendedEntityDataField,
     extendedToLevelData,
+    hldToLeveldata,
     mmwsToUSC,
     susToUSC,
     ucmmwsToLevelData,
@@ -29,6 +32,9 @@ export const convertToLevelData = (
     input: string | Uint8Array | USC | LevelData,
     offset = 0,
 ): LevelData => {
+    if (isHolodoriLevelData(input)) {
+        return hldToLeveldata(input, offset)
+    }
     if (isExtendedLevelData(input)) {
         const converted = extendedToLevelData(input, offset)
         if (converted) return converted
@@ -56,6 +62,9 @@ export const convertToLevelData = (
     } else if (typeof input === 'string') {
         try {
             const parsed = JSON.parse(input)
+            if (isHolodoriLevelData(parsed)) {
+                return hldToLeveldata(parsed, offset)
+            }
             if (isExtendedLevelData(parsed)) {
                 const converted = extendedToLevelData(parsed, offset)
                 if (converted) return converted
