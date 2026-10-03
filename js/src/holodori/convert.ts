@@ -157,6 +157,38 @@ export const hldToLeveldata = (hld: LevelData, offset = 0): LevelData => {
         entities.push(entity)
     }
 
+    // Holodori allows overlapping slide heads to share one tap. Keep one tap/flick
+    // head per overlapping pair and let the others accept that touch as traces.
+    const seenHeads = new Set<LevelDataEntity>()
+    const retainedHeadsByBeat = new Map<number, LevelDataEntity[]>()
+    for (const [source] of converted) {
+        if (source.archetype !== 'Connector') continue
+        const segmentHead = resolve(source, 'segmentHead')!
+        const kind = getValue(segmentHead, 'segmentKind')
+        if (kind >= GUIDE_GHOST && kind <= GUIDE_BLACK) continue
+
+        const head = converted.get(resolve(source, 'head')!)!
+        if (seenHeads.has(head)) continue
+        seenHeads.add(head)
+        if (!/^(Normal|Critical)(Head|Tail)?(Tap|Flick)Note$/.test(head.archetype)) continue
+
+        const beat = getValue(head, '#BEAT')
+        const lane = getValue(head, 'lane')
+        const size = getValue(head, 'size')
+        const retainedHeads = retainedHeadsByBeat.get(beat) ?? []
+        const overlaps = retainedHeads.some(
+            (other) => Math.abs(lane - getValue(other, 'lane')) < size + getValue(other, 'size'),
+        )
+        if (overlaps) {
+            head.archetype = head.archetype.endsWith('TapNote')
+                ? head.archetype.replace('TapNote', 'TraceNote')
+                : head.archetype.replace('FlickNote', 'TraceFlickNote')
+        } else {
+            retainedHeads.push(head)
+            retainedHeadsByBeat.set(beat, retainedHeads)
+        }
+    }
+
     // Drop references to skipped entities and update names assigned to unnamed entities.
     for (const entity of entities) {
         entity.data = entity.data.flatMap((field): LevelDataEntity['data'] => {
