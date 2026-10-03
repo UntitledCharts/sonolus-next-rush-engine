@@ -188,7 +188,7 @@ def preassign_taps():
             target_note = active[note_i].get()
             touch = processed_touches()[i]
             disallow_empty(touch)
-            if not is_head(target_note.kind):
+            if not is_head(target_note.kind) and not target_note.is_trace_flick:
                 disallow_release(touch, target_note.target_time + SLIDE_END_LOCKOUT_DURATION)
             target_note.captured_touch_id = touch.id
             target_note.captured_touch_time = min(touch.time, touch.start_time)
