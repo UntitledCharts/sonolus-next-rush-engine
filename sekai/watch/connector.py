@@ -110,7 +110,10 @@ class WatchConnector(WatchArchetype):
         if self.active_tail_ref.index > 0 and not self.active_tail.preprocess_done:
             return
         self.shared_stage_transform = (
-            not head.is_attached and not tail.is_attached and head.stage_ref.index == tail.stage_ref.index
+            not head.is_attached
+            and not tail.is_attached
+            and head.stage_ref.index == tail.stage_ref.index
+            and head.elevation == tail.elevation
         )
         self.kind = self.segment_head.segment_kind
         self.ease_type = head.connector_ease

@@ -39,6 +39,7 @@ from sekai.lib.layout import (
     compute_hitbox,
     compute_hitbox_at_time,
     compute_stage_transform,
+    current_layout_transform,
     identity_stage_transform,
 )
 from sekai.lib.note import (
@@ -108,6 +109,7 @@ class WatchBaseNote(WatchArchetype):
     stage_ref: EntityRef[WatchDynamicStage] = imported(name="stage")
     lane: float = imported()
     size: float = imported()
+    elevation: float = imported(default=0.0)
     direction: FlickDirection = imported()
     style: NoteStyle = imported()
     active_head_ref: EntityRef[WatchBaseNote] = imported(name="activeHead")
@@ -137,7 +139,6 @@ class WatchBaseNote(WatchArchetype):
     scheduled_spawn_time: float = shared_memory()
     # Replay imports overwrite entity data, so keep coordinates in shared memory.
     target_position: TargetPosition = shared_memory()
-    target_y_offset: float = entity_data()
     not_render: float = entity_memory()
 
     trajectory_first: TrajectoryCache = entity_memory()
@@ -197,7 +198,6 @@ class WatchBaseNote(WatchArchetype):
         if self.stage_ref.index > 0:
             self.rel_lane = self.lane
             self.lane += get_stage_pivot_lane(self.stage_ref.get(), self.target_time)
-            self.target_y_offset = self._basic_y_offset_at(self.target_time, left_limit=True)
 
         self.data_init_done = 2
 
@@ -234,11 +234,6 @@ class WatchBaseNote(WatchArchetype):
             )
             self.lane = lane
             self.size = size
-            self.target_y_offset = lerp(
-                attach_head._basic_y_offset_at(self.target_time, left_limit=True),
-                attach_tail._basic_y_offset_at(self.target_time, left_limit=True),
-                get_attach_frac(attach_head.target_time, attach_tail.target_time, self.target_time),
-            )
 
         end_time = max(self.target_time, self.despawn_time())
         natural_start_time = note_visual_spawn_time(self, end_time)
@@ -268,7 +263,7 @@ class WatchBaseNote(WatchArchetype):
                 hitbox_size,
                 get_leniency(self.kind),
                 self.target_time,
-                self.target_y_offset,
+                self.y_offset_at(self.target_time, left_limit=True),
                 stage_transform=self.stage_transform_at(self.target_time, left_limit=True).to_screen_transform(),
                 left_limit=True,
             )
@@ -383,7 +378,7 @@ class WatchBaseNote(WatchArchetype):
                     props.y_lane_translate,
                     props.lane,
                     props.center_weight,
-                    props.elevation,
+                    props.elevation + self.elevation,
                 )
             render_size = self.size
             if not self.is_attached:
@@ -571,6 +566,8 @@ class WatchBaseNote(WatchArchetype):
         else:
             result.lane = self.lane
             result.transform @= identity_stage_transform()
+        if self.elevation != 0.0:
+            result.transform @= self._basic_stage_transform_at(context.time, left_limit=True)
         return result
 
     def input_geometry(self, context: InputGeometryContext) -> InputGeometry:
@@ -646,7 +643,9 @@ class WatchBaseNote(WatchArchetype):
     def _basic_visual_stage_transform(self) -> StageTransform:
         result = +StageTransform
         if self.stage_ref.index > 0:
-            result @= self.stage_ref.get().props.stage_transform()
+            result @= self.stage_ref.get().props.stage_transform(self.elevation)
+        elif self.elevation != 0.0:
+            result @= compute_stage_transform(current_layout_transform(), 0.0, 0.0, 0.0, 0.0, elevation=self.elevation)
         else:
             result @= identity_stage_transform()
         return result
@@ -666,7 +665,7 @@ class WatchBaseNote(WatchArchetype):
         return result
 
     def _basic_has_stage_transform(self) -> bool:
-        return self.stage_ref.index > 0 and self.stage_ref.get().props.has_transform()
+        return self.elevation != 0.0 or (self.stage_ref.index > 0 and self.stage_ref.get().props.has_transform())
 
     def has_stage_transform(self) -> bool:
         if self.is_attached:
@@ -687,7 +686,11 @@ class WatchBaseNote(WatchArchetype):
                 props.y_lane_translate,
                 props.lane,
                 props.center_weight,
-                props.elevation,
+                props.elevation + self.elevation,
+            )
+        elif self.elevation != 0.0:
+            result @= compute_stage_transform(
+                camera_layout_transform_at_time(t, left_limit=left_limit), 0.0, 0.0, 0.0, 0.0, elevation=self.elevation
             )
         else:
             result @= identity_stage_transform()

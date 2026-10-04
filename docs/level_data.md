@@ -187,6 +187,7 @@ Comprised of many archetypes according to the following naming scheme:
 * **stage (ref?[Stage])**: An optional reference to the **Stage** entity this note belongs to.
 * **lane (float)**: The lane for the center of the note. When **stage** is set, this is interpreted relative to the pivot's lane at this note's beat (positive if the note is to the right of the pivot). When **stage** is not set, this is centered at 0 with typical values from -5.5 to 5.5 (the edges of the stage are at lane -6 and 6).
 * **size (float)**: The size in lanes of *half* the note. E.g. a note of size 1 would take up two lanes and have an extent of (lane - size) to (lane + size). Typically ranges from 0.5 to 6.
+* **elevation (float)**: Per-note elevation added to the stage elevation.
 * **style (NoteStyle)**: The note and effect color. Defaults to `DEFAULT`. Missing colored assets use the note kind's original assets. Takes on one of the following values:
   * DEFAULT = 0
   * NEUTRAL = 1

@@ -56,6 +56,7 @@ class PreviewBaseNote(PreviewArchetype):
     stage_ref: EntityRef[PreviewDynamicStage] = imported(name="stage")
     lane: float = imported()
     size: float = imported()
+    elevation: float = imported(default=0.0)
     direction: FlickDirection = imported()
     style: NoteStyle = imported()
     active_head_ref: EntityRef[PreviewBaseNote] = imported(name="activeHead")
