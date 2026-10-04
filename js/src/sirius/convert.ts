@@ -154,7 +154,7 @@ export const siriusToLeveldata = (sirius: LevelData, offset = 0): LevelData => {
                     archetype = 'NormalFlickNote'
                     break
                 case 'Sirius Sound':
-                    archetype = isCriticalHold(source) ? 'CriticalTapNote' : 'NormalTapNote'
+                    archetype = isCriticalHold(source) ? 'CriticalTickNote' : 'NormalTickNote'
                     break
                 case 'Sirius Hold Eighth':
                     archetype = 'TransientHiddenTickNote'
