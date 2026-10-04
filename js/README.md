@@ -33,6 +33,13 @@ Converts USC to Level Data.
 - `usc`: usc chart.
 - `offset`: offset (default: `0`).
 
+### `bandoriToLeveldata(bandori, offset?)`
+
+Converts Bandori engine LevelData to Next Rush LevelData.
+
+- `bandori`: decompressed Bandori LevelData object.
+- `offset`: seconds added to the existing `bgmOffset` (default: `0`).
+
 ### Assets
 
 The following assets are exposed as package entry points:

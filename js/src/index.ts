@@ -1,5 +1,7 @@
 import { DatabaseEngineItem, LevelData, TextFunction } from '@sonolus/core'
 
+import { isBandoriLevelData } from './bandori/analyze.js'
+import { bandoriToLeveldata } from './bandori/convert.js'
 import { isExtendedLevelData } from './extended/analyze.js'
 import {
     type ExtendedEntityData,
@@ -20,6 +22,7 @@ export * from './usc/index.js'
 export {
     type ExtendedEntityData,
     type ExtendedEntityDataField,
+    bandoriToLeveldata,
     extendedToLevelData,
     hldToLeveldata,
     mmwsToUSC,
@@ -32,6 +35,9 @@ export const convertToLevelData = (
     input: string | Uint8Array | USC | LevelData,
     offset = 0,
 ): LevelData => {
+    if (isBandoriLevelData(input)) {
+        return bandoriToLeveldata(input, offset)
+    }
     if (isHolodoriLevelData(input)) {
         return hldToLeveldata(input, offset)
     }
@@ -62,6 +68,9 @@ export const convertToLevelData = (
     } else if (typeof input === 'string') {
         try {
             const parsed = JSON.parse(input)
+            if (isBandoriLevelData(parsed)) {
+                return bandoriToLeveldata(parsed, offset)
+            }
             if (isHolodoriLevelData(parsed)) {
                 return hldToLeveldata(parsed, offset)
             }
