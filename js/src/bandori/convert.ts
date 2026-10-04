@@ -1,9 +1,8 @@
 import { type LevelData, type LevelDataEntity } from '@sonolus/core'
 
-// Preserve Bandori's seven unit lanes. A matching camera half-width makes this
-// dynamic stage fill the same screen width as Next Rush's static 12-lane stage.
-const STAGE_SIZE = 7 / 2
-const NOTE_SIZE = 0.5
+// Fit seven equal Bandori lanes across the static stage without camera zoom.
+const LANE_SCALE = 12 / 7
+const NOTE_SIZE = LANE_SCALE / 2
 
 const noteArchetypes: ReadonlyMap<string, string> = new Map([
     ['TapNote', 'NormalTapNote'],
@@ -57,48 +56,6 @@ export const bandoriToLeveldata = (bandori: LevelData, offset = 0): LevelData =>
         [],
         bandori.entities.find((entity) => entity.archetype === 'Initialization'),
     )
-    const camera = create('CameraChange', [
-        { name: '#BEAT', value: 0 },
-        { name: 'lane', value: 0 },
-        { name: 'size', value: STAGE_SIZE },
-        { name: 'zoom', value: 1 },
-        { name: 'stageTilt', value: 1 },
-    ])
-    setRef(initialization, 'firstCamera', camera)
-    const stage = create(
-        'Stage',
-        [
-            { name: 'fromStart', value: 1 },
-            { name: 'untilEnd', value: 1 },
-        ],
-        bandori.entities.find((entity) => entity.archetype === 'Stage'),
-    )
-    const mask = create('StageMaskChange', [
-        { name: '#BEAT', value: 0 },
-        { name: 'stage', ref: stage.name! },
-        { name: 'lane', value: 0 },
-        { name: 'size', value: STAGE_SIZE },
-    ])
-    const pivot = create('StagePivotChange', [
-        { name: '#BEAT', value: 0 },
-        { name: 'stage', ref: stage.name! },
-        { name: 'lane', value: 0 },
-        { name: 'divisionSize', value: 1 },
-        // Odd parity puts lane centers on integers and dividers on half-integers.
-        { name: 'divisionParity', value: 1 },
-    ])
-    const style = create('StageStyleChange', [
-        { name: '#BEAT', value: 0 },
-        { name: 'stage', ref: stage.name! },
-        { name: 'judgeLineColor', value: 5 },
-        { name: 'laneAlpha', value: 1 },
-        { name: 'judgeLineAlpha', value: 1 },
-        { name: 'divisionLineAlpha', value: 1 },
-        { name: 'noteAlpha', value: 1 },
-    ])
-    setRef(stage, 'firstMaskChange', mask)
-    setRef(stage, 'firstPivotChange', pivot)
-    setRef(stage, 'firstStyleChange', style)
     const group = create('#TIMESCALE_GROUP', [])
     const change = create('#TIMESCALE_CHANGE', [
         { name: '#BEAT', value: 0 },
@@ -108,7 +65,7 @@ export const bandoriToLeveldata = (bandori: LevelData, offset = 0): LevelData =>
         { name: '#TIMESCALE_GROUP', ref: group.name! },
     ])
     setRef(group, 'first', change)
-    const entities = [initialization, camera, stage, mask, pivot, style, group, change]
+    const entities = [initialization, group, change]
     const notes = new Map<LevelDataEntity, LevelDataEntity>()
 
     for (const source of bandori.entities) {
@@ -137,7 +94,7 @@ export const bandoriToLeveldata = (bandori: LevelData, offset = 0): LevelData =>
             archetype,
             [
                 { name: '#BEAT', value: getValue(source, '#BEAT') },
-                { name: 'lane', value: lane },
+                { name: 'lane', value: lane * LANE_SCALE },
                 { name: 'size', value: width * NOTE_SIZE },
                 { name: 'direction', value: direction < 0 ? 1 : direction > 0 ? 2 : 0 },
                 { name: 'isAttached', value: 0 },
@@ -146,7 +103,6 @@ export const bandoriToLeveldata = (bandori: LevelData, offset = 0): LevelData =>
                 { name: 'segmentKind', value: 1 },
                 { name: 'segmentAlpha', value: 1 },
                 { name: '#TIMESCALE_GROUP', ref: group.name! },
-                { name: 'stage', ref: stage.name! },
             ],
             source,
         )
