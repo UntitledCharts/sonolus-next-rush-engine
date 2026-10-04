@@ -1,4 +1,5 @@
 from sonolus.script.archetype import PlayArchetype, entity_memory
+from sonolus.script.interval import Interval
 from sonolus.script.runtime import time
 from sonolus.script.sprite import Sprite
 
@@ -23,6 +24,7 @@ class SlotGlowEffect(PlayArchetype):
     left: int = entity_memory()
     right: int = entity_memory()
     shift: float = entity_memory()
+    bounds: Interval = entity_memory()
     y_offset: float = entity_memory()
     transform: StageScreenTransform = entity_memory()
     end_time: float = entity_memory()
@@ -50,6 +52,7 @@ class SlotGlowEffect(PlayArchetype):
             self.left,
             self.right,
             shift=self.shift,
+            bounds=self.bounds,
             y_offset=self.y_offset,
             transform=self.transform,
         )
@@ -63,6 +66,7 @@ class SlotEffect(PlayArchetype):
     left: int = entity_memory()
     right: int = entity_memory()
     shift: float = entity_memory()
+    bounds: Interval = entity_memory()
     y_offset: float = entity_memory()
     transform: StageScreenTransform = entity_memory()
     end_time: float = entity_memory()
@@ -90,6 +94,7 @@ class SlotEffect(PlayArchetype):
             self.left,
             self.right,
             self.shift,
+            bounds=self.bounds,
             y_offset=self.y_offset,
             transform=self.transform,
         )

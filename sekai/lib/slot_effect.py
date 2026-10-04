@@ -3,7 +3,7 @@ from math import ceil, floor
 from sonolus.script.array import Dim
 from sonolus.script.containers import ArrayMap, Pair
 from sonolus.script.globals import level_memory
-from sonolus.script.interval import lerp, unlerp_clamped
+from sonolus.script.interval import Interval, lerp, unlerp_clamped
 from sonolus.script.runtime import time
 from sonolus.script.sprite import Sprite
 
@@ -110,6 +110,7 @@ def draw_slot_effects_in_range(
     y_offset: float = 0.0,
     *,
     transform: StageScreenTransform,
+    bounds: Interval | None = None,
 ):
     """Draw slot effects at lanes i + 0.5 + shift for i in [left, right), skipping off-screen slots."""
     progress = unlerp_clamped(start_time, end_time, time())
@@ -125,7 +126,16 @@ def draw_slot_effects_in_range(
     last = min(right, ceil(hi - shift) + 1)
     for i in range(first, last):
         lane = i + 0.5 + shift
-        layout = transform.transform_quad(layout_slot_effect(lane, y_offset=y_offset))
+        left_edge = lane - 0.485
+        right_edge = lane + 0.485
+        if bounds is not None:
+            left_edge = max(left_edge, bounds.start)
+            right_edge = min(right_edge, bounds.end)
+        if right_edge <= left_edge:
+            continue
+        center = (left_edge + right_edge) / 2
+        size = (right_edge - left_edge) / 2
+        layout = transform.transform_quad(layout_slot_effect(center, y_offset=y_offset, size=size))
         z = get_z(layers.slot_effect, start_time, lane, elevation=transform.elevation, invert_time=True)
         sprite.draw(layout, z=z.tuple, a=a * lightweight)
 
@@ -140,6 +150,7 @@ def draw_slot_glow_effects_in_range(
     *,
     transform: StageScreenTransform,
     shift: float = 0.0,
+    bounds: Interval | None = None,
 ):
     """Draw per-lane slot glows on the stage's grid, skipping off-screen slots."""
     progress = unlerp_clamped(start_time, end_time, time())
@@ -156,9 +167,18 @@ def draw_slot_glow_effects_in_range(
     last = min(right, ceil(hi - shift) + 1)
     for i in range(first, last):
         lane = i + 0.5 + shift
+        left_edge = lane - 0.5
+        right_edge = lane + 0.5
+        if bounds is not None:
+            left_edge = max(left_edge, bounds.start)
+            right_edge = min(right_edge, bounds.end)
+        if right_edge <= left_edge:
+            continue
+        center = (left_edge + right_edge) / 2
+        size = (right_edge - left_edge) / 2
         layout = transform.transform_billboard(
-            layout_slot_glow_effect(lane, 0.5, height, y_offset=y_offset),
-            transformed_vec_at(lane, travel),
+            layout_slot_glow_effect(center, size, height, y_offset=y_offset),
+            transformed_vec_at(center, travel),
         )
         z = get_z(layers.slot_glow_effect, start_time, lane, elevation=transform.elevation, invert_time=True)
         sprite.draw(layout, z=z.tuple, a=a * lightweight)

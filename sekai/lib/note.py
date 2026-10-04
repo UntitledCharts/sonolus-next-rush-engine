@@ -9,7 +9,7 @@ from sonolus.script.bucket import Bucket, Judgment
 from sonolus.script.containers import VarArray
 from sonolus.script.easing import ease_in_cubic
 from sonolus.script.effect import Effect
-from sonolus.script.interval import clamp, lerp, unlerp_clamped
+from sonolus.script.interval import Interval, clamp, lerp, unlerp_clamped
 from sonolus.script.quad import Quad
 from sonolus.script.runtime import is_tutorial, is_watch, level_life, level_score, time
 from sonolus.script.sprite import Sprite
@@ -1180,8 +1180,14 @@ def _emit_lane_particles(
         return transform.transform_quad(q)
 
     def lane_layout(lane: float, half_width: float) -> Quad:
+        left = max(lane - half_width, center_lane - size)
+        right = min(lane + half_width, center_lane + size)
         return layout_particle_lane(
-            lane, half_width, y_offset=y_offset, extend_down=extend_down, compensate_overshoot=compensate_overshoot
+            (left + right) / 2,
+            (right - left) / 2,
+            y_offset=y_offset,
+            extend_down=extend_down,
+            compensate_overshoot=compensate_overshoot,
         )
 
     min_i = floor(center_lane - size)
@@ -1358,6 +1364,7 @@ def schedule_note_slot_effects(
                 left=left,
                 right=right,
                 shift=shift,
+                bounds=Interval(lane - size, lane + size),
                 y_offset=y_offset,
                 group_id=group_id,
                 transform=transform,
@@ -1374,6 +1381,7 @@ def schedule_note_slot_effects(
                 left=left,
                 right=right,
                 shift=shift,
+                bounds=Interval(lane - size, lane + size),
                 y_offset=y_offset,
                 group_id=group_id,
                 transform=transform,

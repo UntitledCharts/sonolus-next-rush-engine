@@ -1800,12 +1800,12 @@ def layout_flick_arrow_fallback(
     )
 
 
-def layout_slot_effect(lane: float, y_offset: float = 0.0) -> Quad:
+def layout_slot_effect(lane: float, y_offset: float = 0.0, size: float = 0.485) -> Quad:
     travel = approach(1 - y_offset)
     nh = DynamicLayout.note_h
     return perspective_rect(
-        l=lane - 0.485,
-        r=lane + 0.485,
+        l=lane - size,
+        r=lane + size,
         b=1 + nh,
         t=1 - nh,
         travel=travel,

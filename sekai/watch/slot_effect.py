@@ -1,4 +1,5 @@
 from sonolus.script.archetype import WatchArchetype, entity_memory
+from sonolus.script.interval import Interval
 from sonolus.script.runtime import is_skip
 from sonolus.script.sprite import Sprite
 
@@ -24,6 +25,7 @@ class WatchSlotGlowEffect(WatchArchetype):
     left: int = entity_memory()
     right: int = entity_memory()
     shift: float = entity_memory()
+    bounds: Interval = entity_memory()
     y_offset: float = entity_memory()
     transform: StageScreenTransform = entity_memory()
     end_time: float = entity_memory()
@@ -60,6 +62,7 @@ class WatchSlotGlowEffect(WatchArchetype):
             self.left,
             self.right,
             shift=self.shift,
+            bounds=self.bounds,
             y_offset=self.y_offset,
             transform=self.transform,
         )
@@ -76,6 +79,7 @@ class WatchSlotEffect(WatchArchetype):
     left: int = entity_memory()
     right: int = entity_memory()
     shift: float = entity_memory()
+    bounds: Interval = entity_memory()
     y_offset: float = entity_memory()
     transform: StageScreenTransform = entity_memory()
     end_time: float = entity_memory()
@@ -112,6 +116,7 @@ class WatchSlotEffect(WatchArchetype):
             self.left,
             self.right,
             self.shift,
+            bounds=self.bounds,
             y_offset=self.y_offset,
             transform=self.transform,
         )
