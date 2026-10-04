@@ -22,6 +22,7 @@ class SlotGlowEffect(PlayArchetype):
     start_time: float = entity_memory()
     left: int = entity_memory()
     right: int = entity_memory()
+    shift: float = entity_memory()
     y_offset: float = entity_memory()
     transform: StageScreenTransform = entity_memory()
     end_time: float = entity_memory()
@@ -48,6 +49,7 @@ class SlotGlowEffect(PlayArchetype):
             self.end_time,
             self.left,
             self.right,
+            shift=self.shift,
             y_offset=self.y_offset,
             transform=self.transform,
         )

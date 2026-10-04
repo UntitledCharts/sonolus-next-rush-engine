@@ -1364,14 +1364,16 @@ def schedule_note_slot_effects(
             )
     slot_glow_sprite = sprite_set.slot_glow.get_sprite(judgment)
     if slot_glow_sprite.is_available and size > 0:
-        left = floor(lane - size + e)
-        right = ceil(lane + size - e)
+        shift = pivot_lane + (0.0 if half_offset else 0.5) - 0.5
+        left = floor(lane - shift - size + e)
+        right = ceil(lane - shift + size - e)
         if right > left:
             get_archetype_by_name(archetype_names.SLOT_GLOW_EFFECT).spawn(
                 sprite=slot_glow_sprite,
                 start_time=target_time,
                 left=left,
                 right=right,
+                shift=shift,
                 y_offset=y_offset,
                 group_id=group_id,
                 transform=transform,

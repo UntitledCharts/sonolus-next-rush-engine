@@ -139,8 +139,9 @@ def draw_slot_glow_effects_in_range(
     y_offset: float = 0.0,
     *,
     transform: StageScreenTransform,
+    shift: float = 0.0,
 ):
-    """Draw per-lane slot glow effects at lanes i + 0.5 for i in [left, right), skipping off-screen slots."""
+    """Draw per-lane slot glows on the stage's grid, skipping off-screen slots."""
     progress = unlerp_clamped(start_time, end_time, time())
     height = slot_glow_progress_height(progress)
     a = lerp(1, 0, progress)
@@ -151,10 +152,10 @@ def draw_slot_glow_effects_in_range(
     s = 1 + 0.25 * Options.slot_effect_size
     lo = min(lo, lo / s)
     hi = max(hi, hi / s)
-    first = max(left, floor(lo) - 1)
-    last = min(right, ceil(hi) + 1)
+    first = max(left, floor(lo - shift) - 1)
+    last = min(right, ceil(hi - shift) + 1)
     for i in range(first, last):
-        lane = i + 0.5
+        lane = i + 0.5 + shift
         layout = transform.transform_billboard(
             layout_slot_glow_effect(lane, 0.5, height, y_offset=y_offset),
             transformed_vec_at(lane, travel),
