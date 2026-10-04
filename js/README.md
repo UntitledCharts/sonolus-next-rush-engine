@@ -40,6 +40,13 @@ Converts Bandori engine LevelData to Next Rush LevelData.
 - `bandori`: decompressed Bandori LevelData object.
 - `offset`: seconds added to the existing `bgmOffset` (default: `0`).
 
+### `siriusToLeveldata(sirius, offset?)`
+
+Converts Sirius engine LevelData to Next Rush LevelData.
+
+- `sirius`: decompressed Sirius LevelData object.
+- `offset`: seconds added to the existing `bgmOffset` (default: `0`).
+
 ### Assets
 
 The following assets are exposed as package entry points:

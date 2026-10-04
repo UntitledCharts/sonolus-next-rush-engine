@@ -13,6 +13,8 @@ import { hldToLeveldata } from './holodori/convert.js'
 import { isLevelData } from './LevelData/analyze.js'
 import { detectMMWSType } from './mmw/analyze.js'
 import { mmwsToUSC, ucmmwsToLevelData } from './mmw/convert.js'
+import { isSiriusLevelData } from './sirius/analyze.js'
+import { siriusToLeveldata } from './sirius/convert.js'
 import { susToUSC } from './sus/convert.js'
 import { isUSC } from './usc/analyze.js'
 import { uscToLevelData } from './usc/convert.js'
@@ -26,6 +28,7 @@ export {
     extendedToLevelData,
     hldToLeveldata,
     mmwsToUSC,
+    siriusToLeveldata,
     susToUSC,
     ucmmwsToLevelData,
     uscToLevelData,
@@ -35,6 +38,9 @@ export const convertToLevelData = (
     input: string | Uint8Array | USC | LevelData,
     offset = 0,
 ): LevelData => {
+    if (isSiriusLevelData(input)) {
+        return siriusToLeveldata(input, offset)
+    }
     if (isBandoriLevelData(input)) {
         return bandoriToLeveldata(input, offset)
     }
@@ -68,6 +74,9 @@ export const convertToLevelData = (
     } else if (typeof input === 'string') {
         try {
             const parsed = JSON.parse(input)
+            if (isSiriusLevelData(parsed)) {
+                return siriusToLeveldata(parsed, offset)
+            }
             if (isBandoriLevelData(parsed)) {
                 return bandoriToLeveldata(parsed, offset)
             }
