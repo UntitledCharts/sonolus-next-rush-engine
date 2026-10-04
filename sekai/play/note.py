@@ -150,7 +150,6 @@ class BaseNote(PlayArchetype):
 
     trajectory_first: TrajectoryCache = entity_memory()
     trajectory_second: TrajectoryCache = entity_memory()
-    attach_eased_frac: float = entity_data()
 
     perfect_window_end: float = entity_memory()
     damage_tick_input_start_time: float = entity_data()
@@ -192,6 +191,19 @@ class BaseNote(PlayArchetype):
     @property
     def preprocess_done(self) -> bool:
         return self.data_init_done == 3
+
+    @property
+    def attach_eased_frac(self) -> float:
+        # Imported fields and entity data share 32 slots; derive this immutable value
+        # so per-note elevation fits alongside RUSH's score and input state.
+        if not self.is_attached:
+            return 0.0
+        return get_attach_eased_frac(
+            self.connector_ease,
+            self.attach_head_ref.get().target_time,
+            self.attach_tail_ref.get().target_time,
+            self.target_time,
+        )
 
     @property
     def judgment_window(self) -> SekaiWindow:
@@ -270,9 +282,6 @@ class BaseNote(PlayArchetype):
             attach_head.init_geometry()
             attach_tail.init_geometry()
             self.connector_ease = attach_head.connector_ease
-            self.attach_eased_frac = get_attach_eased_frac(
-                self.connector_ease, attach_head.target_time, attach_tail.target_time, self.target_time
-            )
             lane, size = get_attach_params(
                 ease_type=attach_head.connector_ease,
                 head_lane=attach_head._basic_visual_lane_at(self.target_time),

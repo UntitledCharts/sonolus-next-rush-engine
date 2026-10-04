@@ -41,7 +41,7 @@ class SlideScoreLinkTests(unittest.TestCase):
                 ref = EntityRef[notes]
                 entities = {}
                 # The ordinary tap occurs during a slide, on an unelevated stage.
-                for index, target, following, transform in ((1, 1, 2, raised), (2, 9, 0, raised), (3, 5, 0, flat)):
+                for index, target, following, transform in ((1, 1, 2, raised), (2, 9, 0, flat), (3, 5, 0, flat)):
                     entities[index] = SimpleNamespace(
                         index=index,
                         target_time=target,
@@ -83,11 +83,13 @@ class SlideScoreLinkTests(unittest.TestCase):
                 if init is watch_initialization:
                     stack.enter_context(patch.object(connectors, "is_skip", return_value=False))
                 # Include a rewind so the cursor reset also uses the original slide chain.
-                for now in (1, 3, 5, 7, 2):
+                for now in (1, 3, 5, 7, 9, 2):
                     with patch.object(connectors, "time", return_value=now):
                         transform, alpha = manager.active_segment_transform_and_note_alpha(state)
                     point = transform.to_screen_transform().apply(Vec2(0, -0.5))
-                    assert isclose(point.y, -0.2)
+                    expected_elevation = 3 * (9 - now) / 8
+                    assert isclose(point.y, -0.5 + 0.1 * expected_elevation)
+                    assert isclose(transform.projection.elevation, expected_elevation)
                     assert alpha == 1
 
 
@@ -154,6 +156,7 @@ class MaskedEffectTests(unittest.TestCase):
             is_attached=False,
             rel_lane=0,
             size=6,
+            elevation=-1,
             kind=note_lib.NoteKind.NORM_TAP,
             style=NoteStyle.BLUE,
             direction=layout.FlickDirection.UP_OMNI,
@@ -163,12 +166,22 @@ class MaskedEffectTests(unittest.TestCase):
         with (
             patch.object(watch_note, "get_stage_props", return_value=props),
             patch.object(watch_note, "resolve_judge_line_style", return_value=0),
-            patch.object(watch_note, "camera_layout_transform_at_time"),
-            patch.object(watch_note, "compute_stage_transform", return_value=layout.identity_stage_transform()),
+            patch.object(layout, "Layout", SimpleNamespace(field_h=1, approach_start=0)),
+            patch.object(layout, "Options", SimpleNamespace(alternative_approach_curve=False)),
+            patch.object(
+                watch_note,
+                "camera_layout_transform_at_time",
+                return_value=layout.LayoutTransform(
+                    t=0, w_scale=0.1, h_scale=-0.5, x_translate=0, rotate=0, stage_tilt=1, size_zoom=1
+                ),
+            ),
             patch.object(watch_note, "schedule_note_slot_effects") as schedule,
         ):
             watch_note.WatchBaseNote.schedule_slot_effects_at(fake, 4)
         assert schedule.call_args.args[1:3] == (0, 1)
+        transform = schedule.call_args.kwargs["transform"]
+        assert isclose(transform.elevation, 2)
+        assert isclose(transform.apply(Vec2(0, -0.5)).y, -0.3)
 
     def test_slot_and_glow_emissions_are_limited_to_visible_lanes(self):
         sprite = SimpleNamespace(is_available=True)
