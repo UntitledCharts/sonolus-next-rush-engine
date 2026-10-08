@@ -141,8 +141,9 @@ class BaseNote(PlayArchetype):
     # Score order is independent of the imported slide next/prev links.
     score_next_ref: EntityRef[BaseNote] = entity_data()
     kind: NoteKind = entity_data()
-    # 0: untouched, 1: score data ready, 2: geometry ready, 3: preprocessing complete.
+    # 0: untouched, 1: score data ready, 2: geometry ready.
     data_init_done: int = entity_data()
+    preprocess_done: bool = entity_data()
     rel_lane: float = entity_data()
     target_time: float = entity_data()
     visual_start_time: float = entity_memory()
@@ -153,9 +154,12 @@ class BaseNote(PlayArchetype):
 
     trajectory_first: TrajectoryCache = entity_memory()
     trajectory_second: TrajectoryCache = entity_memory()
+    attach_eased_frac: float = entity_data()
 
-    perfect_window_end: float = entity_memory()
-    damage_tick_input_start_time: float = entity_data()
+    input_interval: Interval = shared_memory()
+    unadjusted_input_interval: Interval = shared_memory()
+    # RUSH judgment selection is reused by input handling and final judgment.
+    judgment_window_data: SekaiWindow = entity_data()
 
     # The id of the tap consumed by this note, or the touch that released a release note.
     # Trace flicks participate in tap allocation without requiring that tap for their flick motion.
@@ -192,33 +196,8 @@ class BaseNote(PlayArchetype):
     played_hit_effects: bool = exported()
 
     @property
-    def preprocess_done(self) -> bool:
-        return self.data_init_done == 3
-
-    @property
-    def attach_eased_frac(self) -> float:
-        # Imported fields and entity data share 32 slots; derive this immutable value
-        # so per-note elevation fits alongside RUSH's score and input state.
-        if not self.is_attached:
-            return 0.0
-        return ease(self.connector_ease, self.head_ease_frac)
-
-    @property
     def judgment_window(self) -> SekaiWindow:
-        return get_note_window(self.kind, self.active_head_ref.index > 0 or self.is_attached)
-
-    @property
-    def unadjusted_input_interval(self) -> Interval:
-        result = +Interval
-        if self.kind == NoteKind.HIDE_DAMAGE_TICK:
-            result @= Interval(self.damage_tick_input_start_time, self.target_time)
-        else:
-            result @= self.judgment_window.bad + self.target_time
-        return result
-
-    @property
-    def input_interval(self) -> Interval:
-        return self.unadjusted_input_interval + input_offset()
+        return self.judgment_window_data
 
     def init_data(self):
         if self.data_init_done:
@@ -233,6 +212,17 @@ class BaseNote(PlayArchetype):
             self.direction = mirror_flick_direction(self.direction)
 
         self.target_time = beat_to_time(self.beat)
+        self.judgment_window_data = get_note_window(self.kind, self.active_head_ref.index > 0 or self.is_attached)
+        self.input_interval = self.judgment_window.bad + self.target_time + input_offset()
+        self.unadjusted_input_interval = self.judgment_window.bad + self.target_time
+
+        if self.kind == NoteKind.HIDE_DAMAGE_TICK:
+            window_start_beat = damage_tick_input_start_beat(self.beat)
+            if self.active_head_ref.index > 0:
+                window_start_beat = max(window_start_beat, self.active_head_ref.get().beat)
+            window_start_time = beat_to_time(window_start_beat)
+            self.input_interval = Interval(window_start_time, self.target_time) + input_offset()
+            self.unadjusted_input_interval = Interval(window_start_time, self.target_time)
 
         if self.next_ref.index > 0:
             self.next_ref.get().prev_ref = self.ref()
@@ -242,7 +232,7 @@ class BaseNote(PlayArchetype):
     def init_geometry(self):
         # Initialization resolves note data before stages and timescale groups preprocess.
         # Resolve geometry afterward, including anchors whose own callback runs later.
-        if self.data_init_done >= 2:
+        if self.data_init_done == 2:
             return
         self.target_position = locate_target(self.timescale_group, self.target_time)
 
@@ -260,13 +250,6 @@ class BaseNote(PlayArchetype):
             return
         self.visual_end_time = self.target_time
 
-        self.perfect_window_end = self.judgment_window.perfect.end
-        if self.kind == NoteKind.HIDE_DAMAGE_TICK:
-            window_start_beat = damage_tick_input_start_beat(self.beat)
-            if self.active_head_ref.index > 0:
-                window_start_beat = max(window_start_beat, self.active_head_ref.get().beat)
-            self.damage_tick_input_start_time = beat_to_time(window_start_beat)
-
         self.init_geometry()
         self.result.bucket = get_note_bucket(self.kind)
 
@@ -280,6 +263,7 @@ class BaseNote(PlayArchetype):
             attach_head.init_geometry()
             attach_tail.init_geometry()
             self.connector_ease = attach_head.connector_ease
+            self.attach_eased_frac = ease(self.connector_ease, self.head_ease_frac)
             lane, size = get_attach_params(
                 ease_type=attach_head.connector_ease,
                 head_lane=attach_head._basic_visual_lane_at(self.target_time),
@@ -328,7 +312,7 @@ class BaseNote(PlayArchetype):
         # A hidden note can still be an endpoint of a visible connector.
         self.spawn_eligibility_time = min(natural_start_time, start_time)
         self.scheduled_spawn_time = start_time
-        self.data_init_done = 3
+        self.preprocess_done = True
 
     def _basic_extend_stage_window(self, start_time: float, end_time: float):
         if self.stage_ref.index > 0:
@@ -642,14 +626,14 @@ class BaseNote(PlayArchetype):
         # After that, wrong-way has no impact anyway.
         if (
             not self.best_touch_matches_direction
-            and offset_adjusted_time() < self.target_time + self.perfect_window_end
+            and offset_adjusted_time() < self.target_time + self.judgment_window.perfect.end
         ):
             return False
 
         # If a new input could improve the judgment...
         if offset_adjusted_time() < self.target_time + (self.target_time - self.best_touch_time):
             # If we're still in the perfect window, wait for it to end.
-            if offset_adjusted_time() < self.target_time + self.perfect_window_end:
+            if offset_adjusted_time() < self.target_time + self.judgment_window.perfect.end:
                 return False
             # Otherwise, see if there's any ongoing touches in the hitbox.
             for touch in input_manager.processed_touches():
@@ -805,10 +789,10 @@ class BaseNote(PlayArchetype):
         # The touch is either before the target time or has the wrong direction within the perfect window.
         current_abs_error = abs(self.best_touch_time - self.target_time)
         if not self.best_touch_matches_direction:
-            current_abs_error = max(current_abs_error, self.perfect_window_end)
+            current_abs_error = max(current_abs_error, self.judgment_window.perfect.end)
         incoming_abs_error = abs(offset_adjusted_time() - self.target_time)
         if not has_correct_direction_touch:
-            incoming_abs_error = max(incoming_abs_error, self.perfect_window_end)
+            incoming_abs_error = max(incoming_abs_error, self.judgment_window.perfect.end)
         if incoming_abs_error < current_abs_error:
             self.best_touch_time = offset_adjusted_time()
             self.best_touch_matches_direction = has_correct_direction_touch
@@ -1021,7 +1005,7 @@ class BaseNote(PlayArchetype):
         error = self.judgment_window.bad.clamp(actual_time - self.target_time)
         self.result.judgment = judgment if not SkillActive.judgment or judgment == Judgment.MISS else Judgment.PERFECT
         if error in self.judgment_window.perfect:
-            self.result.accuracy = self.perfect_window_end
+            self.result.accuracy = self.judgment_window.perfect.end
         else:
             self.result.accuracy = error
         if self.result.bucket.id != -1:
@@ -1122,7 +1106,7 @@ class BaseNote(PlayArchetype):
                 result.transform @= blend_stage_transform(
                     head_geometry.transform,
                     tail_geometry.transform,
-                    ease(self.connector_ease, self.head_ease_frac),
+                    self.attach_eased_frac,
                 )
         else:
             result @= self._basic_input_geometry(context)
@@ -1411,7 +1395,7 @@ class BaseNote(PlayArchetype):
                 result @= blend_stage_transform(
                     head._basic_stage_transform_at(t),
                     tail._basic_stage_transform_at(t),
-                    ease(self.connector_ease, self.head_ease_frac),
+                    self.attach_eased_frac,
                 )
         else:
             result @= self._basic_stage_transform_at(t)
