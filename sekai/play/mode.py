@@ -26,6 +26,9 @@ from sekai.play.static_stage import StaticStage
 from sekai.play.timescale import TimescaleChange, TimescaleGroup
 
 play_mode = PlayMode(
+    entity_memory_length=64,
+    entity_data_length=64,
+    entity_shared_memory_length=64,
     archetypes=[
         Initialization,
         CameraChange,

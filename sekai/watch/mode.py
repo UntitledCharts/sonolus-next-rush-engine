@@ -26,6 +26,9 @@ from sekai.watch.timescale import WatchTimescaleChange, WatchTimescaleGroup
 from sekai.watch.update_spawn import update_spawn
 
 watch_mode = WatchMode(
+    entity_memory_length=64,
+    entity_data_length=64,
+    entity_shared_memory_length=64,
     archetypes=[
         WatchInitialization,
         WatchCameraChange,

@@ -18,6 +18,8 @@ from sekai.preview.sim_line import PreviewSimLine
 from sekai.preview.timescale import PreviewTimescaleChange, PreviewTimescaleGroup
 
 preview_mode = PreviewMode(
+    entity_data_length=64,
+    entity_shared_memory_length=64,
     archetypes=[
         PreviewInitialization,
         PreviewCameraChange,
