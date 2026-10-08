@@ -3,6 +3,7 @@
 import unittest
 from math import isclose
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import patch
 
 from sonolus.script.quad import Rect
@@ -49,28 +50,39 @@ class ElevationCompatibilityTests(unittest.TestCase):
         assert len(notes) == 1
         assert notes[0].elevation == 1.5
 
-    def test_attached_note_keeps_eased_fraction_without_cached_data(self):
-        fake = SimpleNamespace(
-            is_attached=True,
-            connector_ease=EaseType.IN_QUAD,
-            attach_head_ref=SimpleNamespace(get=lambda: SimpleNamespace(target_time=0)),
-            attach_tail_ref=SimpleNamespace(get=lambda: SimpleNamespace(target_time=4)),
-            target_time=2,
-        )
-        assert play_note.BaseNote.attach_eased_frac.fget(fake) == 0.25
-        fake.is_attached = False
-        assert play_note.BaseNote.attach_eased_frac.fget(fake) == 0
+    def test_attached_note_geometry_uses_preprocessed_fraction(self):
+        for module, cls in ((play_note, play_note.BaseNote), (watch_note, watch_note.WatchBaseNote)):
+            with self.subTest(mode=module.__name__):
+                head = SimpleNamespace(
+                    _basic_stage_transform_at=lambda t, **kwargs: layout.identity_stage_transform(),
+                )
+                tail = SimpleNamespace(
+                    _basic_stage_transform_at=lambda t, **kwargs: layout.compute_stage_transform(
+                        self.camera, 0, 0, 0, 0, elevation=2
+                    ),
+                )
+                fake: Any = SimpleNamespace(
+                    is_attached=True,
+                    connector_ease=EaseType.IN_QUAD,
+                    attach_head_ref=SimpleNamespace(get=lambda head=head: head),
+                    attach_tail_ref=SimpleNamespace(get=lambda tail=tail: tail),
+                    attach_eased_frac=0.25,
+                )
+                with patch.object(module, "get_attach_eased_frac", side_effect=AssertionError("recomputed")):
+                    for t in (0, 2, 4):
+                        transform = cls.stage_transform_at(fake, t)
+                        assert isclose(transform.projection.elevation, 0.5)
 
     def test_elevated_note_input_and_visual_geometry_agree(self):
         for module, cls in ((play_note, play_note.BaseNote), (watch_note, watch_note.WatchBaseNote)):
             with self.subTest(mode=module.__name__):
-                fake = SimpleNamespace(stage_ref=SimpleNamespace(index=0), lane=0, elevation=2)
+                fake: Any = SimpleNamespace(stage_ref=SimpleNamespace(index=0), lane=0, elevation=2)
                 fake._basic_stage_transform_at = lambda t, cls=cls, fake=fake: cls._basic_stage_transform_at(fake, t)
                 with (
                     patch.object(module, "camera_layout_transform_at_time", return_value=self.camera),
                     patch.object(module, "current_layout_transform", return_value=self.camera),
                 ):
-                    geometry = cls._basic_input_geometry(fake, SimpleNamespace(time=1))
+                    geometry = cls._basic_input_geometry(fake, cast(Any, SimpleNamespace(time=1)))
                     visual = cls._basic_visual_stage_transform(fake)
                 for transform in (geometry.transform, visual):
                     target = transform.to_screen_transform().apply(Vec2(0, -0.5))
