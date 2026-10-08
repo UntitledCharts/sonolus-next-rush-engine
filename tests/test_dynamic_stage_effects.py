@@ -79,7 +79,7 @@ class SlideScoreLinkTests(unittest.TestCase):
                 assert entities[2].score_next_ref.index == 0
                 assert entities[1].next_ref.index == 2
                 assert entities[2].prev_ref.index == 1
-                state = SimpleNamespace(active_head_ref=ref(1), segment_head_ref=ref(1), segment_cursor_time=-1e8)
+                state: Any = SimpleNamespace(active_head_ref=ref(1), segment_head_ref=ref(1), segment_cursor_time=-1e8)
                 if init is watch_initialization:
                     stack.enter_context(patch.object(connectors, "is_skip", return_value=False))
                 # Include a rewind so the cursor reset also uses the original slide chain.
@@ -107,7 +107,7 @@ class MaskedEffectTests(unittest.TestCase):
         assert purge.call_args_list[0].args != purge.call_args_list[1].args
 
     def test_play_hit_effects_receive_the_visible_note_width(self):
-        fake = SimpleNamespace(
+        fake: Any = SimpleNamespace(
             should_play_hit_effects=True,
             kind=note_lib.NoteKind.NORM_TAP,
             style=NoteStyle.BLUE,
@@ -126,7 +126,7 @@ class MaskedEffectTests(unittest.TestCase):
             visual_lane_particles=True,
             visual_stage_transform=layout.identity_stage_transform,
         )
-        fake.visual_extents = play_note.BaseNote.visual_extents.fget(fake)
+        fake.visual_extents = cast(Any, play_note.BaseNote.visual_extents.fget)(fake)
         with (
             patch.object(play_note, "play_note_hit_effects") as effects,
             patch.object(play_note, "offset_adjusted_time", return_value=4),
@@ -151,7 +151,7 @@ class MaskedEffectTests(unittest.TestCase):
             width=1,
             mask_notes=True,
         )
-        fake = SimpleNamespace(
+        fake: Any = SimpleNamespace(
             stage_ref=SimpleNamespace(index=1, get=lambda: None),
             is_attached=False,
             rel_lane=0,
@@ -224,19 +224,14 @@ class MaskedEffectTests(unittest.TestCase):
                     direction=layout.FlickDirection.UP_OMNI,
                     judgment=Judgment.PERFECT,
                     index=7,
-                    visual_lane_at=lambda t, right_limit: 0,
+                    visual_lane=0,
                     size=6,
-                    visual_mask_at=lambda t, right_limit, mask=mask: mask,
+                    visual_mask=mask,
                     visual_y_offset=0,
                     visual_pivot_lane=0,
                     visual_half_offset=False,
-                    _stage_lane_particles_at=lambda t, *, right_limit: right_limit,
+                    visual_lane_particles=True,
                     visual_stage_transform=layout.identity_stage_transform,
-                )
-                fake.visual_extents_at = (
-                    lambda t, right_limit=False, fake=fake: watch_note.WatchBaseNote.visual_extents_at(
-                        fake, t, right_limit
-                    )
                 )
                 with (
                     patch.object(watch_note, "time", return_value=4),
