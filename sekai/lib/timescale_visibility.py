@@ -6,7 +6,7 @@ from sonolus.script.containers import VarArray
 from sonolus.script.interval import Interval
 from sonolus.script.record import Record
 
-from sekai.lib.ease import EaseType
+from sekai.lib.ease import EaseType, is_in_step_ease
 from sekai.lib.layout import conservative_progress_bounds
 from sekai.lib.options import Options
 from sekai.lib.timescale import (
@@ -24,7 +24,7 @@ from sekai.lib.timescale import (
     timescale_change_archetype,
     timescale_group_archetype,
 )
-from sekai.lib.timescale_math import TimePosition, integrate_times, speed_at
+from sekai.lib.timescale_math import TimePosition, integrate_times, integration_error_bound, speed_at
 
 SPAWN_STEP = 1 / 120
 SPAWN_PADDING = 0.01
@@ -51,6 +51,7 @@ class _DistanceBoundsPiece(Record):
     peak_speed: float
     span: float
     width: float
+    integration_error: float
     ceiling: float
     floor: float
 
@@ -71,7 +72,7 @@ def _prepare_distance_bounds(
         if event.next_ref.index > 0:
             v1 = timescale_change_archetype().at(event.next_ref.index).timescale
             end, easing = event.event_end, event.timescale_ease
-    peak_speed = abs(v0) if easing == EaseType.NONE else max(abs(v0), abs(v1))
+    peak_speed = abs(v0) if is_in_step_ease(easing) else max(abs(v0), abs(v1))
     span = max(end - start, abs(anchor - start))
     width = 0.0
     if scroll:
@@ -87,6 +88,7 @@ def _prepare_distance_bounds(
         peak_speed,
         span,
         width,
+        0.0 if scroll else 3 * integration_error_bound(v0, v1, easing, max(0.0, end - start)),
         source.preempt * (1 - low - source.offset_min),
         source.preempt * (1 - high - source.offset_max),
     )
@@ -103,7 +105,7 @@ def _prepared_distance_bounds(
     if not -inf < distance < inf:
         return result
     va = vb = piece.v0
-    if piece.easing != EaseType.NONE:
+    if not is_in_step_ease(piece.easing):
         va = speed_at(piece.v0, piece.v1, piece.easing, piece.start, piece.end, a)
         vb = speed_at(piece.v0, piece.v1, piece.easing, piece.start, piece.end, b)
     # Allow for rounding in large intermediate values, even when the result is small.
@@ -120,7 +122,7 @@ def _prepared_distance_bounds(
         upper = max(va * q, va * r, vb * q, vb * r)
     else:
         integral = 0.0
-        if piece.easing == EaseType.NONE:
+        if is_in_step_ease(piece.easing):
             if piece.start != piece.end and anchor != a:
                 integral = (a - anchor) * piece.v0
         else:
@@ -132,8 +134,10 @@ def _prepared_distance_bounds(
         return result
     # When timescale speed stays at zero, only rounding needs extra margin.
     # Scroll still moves at zero because _scroll_speed enforces a minimum speed.
-    stopped = not piece.scroll and piece.v0 == 0 and (piece.easing == EaseType.NONE or piece.v1 == 0)
+    stopped = not piece.scroll and piece.v0 == 0 and (is_in_step_ease(piece.easing) or piece.v1 == 0)
     slack = (0.0 if stopped else 0.01) + source.preempt * 1e-4 + max(magnitude, abs(lower), abs(upper)) * 1e-6
+    # Allow for differences between separate integrations.
+    slack += piece.integration_error
     # If the distance was capped, we do not know how far it extends beyond the cap.
     result @= Interval(
         -inf if distance <= -DISTANCE_LIMIT else lower - slack, inf if distance >= DISTANCE_LIMIT else upper + slack
@@ -166,7 +170,7 @@ def _constant_piece_spawn_time(
             source.preempt <= 0
             or not -inf < piece.floor <= piece.ceiling < inf
             or not -DISTANCE_LIMIT < piece.distance < DISTANCE_LIMIT
-            or (piece.easing != EaseType.NONE and piece.v0 != piece.v1)
+            or (not is_in_step_ease(piece.easing) and piece.v0 != piece.v1)
             or piece.start == piece.end
         ):
             return -inf
@@ -276,6 +280,7 @@ def _tree_range_clear(
             if not -inf < lower <= upper < inf or not magnitude < inf:
                 return False
             slack = 0.01 + source.preempt * 1e-4 + magnitude * 1e-6
+            slack += _target_integration_slack(target, bounds.start, bounds.end)
         ceiling = source.preempt * (1 - low - source.offset_min)
         floor = source.preempt * (1 - high - source.offset_max)
         above = above and lower > ceiling + slack
@@ -283,6 +288,21 @@ def _tree_range_clear(
         if not above and not below:
             return False
     return True
+
+
+def _target_integration_slack(target: TargetPosition, start: float, end: float) -> float:
+    # Direct integration can differ from subtracting stored positions.
+    if target.event_ref <= 0:
+        return 0.0
+    event = timescale_change_archetype().at(target.event_ref)
+    if not start <= event.event_start < end or event.next_ref.index <= 0:
+        return 0.0
+    return 3 * integration_error_bound(
+        event.timescale,
+        timescale_change_archetype().at(event.next_ref.index).timescale,
+        event.timescale_ease,
+        event.event_end - event.event_start,
+    )
 
 
 def _tree_range_end(
@@ -385,6 +405,7 @@ def _source_range_end(
         found = 0
         if -inf < lower <= upper < inf and magnitude < inf:
             slack = 0.01 + source.preempt * 1e-4 + magnitude * 1e-6
+            slack += _target_integration_slack(target, bounds.start, bounds.end)
             found = _offscreen_side(lower - slack, upper + slack, ceiling, floor)
         if found != 0 and side in (0, found):
             side = found

@@ -121,12 +121,12 @@ def draw_camera_markers():
         t_a = col_t_lo
         camera_a = +CameraInfo
         camera_a_next = +CameraInfo
-        camera_a @= get_camera_info(t_a)
+        camera_a @= get_camera_info(t_a, right_limit=True, exact=True)
         while t_a < col_t_hi:
             next_event = get_next_camera_event_time(t_a)
             t_b = min(t_a + PREVIEW_DYNAMIC_STAGE_TIME_INCREMENT, col_t_hi, next_event)
             at_event = t_b == next_event
-            camera_b = get_camera_info(t_b, left_limit=at_event)
+            camera_b = get_camera_info(t_b, exact=True)
 
             draw_camera_line_slice(
                 ActiveSkin.camera_line,
@@ -158,7 +158,7 @@ def draw_camera_markers():
 
             t_a = t_b
             if at_event:
-                camera_a_next @= get_camera_info(t_a)
+                camera_a_next @= get_camera_info(t_a, right_limit=True, exact=True)
                 draw_camera_jump_connectors(camera_b, camera_a_next, col, t_a, z_edge, z_target)
                 camera_a @= camera_a_next
             else:

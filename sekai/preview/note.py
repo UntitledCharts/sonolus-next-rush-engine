@@ -135,7 +135,7 @@ class PreviewBaseNote(PreviewArchetype):
     def render(self):
         if not self.is_scored:
             return
-        render_lane, render_size = self.visual_extents_at(self.target_time, left_limit=True)
+        render_lane, render_size = self.visual_extents_at(self.target_time)
         if abs(render_lane) > 12 or render_size <= 0:
             return
         draw_note(
@@ -167,32 +167,29 @@ class PreviewBaseNote(PreviewArchetype):
         else:
             return 1.0
 
-    def _basic_visual_lane_at(self, t: float, left_limit: bool = False) -> float:
+    def _basic_visual_lane_at(self, t: float, right_limit: bool = False, exact: bool = False) -> float:
         if self.stage_ref.index <= 0:
             return self.lane
-        props = get_stage_props(self.stage_ref.get(), t)
-        x_lane_translate = props.x_lane_translate
-        if left_limit:
-            x_lane_translate = get_stage_props(self.stage_ref.get(), t, left_limit=True).x_lane_translate
-        return props.pivot_lane + self.rel_lane + x_lane_translate
+        props = get_stage_props(self.stage_ref.get(), t, right_limit=right_limit, exact=exact)
+        return props.pivot_lane + self.rel_lane + props.x_lane_translate
 
-    def visual_lane_at(self, t: float, left_limit: bool = False) -> float:
+    def visual_lane_at(self, t: float, right_limit: bool = False, exact: bool = False) -> float:
         if self.is_attached:
             head = self.attach_head_ref.get()
             tail = self.attach_tail_ref.get()
-            head_lane = head._basic_visual_lane_at(t, left_limit=left_limit)
-            tail_lane = tail._basic_visual_lane_at(t, left_limit=left_limit)
+            head_lane = head._basic_visual_lane_at(t, right_limit=right_limit, exact=exact)
+            tail_lane = tail._basic_visual_lane_at(t, right_limit=right_limit, exact=exact)
             return lerp(
                 head_lane,
                 tail_lane,
                 get_attach_eased_frac(self.connector_ease, head.target_time, tail.target_time, self.target_time),
             )
-        return self._basic_visual_lane_at(t, left_limit=left_limit)
+        return self._basic_visual_lane_at(t, right_limit=right_limit, exact=exact)
 
-    def _basic_visual_mask_at(self, t: float, left_limit: bool = False) -> VisualMask:
+    def _basic_visual_mask_at(self, t: float, right_limit: bool = False, exact: bool = False) -> VisualMask:
         result = +VisualMask
         if self.stage_ref.index > 0:
-            props = get_stage_props(self.stage_ref.get(), t, left_limit=left_limit)
+            props = get_stage_props(self.stage_ref.get(), t, right_limit=right_limit, exact=exact)
             result.left = props.lane - props.width + props.x_lane_translate
             result.right = props.lane + props.width + props.x_lane_translate
             result.enabled = props.mask_notes
@@ -200,24 +197,24 @@ class PreviewBaseNote(PreviewArchetype):
                 result.stage_index = self.stage_ref.index
         return result
 
-    def visual_mask_at(self, t: float, left_limit: bool = False) -> VisualMask:
+    def visual_mask_at(self, t: float, right_limit: bool = False, exact: bool = False) -> VisualMask:
         result = +VisualMask
         if not self.is_attached:
-            result @= self._basic_visual_mask_at(t, left_limit=left_limit)
+            result @= self._basic_visual_mask_at(t, right_limit=right_limit, exact=exact)
             return result
 
         head = self.attach_head_ref.get()
         tail = self.attach_tail_ref.get()
         result @= interpolate_visual_masks(
-            head._basic_visual_mask_at(t, left_limit=left_limit),
-            tail._basic_visual_mask_at(t, left_limit=left_limit),
+            head._basic_visual_mask_at(t, right_limit=right_limit, exact=exact),
+            tail._basic_visual_mask_at(t, right_limit=right_limit, exact=exact),
             get_attach_eased_frac(self.connector_ease, head.target_time, tail.target_time, self.target_time),
         )
         return result
 
-    def visual_extents_at(self, t: float, left_limit: bool = False) -> tuple[float, float]:
-        render_lane = self.visual_lane_at(t, left_limit=left_limit)
-        mask = self.visual_mask_at(t, left_limit=left_limit)
+    def visual_extents_at(self, t: float) -> tuple[float, float]:
+        render_lane = self.visual_lane_at(t)
+        mask = self.visual_mask_at(t)
         return masked_note_extents_by_limits(render_lane, self.size, mask.left, mask.right, mask.enabled)
 
     def _basic_next_visual_mask_event_time(self, t: float) -> float:

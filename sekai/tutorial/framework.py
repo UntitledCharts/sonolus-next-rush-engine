@@ -322,9 +322,13 @@ class QueuedTutorialNoteDrawConnectorTo(Record):
         if tail_progress >= 1 or head_progress == tail_progress:
             return
         head_ease_frac = unlerp_clamped(head_progress, tail_progress, 1)
-        eased_frac = ease(self.ease_type, head_ease_frac)
-        lane = lerp(self.from_note.lane, self.to_note.lane, eased_frac)
-        size = lerp(self.from_note.size, self.to_note.size, eased_frac)
+        if head_ease_frac <= 0:
+            lane = self.from_note.lane
+            size = self.from_note.size
+        else:
+            eased_frac = ease(self.ease_type, head_ease_frac)
+            lane = lerp(self.from_note.lane, self.to_note.lane, eased_frac)
+            size = lerp(self.from_note.size, self.to_note.size, eased_frac)
         draw_connector(
             kind=kind,
             visual_state=visual_state,

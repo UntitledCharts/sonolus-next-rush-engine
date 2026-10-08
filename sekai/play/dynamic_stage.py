@@ -166,7 +166,7 @@ class DynamicStage(PlayArchetype):
 
     @callback(order=-2)
     def update_sequential(self):
-        self.props @= get_stage_props(self)
+        self.props @= get_stage_props(self, right_limit=True)
         if time() >= self.end_time:
             self.despawn = True
             return

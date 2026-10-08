@@ -23,7 +23,7 @@ from sekai.lib.connector import (
     get_guide_connector_sprite,
     masked_connector_extents_by_limits,
 )
-from sekai.lib.ease import EaseType, safe_unlerp_clamped
+from sekai.lib.ease import EaseType, is_in_step_ease, is_step_ease, safe_unlerp_clamped
 from sekai.lib.layout import get_alpha
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.stage import interpolate_visual_masks
@@ -129,7 +129,7 @@ def draw_connector(
     if head_target_time == tail_target_time:
         return
 
-    if ease_type == EaseType.NONE:
+    if is_in_step_ease(ease_type):
         tail_size = head_size
     if head_size <= 0 and tail_size <= 0:
         return
@@ -199,11 +199,19 @@ def draw_connector(
         safe_unlerp_clamped(segment_head_target_time, segment_tail_target_time, tail_target_time),
     )
 
-    match ease_type:
-        case EaseType.NONE | EaseType.LINEAR if head_alpha == tail_alpha and not LevelConfig.dynamic_stages:
-            quality_dist_scale = 0
-        case _:
-            quality_dist_scale = 100 * abs(tail_target_time - head_target_time) / preview_column_secs()
+    quality_dist_scale = 100 * abs(tail_target_time - head_target_time) / preview_column_secs()
+    if (
+        (ease_type == EaseType.LINEAR or is_step_ease(ease_type))
+        and head_alpha == tail_alpha
+        and not LevelConfig.dynamic_stages
+    ):
+        quality_dist_scale = 0
+    # Split in-out steps at the jump and sample each piece at its midpoint.
+    split_time = tail_target_time
+    if ease_type == EaseType.IN_OUT_STEP and head_ease_frac < 0.5 < tail_ease_frac:
+        split_time = lerp(
+            head_target_time, tail_target_time, (0.5 - head_ease_frac) / (tail_ease_frac - head_ease_frac)
+        )
     quality_alpha_scale = 30 * abs(head_alpha - tail_alpha)
     segment_count = max(1, ceil(get_connector_quality_option(kind) * max(quality_dist_scale, quality_alpha_scale)))
 
@@ -223,7 +231,8 @@ def draw_connector(
         tail_target_time,
         tail_ease_frac,
         head_target_time,
-        left_limit=False,
+        step_piece_time(ease_type, head_target_time, split_time, tail_target_time, head_target_time, False),
+        right_limit=True,
     )
     last_alpha = head_alpha
     last_target_time = head_target_time
@@ -237,6 +246,8 @@ def draw_connector(
                 head.next_visual_mask_event_time(last_target_time),
                 tail.next_visual_mask_event_time(last_target_time),
             )
+            if last_target_time < split_time < tail_target_time:
+                next_event_time = min(next_event_time, split_time)
             at_event = next_event_time <= interval_end_time
             next_target_time = min(interval_end_time, next_event_time)
             next_sample = connector_sample_at(
@@ -250,7 +261,9 @@ def draw_connector(
                 tail_target_time,
                 tail_ease_frac,
                 next_target_time,
-                left_limit=at_event,
+                step_piece_time(ease_type, head_target_time, split_time, tail_target_time, next_target_time, at_event),
+                # Interior samples keep their side of a nearby jump; the tail matches its note.
+                exact=next_target_time < tail_target_time,
             )
             next_alpha = lerp(
                 head_alpha,
@@ -301,8 +314,19 @@ def draw_connector(
                     tail_target_time,
                     tail_ease_frac,
                     last_target_time,
-                    left_limit=False,
+                    step_piece_time(ease_type, head_target_time, split_time, tail_target_time, last_target_time, False),
+                    right_limit=True,
                 )
+
+
+def step_piece_time(
+    ease_type: EaseType, head_target_time: float, split_time: float, tail_target_time: float, t: float, left_limit: bool
+) -> float:
+    if not is_step_ease(ease_type):
+        return t
+    if t < split_time or (t == split_time and (left_limit or split_time >= tail_target_time)):
+        return (head_target_time + split_time) / 2
+    return (split_time + tail_target_time) / 2
 
 
 def connector_sample_at(
@@ -316,8 +340,10 @@ def connector_sample_at(
     tail_target_time: float,
     tail_ease_frac: float,
     target_time: float,
+    ease_time: float,
     *,
-    left_limit: bool,
+    right_limit: bool = False,
+    exact: bool = False,
 ) -> PreviewConnectorSample:
     result = +PreviewConnectorSample
     _, interp_frac = get_connector_fractions(
@@ -326,15 +352,19 @@ def connector_sample_at(
         head_ease_frac,
         tail_target_time,
         tail_ease_frac,
-        target_time,
+        ease_time,
     )
-    head_lane = head.visual_lane_at(target_time, left_limit=left_limit)
-    tail_lane = head_lane if ease_type == EaseType.NONE else tail.visual_lane_at(target_time, left_limit=left_limit)
+    head_lane = head.visual_lane_at(target_time, right_limit=right_limit, exact=exact)
+    tail_lane = (
+        head_lane
+        if is_in_step_ease(ease_type)
+        else tail.visual_lane_at(target_time, right_limit=right_limit, exact=exact)
+    )
     result.raw_lane = lerp(head_lane, tail_lane, interp_frac)
     result.raw_size = lerp(head_size, tail_size, interp_frac)
     mask = interpolate_visual_masks(
-        head.visual_mask_at(target_time, left_limit=left_limit),
-        tail.visual_mask_at(target_time, left_limit=left_limit),
+        head.visual_mask_at(target_time, right_limit=right_limit, exact=exact),
+        tail.visual_mask_at(target_time, right_limit=right_limit, exact=exact),
         interp_frac,
     )
     result.lane = result.raw_lane

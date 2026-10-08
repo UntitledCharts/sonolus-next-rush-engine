@@ -4,7 +4,7 @@ import unittest
 from contextlib import ExitStack
 from math import isclose
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 from sonolus.script.archetype import EntityRef
@@ -214,37 +214,55 @@ class MaskedEffectTests(unittest.TestCase):
             )
             archetype.assert_not_called()
 
-    def test_watch_schedules_particles_using_masked_extents(self):
-        for attached in (False, True):
-            for mask in (VisualMask(-1, 1, True, 1), VisualMask(10, 12, True, 1)):
-                with self.subTest(attached=attached, mask=mask):
-                    fake = SimpleNamespace(
-                        is_scored=True,
-                        kind=note_lib.NoteKind.NORM_TAP,
-                        style=NoteStyle.BLUE,
-                        effect_kind=note_lib.NoteEffectKind.DEFAULT,
-                        calc_time=4,
-                        stage_ref=SimpleNamespace(index=0),
-                        size=6,
-                        is_attached=attached,
-                        direction=layout.FlickDirection.UP_OMNI,
-                        judgment=Judgment.PERFECT,
-                        index=1,
-                        visual_lane_at=lambda t: 0,
-                        visual_mask_at=lambda t, mask=mask, **kwargs: mask,
-                        y_offset_at=lambda t: 0,
-                        _stage_lane_particles_at=lambda t: True,
-                        stage_transform_at=lambda t: layout.identity_stage_transform(),
+    def test_watch_hit_effects_use_current_masked_extents(self):
+        for mask in (VisualMask(-1, 1, True, 1), VisualMask(10, 12, True, 1)):
+            with self.subTest(mask=mask):
+                fake: Any = SimpleNamespace(
+                    kind=note_lib.NoteKind.NORM_TAP,
+                    style=NoteStyle.BLUE,
+                    effect_kind=note_lib.NoteEffectKind.DEFAULT,
+                    direction=layout.FlickDirection.UP_OMNI,
+                    judgment=Judgment.PERFECT,
+                    index=7,
+                    visual_lane_at=lambda t, right_limit: 0,
+                    size=6,
+                    visual_mask_at=lambda t, right_limit, mask=mask: mask,
+                    visual_y_offset=0,
+                    visual_pivot_lane=0,
+                    visual_half_offset=False,
+                    _stage_lane_particles_at=lambda t, *, right_limit: right_limit,
+                    visual_stage_transform=layout.identity_stage_transform,
+                )
+                fake.visual_extents_at = (
+                    lambda t, right_limit=False, fake=fake: watch_note.WatchBaseNote.visual_extents_at(
+                        fake, t, right_limit
                     )
-                    fake.visual_extents_at = lambda t, fake=fake: watch_note.WatchBaseNote.visual_extents_at(fake, t)
-                    with (
-                        patch.object(watch_note, "Options", SimpleNamespace(note_effect_enabled=True)),
-                        patch.object(watch_note, "schedule_note_particles") as schedule,
-                    ):
-                        watch_note.WatchBaseNote.spawn_note_particles(fake)
-                    expected = masked_note_extents_by_limits(0, 6, mask.left, mask.right, True)
-                    assert schedule.call_args.args[2:4] == expected
-                    assert schedule.call_args.kwargs["style"] == NoteStyle.BLUE
+                )
+                with (
+                    patch.object(watch_note, "time", return_value=4),
+                    patch.object(watch_note, "handle_note_particles") as emit,
+                ):
+                    fake.visual_extents = cast(Any, watch_note.WatchBaseNote.visual_extents.fget)(fake)
+                    watch_note.WatchBaseNote.play_hit_effects(fake)
+                expected = masked_note_extents_by_limits(0, 6, mask.left, mask.right, True)
+                assert emit.call_args.args[2:4] == expected
+                assert emit.call_args.kwargs["style"] == NoteStyle.BLUE
+                assert emit.call_args.kwargs["group_id"] == 7
+                assert emit.call_args.kwargs["lane_particles"] is True
+
+    def test_watch_hit_emitter_runs_once_and_suppresses_skipped_effects(self):
+        for skipped in (False, True):
+            with self.subTest(skipped=skipped):
+                note = SimpleNamespace(play_hit_effects=lambda: None)
+                fake: Any = SimpleNamespace(played=True, note_ref=SimpleNamespace(get=lambda note=note: note))
+                watch_note.WatchHitEffect.initialize(fake)
+                with (
+                    patch.object(watch_note, "is_skip", return_value=skipped),
+                    patch.object(note, "play_hit_effects") as effects,
+                ):
+                    watch_note.WatchHitEffect.update_sequential(fake)
+                    watch_note.WatchHitEffect.update_sequential(fake)
+                assert effects.call_count == int(not skipped)
 
     def test_fully_masked_notes_emit_no_particles(self):
         for lane in (0, 0.25, -1.75):

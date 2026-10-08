@@ -25,8 +25,8 @@ from sonolus.script.values import swap
 from sonolus.script.vec import Vec2
 
 from sekai.lib import archetype_names
-from sekai.lib.baseevent import get_event_as, query_event_list
-from sekai.lib.ease import EaseType, ease
+from sekai.lib.baseevent import get_event_as, next_event_time_in_list, query_event_list
+from sekai.lib.ease import EaseType, eased_range, event_progress
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, StageCoverNoteSpeedCompensation, Version
 
@@ -57,6 +57,8 @@ APPROACH_TILT_LERP_MIN = 0.05
 
 # Stage width at 0 tilt
 STAGE_WIDTH_MID = (APPROACH_SCALE + 1) / 2
+CAMERA_MIN_SIZE = 0.01
+CAMERA_MIN_ZOOM = 0.01
 
 # As tilt decreases, the vanishing point moves upward and we extend the stage toward it.
 # This is a minimum tilt for this extension so the stage height stays finite at zero tilt.
@@ -342,7 +344,19 @@ def compute_stage_transform(
     return StageTransform(sr=stage_rotate, px=pivot.x, py=pivot.y, tx=tx, ty=ty, projection=projection)
 
 
+def stage_projection_blend_frac(a: StageScreenTransform, b: StageScreenTransform, frac: float) -> float:
+    if 0.0 <= frac <= 1.0:
+        return frac
+    # Both projections use the same camera axis. Stop at zero height to avoid a flip.
+    trace_a = a.a00 + a.a11
+    trace_b = b.a00 + b.a11
+    if trace_a != trace_b and lerp(trace_a, trace_b, frac) < 1.0:
+        return (1.0 - trace_a) / (trace_b - trace_a)
+    return frac
+
+
 def blend_stage_transform(a: StageTransform, b: StageTransform, frac: float) -> StageTransform:
+    projection_frac = stage_projection_blend_frac(a.projection, b.projection, frac)
     return StageTransform(
         sr=lerp(a.sr, b.sr, frac),
         px=lerp(a.px, b.px, frac),
@@ -350,13 +364,13 @@ def blend_stage_transform(a: StageTransform, b: StageTransform, frac: float) -> 
         tx=lerp(a.tx, b.tx, frac),
         ty=lerp(a.ty, b.ty, frac),
         projection=StageScreenTransform(
-            a00=lerp(a.projection.a00, b.projection.a00, frac),
-            a01=lerp(a.projection.a01, b.projection.a01, frac),
-            a02=lerp(a.projection.a02, b.projection.a02, frac),
-            a10=lerp(a.projection.a10, b.projection.a10, frac),
-            a11=lerp(a.projection.a11, b.projection.a11, frac),
-            a12=lerp(a.projection.a12, b.projection.a12, frac),
-            elevation=lerp(a.projection.elevation, b.projection.elevation, frac),
+            a00=lerp(a.projection.a00, b.projection.a00, projection_frac),
+            a01=lerp(a.projection.a01, b.projection.a01, projection_frac),
+            a02=lerp(a.projection.a02, b.projection.a02, projection_frac),
+            a10=lerp(a.projection.a10, b.projection.a10, projection_frac),
+            a11=lerp(a.projection.a11, b.projection.a11, projection_frac),
+            a12=lerp(a.projection.a12, b.projection.a12, projection_frac),
+            elevation=lerp(a.projection.elevation, b.projection.elevation, projection_frac),
         ),
     )
 
@@ -499,6 +513,11 @@ def max_camera_abs_rotation() -> float:
     while ref.index > 0:
         camera = get_event_as(ref, camera_archetype)
         result = max(result, abs(camera.rotate))
+        if camera.next_ref.index > 0:
+            lower, upper = eased_range(
+                camera.rotate, get_event_as(camera.next_ref, camera_archetype).rotate, camera.ease
+            )
+            result = max(result, -lower, upper)
         ref.index = camera.next_ref.index
     return result
 
@@ -555,7 +574,7 @@ def corrected_background_camera_zoom(bg: QuadLike, zoom: float, target: Vec2, an
     return max(zoom, background_auto_correction_zoom(bg, target, anchor, rotate), 1.0)
 
 
-def get_camera_info(target_time: float | None = None, left_limit: bool = False) -> CameraInfo:
+def get_camera_info(target_time: float | None = None, right_limit: bool = False, exact: bool = False) -> CameraInfo:
     result = +CameraInfo
     first_camera_ref = _initialization_archetype().at(0).first_camera_ref
     if first_camera_ref.index <= 0:
@@ -571,51 +590,41 @@ def get_camera_info(target_time: float | None = None, left_limit: bool = False) 
         )
         return result
     t = time() if target_time is None else target_time
-    camera_a_ref, camera_b_ref = query_event_list(first_camera_ref, t, lambda e: e.time)
+    camera_a_ref, camera_b_ref = query_event_list(first_camera_ref, t, lambda e: e.time, strict=not right_limit)
     camera_archetype = _camera_change_archetype()
-    if left_limit and camera_a_ref.index > 0:
-        camera_curr = get_event_as(camera_a_ref, camera_archetype)
-        if camera_curr.time == t:
-            camera_probe_ref = +camera_curr.prev_ref
-            while camera_probe_ref.index > 0:
-                if get_event_as(camera_probe_ref, camera_archetype).time != t:
-                    break
-                camera_a_ref.index = camera_probe_ref.index
-                camera_probe_ref.index = get_event_as(camera_probe_ref, camera_archetype).prev_ref.index
-            camera_b_ref.index = camera_a_ref.index
-            camera_a_ref.index = camera_probe_ref.index
     if camera_a_ref.index > 0:
         camera_a = get_event_as(camera_a_ref, camera_archetype)
+        size_a = max(CAMERA_MIN_SIZE, camera_a.size)
         if camera_b_ref.index > 0:
             camera_b = get_event_as(camera_b_ref, camera_archetype)
-            if camera_b.time > camera_a.time:
-                p = ease(camera_a.ease, unlerp(camera_a.time, camera_b.time, t))
-                ta = camera_zoom_target_at(
-                    camera_a.lane, camera_a.size, camera_a.zoom_target_lane, camera_a.zoom_target_y, camera_a.stage_tilt
-                )
-                tb = camera_zoom_target_at(
-                    camera_b.lane, camera_b.size, camera_b.zoom_target_lane, camera_b.zoom_target_y, camera_b.stage_tilt
-                )
-                aa = camera_zoom_anchor(camera_a.zoom_vertical_align)
-                ab = camera_zoom_anchor(camera_b.zoom_vertical_align)
-                result @= CameraInfo(
-                    lane=lerp(camera_a.lane, camera_b.lane, p),
-                    size=lerp(camera_a.size, camera_b.size, p),
-                    zoom=lerp(camera_a.zoom, camera_b.zoom, p),
-                    zoom_target_lane=lerp(camera_a.zoom_target_lane, camera_b.zoom_target_lane, p),
-                    zoom_target=Vec2(lerp(ta.x, tb.x, p), lerp(ta.y, tb.y, p)),
-                    zoom_anchor=Vec2(lerp(aa.x, ab.x, p), lerp(aa.y, ab.y, p)),
-                    rotate=lerp(camera_a.rotate, camera_b.rotate, p),
-                    stage_tilt=lerp(camera_a.stage_tilt, camera_b.stage_tilt, p),
-                )
-                return result
+            size_b = max(CAMERA_MIN_SIZE, camera_b.size)
+            p = event_progress(camera_a.ease, t, camera_a.time, camera_b.time, right_limit, exact)
+            ta = camera_zoom_target_at(
+                camera_a.lane, size_a, camera_a.zoom_target_lane, camera_a.zoom_target_y, camera_a.stage_tilt
+            )
+            tb = camera_zoom_target_at(
+                camera_b.lane, size_b, camera_b.zoom_target_lane, camera_b.zoom_target_y, camera_b.stage_tilt
+            )
+            aa = camera_zoom_anchor(camera_a.zoom_vertical_align)
+            ab = camera_zoom_anchor(camera_b.zoom_vertical_align)
+            result @= CameraInfo(
+                lane=lerp(camera_a.lane, camera_b.lane, p),
+                size=max(CAMERA_MIN_SIZE, lerp(camera_a.size, camera_b.size, p)),
+                zoom=max(CAMERA_MIN_ZOOM, lerp(camera_a.zoom, camera_b.zoom, p)),
+                zoom_target_lane=lerp(camera_a.zoom_target_lane, camera_b.zoom_target_lane, p),
+                zoom_target=Vec2(lerp(ta.x, tb.x, p), lerp(ta.y, tb.y, p)),
+                zoom_anchor=Vec2(lerp(aa.x, ab.x, p), lerp(aa.y, ab.y, p)),
+                rotate=lerp(camera_a.rotate, camera_b.rotate, p),
+                stage_tilt=lerp(camera_a.stage_tilt, camera_b.stage_tilt, p),
+            )
+            return result
         result @= CameraInfo(
             lane=camera_a.lane,
-            size=camera_a.size,
+            size=size_a,
             zoom=camera_a.zoom,
             zoom_target_lane=camera_a.zoom_target_lane,
             zoom_target=camera_zoom_target_at(
-                camera_a.lane, camera_a.size, camera_a.zoom_target_lane, camera_a.zoom_target_y, camera_a.stage_tilt
+                camera_a.lane, size_a, camera_a.zoom_target_lane, camera_a.zoom_target_y, camera_a.stage_tilt
             ),
             zoom_anchor=camera_zoom_anchor(camera_a.zoom_vertical_align),
             rotate=camera_a.rotate,
@@ -624,13 +633,14 @@ def get_camera_info(target_time: float | None = None, left_limit: bool = False) 
         return result
     if camera_b_ref.index > 0:
         camera_b = get_event_as(camera_b_ref, camera_archetype)
+        size_b = max(CAMERA_MIN_SIZE, camera_b.size)
         result @= CameraInfo(
             lane=camera_b.lane,
-            size=camera_b.size,
+            size=size_b,
             zoom=camera_b.zoom,
             zoom_target_lane=camera_b.zoom_target_lane,
             zoom_target=camera_zoom_target_at(
-                camera_b.lane, camera_b.size, camera_b.zoom_target_lane, camera_b.zoom_target_y, camera_b.stage_tilt
+                camera_b.lane, size_b, camera_b.zoom_target_lane, camera_b.zoom_target_y, camera_b.stage_tilt
             ),
             zoom_anchor=camera_zoom_anchor(camera_b.zoom_vertical_align),
             rotate=camera_b.rotate,
@@ -654,9 +664,8 @@ def get_next_camera_event_time(t: float) -> float:
     result = 1e8
     first_camera_ref = _initialization_archetype().at(0).first_camera_ref
     if first_camera_ref.index > 0:
-        _, b_ref = query_event_list(first_camera_ref, t, lambda e: e.time)
-        if b_ref.index > 0:
-            result = min(result, get_event_as(b_ref, _camera_change_archetype()).time)
+        a_ref, b_ref = query_event_list(first_camera_ref, t, lambda e: e.time)
+        result = min(result, next_event_time_in_list(a_ref, b_ref, _camera_change_archetype(), t))
     return result
 
 
@@ -667,7 +676,7 @@ def test_aspect_active() -> bool:
 def refresh_layout():
     camera = +CameraInfo
     if is_play() or is_watch():
-        camera @= get_camera_info()
+        camera @= get_camera_info(right_limit=True)
     else:
         camera @= CameraInfo(
             lane=0.0,
@@ -2276,8 +2285,8 @@ def compute_hitbox(
     )
 
 
-def camera_layout_transform_at_time(target_time: float, left_limit: bool = False) -> LayoutTransform:
-    return apply_test_aspect(layout_transform_at_camera(get_camera_info(target_time, left_limit=left_limit)))
+def camera_layout_transform_at_time(target_time: float) -> LayoutTransform:
+    return apply_test_aspect(layout_transform_at_camera(get_camera_info(target_time)))
 
 
 def compute_hitbox_at_time(
@@ -2288,10 +2297,9 @@ def compute_hitbox_at_time(
     y_offset: float = 0.0,
     *,
     stage_transform: StageScreenTransform,
-    left_limit: bool = False,
 ) -> Hitbox:
     return compute_hitbox(
-        camera_layout_transform_at_time(target_time, left_limit=left_limit),
+        camera_layout_transform_at_time(target_time),
         lane,
         size,
         leniency,

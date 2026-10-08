@@ -312,15 +312,14 @@ class BaseNote(PlayArchetype):
 
         if self.is_scored:
             schedule_note_auto_sfx(self.effect_kind, self.target_time)
-            hitbox_lane, hitbox_size = self.visual_extents_at(self.target_time, left_limit=True)
+            hitbox_lane, hitbox_size = self.visual_extents_at(self.target_time)
             self.hitbox @= compute_hitbox_at_time(
                 hitbox_lane,
                 hitbox_size,
                 get_leniency(self.kind),
                 self.target_time,
-                self.y_offset_at(self.target_time, left_limit=True),
-                stage_transform=self.stage_transform_at(self.target_time, left_limit=True).to_screen_transform(),
-                left_limit=True,
+                self.y_offset_at(self.target_time),
+                stage_transform=self.stage_transform_at(self.target_time).to_screen_transform(),
             )
 
         if start_time < inf:
@@ -1101,7 +1100,7 @@ class BaseNote(PlayArchetype):
             result.lane = self.lane
             result.transform @= identity_stage_transform()
         if self.elevation != 0.0:
-            result.transform @= self._basic_stage_transform_at(context.time, left_limit=True)
+            result.transform @= self._basic_stage_transform_at(context.time)
         return result
 
     def input_geometry(self, context: InputGeometryContext) -> InputGeometry:
@@ -1167,10 +1166,10 @@ class BaseNote(PlayArchetype):
                 result.stage_index = self.stage_ref.index
         return result
 
-    def _basic_visual_mask_at(self, t: float, left_limit: bool = False) -> VisualMask:
+    def _basic_visual_mask_at(self, t: float) -> VisualMask:
         result = +VisualMask
         if self.stage_ref.index > 0:
-            props = get_stage_props(self.stage_ref.get(), t, left_limit=left_limit)
+            props = get_stage_props(self.stage_ref.get(), t)
             result.left = props.lane - props.width
             result.right = props.lane + props.width
             result.enabled = props.mask_notes
@@ -1190,20 +1189,20 @@ class BaseNote(PlayArchetype):
         result @= interpolate_visual_masks(head_mask, tail_mask, self.attach_eased_frac)
         return result
 
-    def visual_mask_at(self, t: float, left_limit: bool = False) -> VisualMask:
+    def visual_mask_at(self, t: float) -> VisualMask:
         result = +VisualMask
         if not self.is_attached:
-            result @= self._basic_visual_mask_at(t, left_limit=left_limit)
+            result @= self._basic_visual_mask_at(t)
             return result
 
-        head_mask = self.attach_head_ref.get()._basic_visual_mask_at(t, left_limit=left_limit)
-        tail_mask = self.attach_tail_ref.get()._basic_visual_mask_at(t, left_limit=left_limit)
+        head_mask = self.attach_head_ref.get()._basic_visual_mask_at(t)
+        tail_mask = self.attach_tail_ref.get()._basic_visual_mask_at(t)
         result @= interpolate_visual_masks(head_mask, tail_mask, self.attach_eased_frac)
         return result
 
-    def visual_extents_at(self, t: float, left_limit: bool = False) -> tuple[float, float]:
+    def visual_extents_at(self, t: float) -> tuple[float, float]:
         render_lane = self.visual_lane_at(t)
-        mask = self.visual_mask_at(t, left_limit=left_limit)
+        mask = self.visual_mask_at(t)
         return masked_note_extents_by_limits(render_lane, self.size, mask.left, mask.right, mask.enabled)
 
     @property
@@ -1250,21 +1249,21 @@ class BaseNote(PlayArchetype):
             )
         return self._basic_visual_note_alpha
 
-    def _basic_y_offset_at(self, t: float, left_limit: bool = False) -> float:
+    def _basic_y_offset_at(self, t: float) -> float:
         if self.stage_ref.index <= 0:
             return 0.0
-        return get_stage_y_offset(self.stage_ref.get(), t, left_limit=left_limit)
+        return get_stage_y_offset(self.stage_ref.get(), t)
 
-    def y_offset_at(self, t: float, left_limit: bool = False) -> float:
+    def y_offset_at(self, t: float) -> float:
         if self.is_attached:
             head = self.attach_head_ref.get()
             tail = self.attach_tail_ref.get()
             return lerp(
-                head._basic_y_offset_at(t, left_limit=left_limit),
-                tail._basic_y_offset_at(t, left_limit=left_limit),
+                head._basic_y_offset_at(t),
+                tail._basic_y_offset_at(t),
                 get_attach_frac(head.target_time, tail.target_time, self.target_time),
             )
-        return self._basic_y_offset_at(t, left_limit=left_limit)
+        return self._basic_y_offset_at(t)
 
     def _basic_visual_stage_transform(self) -> StageTransform:
         result = +StageTransform
@@ -1319,12 +1318,12 @@ class BaseNote(PlayArchetype):
             )
         return self._basic_visual_stage_rotate
 
-    def _basic_stage_transform_at(self, t: float, left_limit: bool = False) -> StageTransform:
+    def _basic_stage_transform_at(self, t: float) -> StageTransform:
         result = +StageTransform
         if self.stage_ref.index > 0:
-            props = get_stage_props(self.stage_ref.get(), t, left_limit=left_limit)
+            props = get_stage_props(self.stage_ref.get(), t)
             result @= compute_stage_transform(
-                camera_layout_transform_at_time(t, left_limit=left_limit),
+                camera_layout_transform_at_time(t),
                 props.rotate,
                 props.x_lane_translate,
                 props.y_lane_translate,
@@ -1334,24 +1333,24 @@ class BaseNote(PlayArchetype):
             )
         elif self.elevation != 0.0:
             result @= compute_stage_transform(
-                camera_layout_transform_at_time(t, left_limit=left_limit), 0.0, 0.0, 0.0, 0.0, elevation=self.elevation
+                camera_layout_transform_at_time(t), 0.0, 0.0, 0.0, 0.0, elevation=self.elevation
             )
         else:
             result @= identity_stage_transform()
         return result
 
-    def stage_transform_at(self, t: float, left_limit: bool = False) -> StageTransform:
+    def stage_transform_at(self, t: float) -> StageTransform:
         result = +StageTransform
         if self.is_attached:
             head = self.attach_head_ref.get()
             tail = self.attach_tail_ref.get()
             result @= blend_stage_transform(
-                head._basic_stage_transform_at(t, left_limit=left_limit),
-                tail._basic_stage_transform_at(t, left_limit=left_limit),
+                head._basic_stage_transform_at(t),
+                tail._basic_stage_transform_at(t),
                 get_attach_eased_frac(self.connector_ease, head.target_time, tail.target_time, self.target_time),
             )
         else:
-            result @= self._basic_stage_transform_at(t, left_limit=left_limit)
+            result @= self._basic_stage_transform_at(t)
         return result
 
     @property

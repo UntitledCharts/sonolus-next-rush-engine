@@ -180,7 +180,7 @@ def convert_timescale_groups(data: ExtendedLevelData) -> tuple[dict[int, Timesca
         group = TimescaleGroup()
         changes = []
         raw_change = data[entity.data["first"]]
-        while True:
+        while raw_change.archetype == "TimeScaleChange":
             change = TimescaleChange(
                 beat=raw_change.data["#BEAT"],
                 timescale=raw_change.data["timeScale"],

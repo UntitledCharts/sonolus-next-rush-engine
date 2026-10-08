@@ -19,6 +19,7 @@ from sonolus.script.runtime import is_replay, is_skip, time
 from sonolus.script.timing import beat_to_time
 
 from sekai.debug import DISABLE_NOTES
+from sekai.lib import archetype_names
 from sekai.lib.buckets import SekaiWindow
 from sekai.lib.connector import (
     ActiveConnectorInfo,
@@ -55,14 +56,15 @@ from sekai.lib.note import (
     get_note_bucket,
     get_note_effect_kind,
     get_note_window,
+    handle_note_particles,
+    has_note_particles,
     hitbox_draw_alpha,
     hitbox_draw_start,
+    is_avoided_damage,
     is_head,
     map_note_kind,
     mirror_flick_direction,
-    play_note_hit_effects,
     schedule_note_auto_sfx,
-    schedule_note_particles,
     schedule_note_sfx,
     schedule_note_slot_effects,
 )
@@ -246,8 +248,6 @@ class WatchBaseNote(WatchArchetype):
         start_time = self.visual_start_time
 
         if self.is_scored:
-            # Keep a one-second buffer for hit particles without extending short lifetimes.
-            start_time = min(start_time, max(natural_start_time, self.despawn_time() - 1.0))
             input_start = self.target_time + self.judgment_window.bad.start
             if self.kind == NoteKind.HIDE_DAMAGE_TICK:
                 window_start_beat = damage_tick_input_start_beat(self.beat)
@@ -257,22 +257,18 @@ class WatchBaseNote(WatchArchetype):
             start_time = min(start_time, input_start)
             if Options.show_hitboxes:
                 start_time = min(start_time, hitbox_draw_start(self.kind, input_start, self.target_time))
-            hitbox_lane, hitbox_size = self.visual_extents_at(self.target_time, left_limit=True)
+            hitbox_lane, hitbox_size = self.visual_extents_at(self.target_time)
             self.hitbox @= compute_hitbox_at_time(
                 hitbox_lane,
                 hitbox_size,
                 get_leniency(self.kind),
                 self.target_time,
-                self.y_offset_at(self.target_time, left_limit=True),
-                stage_transform=self.stage_transform_at(self.target_time, left_limit=True).to_screen_transform(),
-                left_limit=True,
+                self.y_offset_at(self.target_time),
+                stage_transform=self.stage_transform_at(self.target_time).to_screen_transform(),
             )
 
         if is_replay():
             if self.played_hit_effects:
-                if self.is_scored:
-                    # Spawn before the recorded hit so termination can emit its particles.
-                    start_time = min(start_time, self.end_time - 1.0)
                 if Options.auto_sfx:
                     schedule_note_auto_sfx(self.effect_kind, self.target_time)
                 else:
@@ -286,6 +282,15 @@ class WatchBaseNote(WatchArchetype):
                 self.schedule_slot_effects_at(self.target_time)
 
         self.result.target_time = self.target_time
+
+        if (
+            (not is_replay() or self.played_hit_effects)
+            and self.is_scored
+            and (Options.note_effect_enabled or Options.lane_effect_enabled)
+            and has_note_particles(self.kind)
+            and not is_avoided_damage(self.kind, self.judgment)
+        ):
+            WatchHitEffect.spawn(note_ref=self.ref())
 
         if start_time < inf:
             self.extend_stage_windows(start_time - 1.0, end_time + 1.0)
@@ -303,7 +308,6 @@ class WatchBaseNote(WatchArchetype):
             )
 
         if self.played_hit_effects or not is_replay():
-            self.spawn_note_particles()
             self.get_min_start_time()
 
     def _basic_extend_stage_window(self, start_time: float, end_time: float):
@@ -324,39 +328,6 @@ class WatchBaseNote(WatchArchetype):
         else:
             self.not_render = True
             return self.calc_time - MIN_START_TIME
-
-    def spawn_note_particles(self):
-        if not self.is_scored:
-            return
-        if not (Options.note_effect_enabled or Options.lane_effect_enabled):
-            return
-        if self.kind == NoteKind.HIDE_TICK:
-            return
-        t = self.calc_time
-        pivot_lane = 0.0
-        half_offset = False
-        if self.stage_ref.index > 0:
-            props = get_stage_props(self.stage_ref.get(), t)
-            pivot_lane = props.pivot_lane
-            division = props.division.start
-            half_offset = division.parity == DivisionParity.ODD and division.size % 2 == 1
-        render_lane, render_size = self.visual_extents_at(t)
-        schedule_note_particles(
-            self.kind,
-            self.effect_kind,
-            render_lane,
-            render_size,
-            t,
-            self.direction,
-            self.judgment,
-            y_offset=self.y_offset_at(t),
-            pivot_lane=pivot_lane,
-            half_offset=half_offset,
-            group_id=self.index,
-            lane_particles=self._stage_lane_particles_at(t),
-            style=self.style,
-            transform=self.stage_transform_at(t).to_screen_transform(),
-        )
 
     def schedule_slot_effects_at(self, t: float):
         transform = +StageTransform
@@ -536,27 +507,23 @@ class WatchBaseNote(WatchArchetype):
             result @= self.hitbox.bounds
         return result
 
-    def terminate(self):
-        if is_skip():
-            return
-        if time() < self.despawn_time():
-            return
-        if (not is_replay() or self.played_hit_effects) and self.is_scored:
-            render_lane, render_size = self.visual_extents
-            play_note_hit_effects(
-                self.kind,
-                self.effect_kind,
-                render_lane,
-                render_size,
-                self.direction,
-                self.judgment,
-                y_offset=self.visual_y_offset,
-                pivot_lane=self.visual_pivot_lane,
-                half_offset=self.visual_half_offset,
-                lane_particles=self._stage_lane_particles_at(time()),
-                transform=self.visual_stage_transform().to_screen_transform(),
-                style=self.style,
-            )
+    def play_hit_effects(self):
+        render_lane, render_size = self.visual_extents
+        handle_note_particles(
+            self.kind,
+            self.effect_kind,
+            render_lane,
+            render_size,
+            self.direction,
+            self.judgment,
+            y_offset=self.visual_y_offset,
+            pivot_lane=self.visual_pivot_lane,
+            half_offset=self.visual_half_offset,
+            group_id=self.index,
+            lane_particles=self._stage_lane_particles_at(time(), right_limit=True),
+            transform=self.visual_stage_transform().to_screen_transform(),
+            style=self.style,
+        )
 
     def _basic_input_geometry(self, context: InputGeometryContext) -> InputGeometry:
         result = +InputGeometry
@@ -567,7 +534,7 @@ class WatchBaseNote(WatchArchetype):
             result.lane = self.lane
             result.transform @= identity_stage_transform()
         if self.elevation != 0.0:
-            result.transform @= self._basic_stage_transform_at(context.time, left_limit=True)
+            result.transform @= self._basic_stage_transform_at(context.time)
         return result
 
     def input_geometry(self, context: InputGeometryContext) -> InputGeometry:
@@ -593,17 +560,21 @@ class WatchBaseNote(WatchArchetype):
             result @= self._basic_input_geometry(context)
         return result
 
-    def _basic_visual_lane_at(self, t: float) -> float:
+    def _basic_visual_lane_at(self, t: float, right_limit: bool = False) -> float:
         if self.stage_ref.index <= 0:
             return self.lane
-        return get_stage_pivot_lane(self.stage_ref.get(), t) + self.rel_lane
+        return get_stage_pivot_lane(self.stage_ref.get(), t, right_limit) + self.rel_lane
 
-    def visual_lane_at(self, t: float) -> float:
+    def visual_lane_at(self, t: float, right_limit: bool = False) -> float:
         if self.is_attached:
             head = self.attach_head_ref.get()
             tail = self.attach_tail_ref.get()
-            return lerp(head._basic_visual_lane_at(t), tail._basic_visual_lane_at(t), self.attach_eased_frac)
-        return self._basic_visual_lane_at(t)
+            return lerp(
+                head._basic_visual_lane_at(t, right_limit),
+                tail._basic_visual_lane_at(t, right_limit),
+                self.attach_eased_frac,
+            )
+        return self._basic_visual_lane_at(t, right_limit)
 
     @property
     def _basic_visual_note_alpha(self) -> float:
@@ -624,21 +595,21 @@ class WatchBaseNote(WatchArchetype):
             )
         return self._basic_visual_note_alpha
 
-    def _basic_y_offset_at(self, t: float, left_limit: bool = False) -> float:
+    def _basic_y_offset_at(self, t: float) -> float:
         if self.stage_ref.index <= 0:
             return 0.0
-        return get_stage_y_offset(self.stage_ref.get(), t, left_limit=left_limit)
+        return get_stage_y_offset(self.stage_ref.get(), t)
 
-    def y_offset_at(self, t: float, left_limit: bool = False) -> float:
+    def y_offset_at(self, t: float) -> float:
         if self.is_attached:
             head = self.attach_head_ref.get()
             tail = self.attach_tail_ref.get()
             return lerp(
-                head._basic_y_offset_at(t, left_limit=left_limit),
-                tail._basic_y_offset_at(t, left_limit=left_limit),
+                head._basic_y_offset_at(t),
+                tail._basic_y_offset_at(t),
                 get_attach_frac(head.target_time, tail.target_time, self.target_time),
             )
-        return self._basic_y_offset_at(t, left_limit=left_limit)
+        return self._basic_y_offset_at(t)
 
     def _basic_visual_stage_transform(self) -> StageTransform:
         result = +StageTransform
@@ -675,12 +646,12 @@ class WatchBaseNote(WatchArchetype):
             )
         return self._basic_has_stage_transform()
 
-    def _basic_stage_transform_at(self, t: float, left_limit: bool = False) -> StageTransform:
+    def _basic_stage_transform_at(self, t: float) -> StageTransform:
         result = +StageTransform
         if self.stage_ref.index > 0:
-            props = get_stage_props(self.stage_ref.get(), t, left_limit=left_limit)
+            props = get_stage_props(self.stage_ref.get(), t)
             result @= compute_stage_transform(
-                camera_layout_transform_at_time(t, left_limit=left_limit),
+                camera_layout_transform_at_time(t),
                 props.rotate,
                 props.x_lane_translate,
                 props.y_lane_translate,
@@ -690,49 +661,30 @@ class WatchBaseNote(WatchArchetype):
             )
         elif self.elevation != 0.0:
             result @= compute_stage_transform(
-                camera_layout_transform_at_time(t, left_limit=left_limit), 0.0, 0.0, 0.0, 0.0, elevation=self.elevation
+                camera_layout_transform_at_time(t), 0.0, 0.0, 0.0, 0.0, elevation=self.elevation
             )
         else:
             result @= identity_stage_transform()
         return result
 
-    def stage_transform_at(self, t: float, left_limit: bool = False) -> StageTransform:
+    def stage_transform_at(self, t: float) -> StageTransform:
         result = +StageTransform
         if self.is_attached:
             head = self.attach_head_ref.get()
             tail = self.attach_tail_ref.get()
             result @= blend_stage_transform(
-                head._basic_stage_transform_at(t, left_limit=left_limit),
-                tail._basic_stage_transform_at(t, left_limit=left_limit),
+                head._basic_stage_transform_at(t),
+                tail._basic_stage_transform_at(t),
                 get_attach_eased_frac(self.connector_ease, head.target_time, tail.target_time, self.target_time),
             )
         else:
-            result @= self._basic_stage_transform_at(t, left_limit=left_limit)
+            result @= self._basic_stage_transform_at(t)
         return result
 
-    def _stage_pivot_lane_at(self, t: float) -> float:
-        if self.stage_ref.index <= 0:
-            return 0.0
-        return get_stage_props(self.stage_ref.get(), t).pivot_lane
-
-    def _stage_half_offset_at(self, t: float) -> bool:
-        if self.stage_ref.index <= 0:
-            return False
-        division = get_stage_props(self.stage_ref.get(), t).division.start
-        return division.parity == DivisionParity.ODD and division.size % 2 == 1
-
-    def _stage_single_line_at(self, t: float) -> bool:
-        if self.stage_ref.index <= 0:
-            return False
-        return (
-            resolve_judge_line_style(get_stage_props(self.stage_ref.get(), t).judge_line_style)
-            == JudgeLineStyle.SINGLE_LINE
-        )
-
-    def _stage_lane_particles_at(self, t: float) -> bool:
+    def _stage_lane_particles_at(self, t: float, right_limit: bool = False) -> bool:
         if self.stage_ref.index <= 0:
             return True
-        return get_stage_props(self.stage_ref.get(), t).full_width <= 0.0
+        return get_stage_props(self.stage_ref.get(), t, right_limit=right_limit).full_width <= 0.0
 
     @property
     def _basic_visual_lane(self) -> float:
@@ -750,10 +702,11 @@ class WatchBaseNote(WatchArchetype):
             )
         return self._basic_visual_lane
 
-    def _basic_visual_mask_at(self, t: float, left_limit: bool = False) -> VisualMask:
+    @property
+    def _basic_visual_mask(self) -> VisualMask:
         result = +VisualMask
         if self.stage_ref.index > 0:
-            props = get_stage_props(self.stage_ref.get(), t, left_limit=left_limit)
+            props = self.stage_ref.get().props
             result.left = props.lane - props.width
             result.right = props.lane + props.width
             result.enabled = props.mask_notes
@@ -761,29 +714,48 @@ class WatchBaseNote(WatchArchetype):
                 result.stage_index = self.stage_ref.index
         return result
 
-    def visual_mask_at(self, t: float, left_limit: bool = False) -> VisualMask:
+    def _basic_visual_mask_at(self, t: float, right_limit: bool = False) -> VisualMask:
+        result = +VisualMask
+        if self.stage_ref.index > 0:
+            props = get_stage_props(self.stage_ref.get(), t, right_limit=right_limit)
+            result.left = props.lane - props.width
+            result.right = props.lane + props.width
+            result.enabled = props.mask_notes
+            if result.enabled:
+                result.stage_index = self.stage_ref.index
+        return result
+
+    def visual_mask_at(self, t: float, right_limit: bool = False) -> VisualMask:
         result = +VisualMask
         if not self.is_attached:
-            result @= self._basic_visual_mask_at(t, left_limit=left_limit)
+            result @= self._basic_visual_mask_at(t, right_limit)
             return result
 
-        head_mask = self.attach_head_ref.get()._basic_visual_mask_at(t, left_limit=left_limit)
-        tail_mask = self.attach_tail_ref.get()._basic_visual_mask_at(t, left_limit=left_limit)
+        head_mask = self.attach_head_ref.get()._basic_visual_mask_at(t, right_limit)
+        tail_mask = self.attach_tail_ref.get()._basic_visual_mask_at(t, right_limit)
         result @= interpolate_visual_masks(head_mask, tail_mask, self.attach_eased_frac)
         return result
 
     @property
     def visual_mask(self) -> VisualMask:
-        return self.visual_mask_at(time())
+        result = +VisualMask
+        if not self.is_attached:
+            result @= self._basic_visual_mask
+            return result
 
-    def visual_extents_at(self, t: float, left_limit: bool = False) -> tuple[float, float]:
-        render_lane = self.visual_lane_at(t)
-        mask = self.visual_mask_at(t, left_limit=left_limit)
+        head_mask = self.attach_head_ref.get()._basic_visual_mask
+        tail_mask = self.attach_tail_ref.get()._basic_visual_mask
+        result @= interpolate_visual_masks(head_mask, tail_mask, self.attach_eased_frac)
+        return result
+
+    def visual_extents_at(self, t: float, right_limit: bool = False) -> tuple[float, float]:
+        render_lane = self.visual_lane_at(t, right_limit)
+        mask = self.visual_mask_at(t, right_limit)
         return masked_note_extents_by_limits(render_lane, self.size, mask.left, mask.right, mask.enabled)
 
     @property
     def visual_extents(self) -> tuple[float, float]:
-        return self.visual_extents_at(time())
+        return self.visual_extents_at(time(), right_limit=True)
 
     @property
     def _basic_visual_y_offset(self) -> float:
@@ -910,6 +882,31 @@ def compute_slide_input_bounds(
         input_y_offset,
         stage_transform=input_transform.to_screen_transform(),
     ).bounds
+
+
+class WatchHitEffect(WatchArchetype):
+    name = archetype_names.HIT_EFFECT
+
+    note_ref: EntityRef[WatchBaseNote] = entity_memory()
+    played: bool = entity_memory()
+
+    def spawn_time(self) -> float:
+        return self.note_ref.get().despawn_time()
+
+    def despawn_time(self) -> float:
+        return self.spawn_time() + 1
+
+    def initialize(self):
+        self.played = False
+
+    # Run after camera/stage updates; managed RUSH particles also write level memory.
+    def update_sequential(self):
+        if self.played:
+            return
+        self.played = True
+        if is_skip():
+            return
+        self.note_ref.get().play_hit_effects()
 
 
 WATCH_NOTE_ARCHETYPES = derive_note_archetypes(WatchBaseNote)

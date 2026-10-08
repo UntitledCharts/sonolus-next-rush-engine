@@ -65,11 +65,7 @@ class ElevationCompatibilityTests(unittest.TestCase):
         for module, cls in ((play_note, play_note.BaseNote), (watch_note, watch_note.WatchBaseNote)):
             with self.subTest(mode=module.__name__):
                 fake = SimpleNamespace(stage_ref=SimpleNamespace(index=0), lane=0, elevation=2)
-                fake._basic_stage_transform_at = (
-                    lambda t, *, left_limit, cls=cls, fake=fake: cls._basic_stage_transform_at(
-                        fake, t, left_limit=left_limit
-                    )
-                )
+                fake._basic_stage_transform_at = lambda t, cls=cls, fake=fake: cls._basic_stage_transform_at(fake, t)
                 with (
                     patch.object(module, "camera_layout_transform_at_time", return_value=self.camera),
                     patch.object(module, "current_layout_transform", return_value=self.camera),

@@ -45,12 +45,12 @@ from sekai.lib.connector import (
     update_connector_sfx,
     update_linear_connector_particle,
 )
-from sekai.lib.ease import EaseType, safe_unlerp_clamped
+from sekai.lib.ease import EaseType, is_in_step_ease, safe_unlerp_clamped
 from sekai.lib.initialization import schedule_connector_sfx_after_notes
 from sekai.lib.layout import StageTransform, blend_stage_transform
-from sekai.lib.note import NoteKind, draw_connector_hitbox_overlay, draw_slide_note_head, get_attach_params
+from sekai.lib.note import NoteKind, draw_connector_hitbox_overlay, draw_slide_note_head
 from sekai.lib.options import Options
-from sekai.lib.stage import VisualMask, get_stage_props, masked_note_extents_by_limits
+from sekai.lib.stage import VisualMask, masked_note_extents_by_limits
 from sekai.lib.streams import Streams
 from sekai.lib.timescale import (
     MIN_START_TIME,
@@ -343,7 +343,7 @@ class Connector(PlayArchetype):
                 head_visual_progress = 1.0 - lerp(head.visual_y_offset, tail.visual_y_offset, head_frac)
                 head_target_time = time()
                 head_note_alpha = lerp(head_note_alpha, tail_note_alpha, head_frac)
-                if self.ease_type == EaseType.NONE:
+                if is_in_step_ease(self.ease_type) or head_frac <= 0:
                     head_lane = head.visual_lane
                     head_size = head.size
                     head_ease_frac = head.head_ease_frac
@@ -414,7 +414,7 @@ class Connector(PlayArchetype):
             or not self.visual_active_interval.start <= time() < self.visual_active_interval.end
         ):
             return
-        lane, size = self.current_visual_head_extents(time())
+        lane, size = self.current_visual_head_extents()
         if size <= 0:
             return
         head = self.head
@@ -448,48 +448,26 @@ class Connector(PlayArchetype):
         if time() in self.input_active_interval:
             draw_connector_hitbox_overlay(self.active_connector_info.input_bounds, 0.6)
 
-    def get_attached_params(self, target_time: float) -> tuple[float, float]:
-        head = self.head_ref.get().effective_attach_head
-        tail = self.tail_ref.get().effective_attach_tail
-        if head.stage_ref.index > 0 and head.stage_ref.index == tail.stage_ref.index:
-            stage = head.stage_ref.get()
-            if target_time == time():
-                pivot_lane = stage.props.pivot_lane
-            else:
-                pivot_lane = get_stage_props(stage, target_time).pivot_lane
-            head_lane = pivot_lane + head.rel_lane
-            tail_lane = pivot_lane + tail.rel_lane
-        else:
-            head_lane = head._basic_visual_lane_at(target_time)
-            tail_lane = tail._basic_visual_lane_at(target_time)
-        return get_attach_params(
-            ease_type=self.ease_type,
-            head_lane=head_lane,
-            head_size=head.size,
-            head_target_time=head.target_time,
-            tail_lane=tail_lane,
-            tail_size=tail.size,
-            tail_target_time=tail.target_time,
-            target_time=target_time,
-        )
-
-    def current_visual_head_extents(self, target_time: float) -> tuple[float, float]:
+    def current_visual_head_extents(self) -> tuple[float, float]:
         head = self.head
         tail = self.tail
-        result_lane, result_size = self.get_attached_params(target_time)
+        result_lane = head.visual_lane
+        result_size = head.size
         head_mask = head.visual_mask
         tail_mask = tail.visual_mask
         mask_left = head_mask.left
         mask_right = head_mask.right
-        if self.ease_type != EaseType.NONE:
+        if not is_in_step_ease(self.ease_type):
             _, interp_frac = get_connector_fractions(
                 self.ease_type,
                 head.target_time,
                 head.head_ease_frac,
                 tail.target_time,
                 tail.tail_ease_frac,
-                target_time,
+                time(),
             )
+            result_lane = lerp(head.visual_lane, tail.visual_lane, interp_frac)
+            result_size = lerp(head.size, tail.size, interp_frac)
             mask_left = lerp(head_mask.left, tail_mask.left, interp_frac)
             mask_right = lerp(head_mask.right, tail_mask.right, interp_frac)
         return masked_note_extents_by_limits(
@@ -614,7 +592,7 @@ class SlideManager(PlayArchetype):
         info = self.active_head.active_connector_info
         if info.visual_connector_index > 0 and info.visual_update_time == time():
             connector = EntityRef[Connector](index=info.visual_connector_index - 1).get()
-            visual_lane, visual_size = connector.current_visual_head_extents(time())
+            visual_lane, visual_size = connector.current_visual_head_extents()
             self.visual_lane = visual_lane
             self.visual_size = visual_size
             self.visual_y_offset = lerp(

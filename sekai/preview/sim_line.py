@@ -16,8 +16,9 @@ class PreviewSimLine(PreviewArchetype):
     def render(self):
         if not self.left.is_scored or not self.right.is_scored:
             return
-        left_lane, left_size = self.left.visual_extents_at(self.left.target_time, left_limit=True)
-        right_lane, right_size = self.right.visual_extents_at(self.right.target_time, left_limit=True)
+        target_time = self.left.target_time
+        left_lane, left_size = self.left.visual_extents_at(target_time)
+        right_lane, right_size = self.right.visual_extents_at(self.right.target_time)
         if left_size <= 0 or right_size <= 0:
             return
         layout = layout_preview_sim_line(

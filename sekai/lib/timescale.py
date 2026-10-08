@@ -14,10 +14,10 @@ from sonolus.script.record import Record
 from sonolus.script.timing import beat_to_bpm, beat_to_time
 
 from sekai.lib import archetype_names
-from sekai.lib.ease import EaseType
+from sekai.lib.ease import EaseType, ease_overshoot, is_in_step_ease
 from sekai.lib.layout import Layout, preempt_time
 from sekai.lib.options import Options
-from sekai.lib.timescale_math import TimePosition, integrate_times, speed_at
+from sekai.lib.timescale_math import TimePosition, integrate_eased_times, integrate_times, speed_at
 
 MIN_START_TIME = -2.0
 DISTANCE_LIMIT = 1e20
@@ -202,13 +202,15 @@ def iter_timescale_changes(index: int) -> Iterator[TimescaleChangeLike]:
         index = marker.next_ref.index
 
 
-def _integral(ref: int, left: float, right: float) -> float:
+def _integral(ref: int, left: float, right: float, compact: bool = False) -> float:
     if ref == 0:
         return right - left
     marker = _marker(ref)
     if marker.next_ref.index == 0:
         return marker.timescale * (right - left)
-    return integrate_times(
+    # Compact integration keeps expanded callback code small.
+    integrate = integrate_eased_times if compact else integrate_times
+    return integrate(
         marker.timescale,
         _marker(marker.next_ref.index).timescale,
         marker.timescale_ease,
@@ -242,9 +244,11 @@ def _coordinate(ref: int, now: float) -> TimePosition:
         # Integrate from the nearer endpoint to reduce rounding near a note hit.
         if marker.next_ref.index > 0 and now - marker.event_start > marker.event_end - now:
             following = _marker(marker.next_ref.index)
-            result @= following.position.add(-following.converted_skip).add(-_integral(ref, now, marker.event_end))
+            result @= following.position.add(-following.converted_skip).add(
+                -_integral(ref, now, marker.event_end, compact=True)
+            )
         else:
-            result @= marker.position.add(_integral(ref, marker.event_start, now))
+            result @= marker.position.add(_integral(ref, marker.event_start, now, compact=True))
     return result
 
 
@@ -278,8 +282,9 @@ def initialize_timescale_group(group: TimescaleGroupLike) -> None:
             abs(marker.beat) < inf
             and abs(marker.timescale) < inf
             and abs(marker.timescale_skip) < inf
-            and 0 <= marker.timescale_ease <= 5
+            and 0 <= marker.timescale_ease <= EaseType.OUT_IN_STEP
             and marker.timescale_ease % 1 == 0
+            and ease_overshoot(marker.timescale_ease) == 0
             and 0 <= marker.transition_style <= 1
             and marker.transition_style % 1 == 0
         ):
@@ -341,9 +346,9 @@ def initialize_timescale_group(group: TimescaleGroupLike) -> None:
             marker.position = TimePosition.of(marker.event_start).add(marker.converted_skip)
         else:
             prior = _marker(marker.prev_ref)
-            marker.position = prior.position.add(_integral(prior.index, prior.event_start, prior.event_end)).add(
-                marker.converted_skip
-            )
+            marker.position = prior.position.add(
+                _integral(prior.index, prior.event_start, prior.event_end, compact=True)
+            ).add(marker.converted_skip)
         if run == 0 or marker.transition_style != _marker(run).transition_style:
             if run > 0:
                 _marker(run).run_end = marker.index
@@ -396,7 +401,7 @@ def _visibility_interval_bounds(ref: int) -> _VisibilityBounds:
     marker = _marker(ref)
     following = _marker(marker.next_ref.index)
     v0 = v1 = marker.timescale
-    if marker.timescale_ease != EaseType.NONE:
+    if not is_in_step_ease(marker.timescale_ease):
         v1 = following.timescale
     span = marker.event_end - marker.event_start
     lower = min(0.0, min(v0, v1) * span)
@@ -751,7 +756,7 @@ def prepare_group(group: int | EntityRef, now: float) -> None:
         entity.event_end = _marker(future).event_start
     if entity.style == TransitionStyle.SCROLL:
         entity.current_speed = _scroll_speed(entity.current_speed)
-    entity.current_constant = entity.ease == EaseType.NONE or entity.v0 == entity.v1
+    entity.current_constant = is_in_step_ease(entity.ease) or entity.v0 == entity.v1
     # Compute note distance from a cached distance at either run boundary:
     # D(now, hit) = offset + gain * D(boundary, hit).
     # Only gain and offset need to change while we stay in the same run.

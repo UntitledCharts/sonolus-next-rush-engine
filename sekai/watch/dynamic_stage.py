@@ -148,7 +148,7 @@ class WatchDynamicStage(WatchArchetype):
 
     @callback(order=-2)
     def update_sequential(self):
-        self.props @= get_stage_props(self)
+        self.props @= get_stage_props(self, right_limit=True)
         self.fever_boundary()
 
     def fever_boundary(self):

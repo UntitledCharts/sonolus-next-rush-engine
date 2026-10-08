@@ -1,6 +1,6 @@
 from math import ceil, floor
 
-from sonolus.script.interval import lerp
+from sonolus.script.interval import clamp, lerp
 from sonolus.script.quad import Quad
 from sonolus.script.values import swap
 
@@ -14,6 +14,7 @@ from sekai.lib.stage import (
     StageProps,
     border_blend_alpha,
     border_sprite_transition,
+    border_style_width,
     border_width,
     get_next_event_time,
     get_stage_props,
@@ -93,12 +94,12 @@ def draw_preview_dynamic_stage(stage: DynamicStageLike, start_time: float, end_t
 
         t_a = col_t_lo
         props_a = +StageProps
-        props_a @= get_stage_props(stage, t_a)
+        props_a @= get_stage_props(stage, t_a, right_limit=True, exact=True)
         while t_a < col_t_hi:
             next_event = get_next_event_time(stage, t_a)
             t_b = min(t_a + PREVIEW_DYNAMIC_STAGE_TIME_INCREMENT, col_t_hi, next_event)
             at_event = t_b == next_event
-            props_b = get_stage_props(stage, t_b, left_limit=at_event)
+            props_b = get_stage_props(stage, t_b, exact=True)
 
             draw_dynamic_stage_lane_bg_slice(props_a, props_b, col, t_a, t_b, z_bg)
             draw_dynamic_stage_border_slice(True, props_a, props_b, col, t_a, t_b, z_left_a, z_left_b)
@@ -107,7 +108,7 @@ def draw_preview_dynamic_stage(stage: DynamicStageLike, start_time: float, end_t
 
             t_a = t_b
             if at_event:
-                props_a @= get_stage_props(stage, t_a)
+                props_a @= get_stage_props(stage, t_a, right_limit=True, exact=True)
             else:
                 props_a @= props_b
 
@@ -137,7 +138,7 @@ def draw_dynamic_stage_lane_bg_slice(
         return
 
     layout = layout_preview_lane_strip(mask_l_a, mask_r_a, t_a, mask_l_b, mask_r_b, t_b, col)
-    ActiveSkin.lane_background_preview.draw(layout, z=z.tuple, a=alpha)
+    ActiveSkin.lane_background_preview.draw(layout, z=z.tuple, a=clamp(alpha, 0.0, 1.0))
 
 
 def draw_dynamic_stage_border_slice(
@@ -200,11 +201,23 @@ def draw_dynamic_stage_border_slice(
         PREVIEW_DYNAMIC_STAGE_BORDER_MEDIUM_W,
         PREVIEW_DYNAMIC_STAGE_BORDER_LIGHT_W,
     )
-    offset_a = border_width(
-        style_a, PREVIEW_DYNAMIC_STAGE_BORDER_DEFAULT_W / 2, PREVIEW_DYNAMIC_STAGE_BORDER_MEDIUM_W / 2, 0
+    offset_a = lerp(
+        border_style_width(
+            style_a.start, PREVIEW_DYNAMIC_STAGE_BORDER_DEFAULT_W / 2, PREVIEW_DYNAMIC_STAGE_BORDER_MEDIUM_W / 2, 0
+        ),
+        border_style_width(
+            style_a.end, PREVIEW_DYNAMIC_STAGE_BORDER_DEFAULT_W / 2, PREVIEW_DYNAMIC_STAGE_BORDER_MEDIUM_W / 2, 0
+        ),
+        style_a.progress,
     )
-    offset_b = border_width(
-        style_b, PREVIEW_DYNAMIC_STAGE_BORDER_DEFAULT_W / 2, PREVIEW_DYNAMIC_STAGE_BORDER_MEDIUM_W / 2, 0
+    offset_b = lerp(
+        border_style_width(
+            style_b.start, PREVIEW_DYNAMIC_STAGE_BORDER_DEFAULT_W / 2, PREVIEW_DYNAMIC_STAGE_BORDER_MEDIUM_W / 2, 0
+        ),
+        border_style_width(
+            style_b.end, PREVIEW_DYNAMIC_STAGE_BORDER_DEFAULT_W / 2, PREVIEW_DYNAMIC_STAGE_BORDER_MEDIUM_W / 2, 0
+        ),
+        style_b.progress,
     )
     frac_a = (clip_t_a - t_a) / (t_b - t_a)
     frac_b = (clip_t_b - t_a) / (t_b - t_a)
@@ -227,6 +240,7 @@ def draw_dynamic_stage_border_slice(
     style = border_sprite_transition(style)
 
     def draw_border(style: StageBorderStyle, z: ZIndexes, a: float):
+        a = clamp(a, 0.0, 1.0)
         if a <= 0:
             return
         if style == StageBorderStyle.LIGHT:
@@ -242,7 +256,7 @@ def draw_dynamic_stage_border_slice(
         draw_border(style.start, z_a, alpha)
     else:
         draw_border(style.start, z_a, border_blend_alpha(alpha, style.progress))
-        draw_border(style.end, z_b, alpha * style.progress)
+        draw_border(style.end, z_b, alpha * max(0.0, style.progress))
 
 
 def draw_dynamic_stage_dividers_slice(
@@ -271,14 +285,12 @@ def draw_dynamic_stage_dividers_slice(
             progress = (division_a.progress + division_b.progress) / 2
         else:
             progress = division_b.progress
-        if 1 - progress > 0:
-            draw_dynamic_stage_division_set(
-                stage, props_a, props_b, col, t_a, t_b, division_b.start, alpha * (1 - progress), z_a
-            )
-        if progress > 0:
-            draw_dynamic_stage_division_set(
-                stage, props_a, props_b, col, t_a, t_b, division_b.end, alpha * progress, z_b
-            )
+        start_alpha = alpha * max(0.0, 1 - progress)
+        end_alpha = alpha * max(0.0, progress)
+        if start_alpha > 0:
+            draw_dynamic_stage_division_set(stage, props_a, props_b, col, t_a, t_b, division_b.start, start_alpha, z_a)
+        if end_alpha > 0:
+            draw_dynamic_stage_division_set(stage, props_a, props_b, col, t_a, t_b, division_b.end, end_alpha, z_b)
 
 
 def draw_dynamic_stage_division_set(
@@ -354,7 +366,7 @@ def draw_divider_strip(
     pos_a: float, pos_b: float, t_a: float, t_b: float, width: float, col: int, alpha: float, z: ZIndexes
 ):
     layout = layout_preview_lane_rotated_strip(pos_a, pos_b, t_a, t_b, width, col)
-    ActiveSkin.lane_divider_preview.draw(layout, z=z.tuple, a=alpha)
+    ActiveSkin.lane_divider_preview.draw(layout, z=z.tuple, a=clamp(alpha, 0.0, 1.0))
 
 
 def bsearch_divider_mask_edge(

@@ -13,7 +13,7 @@ from sonolus.script.level import Level, LevelData
 from sonolus.script.timing import TimescaleEase
 
 from sekai.lib.connector import ConnectorKind, ConnectorLayer, SegmentPresentation, get_connector_base_kind
-from sekai.lib.ease import EaseType
+from sekai.lib.ease import EaseType, ease_overshoot
 from sekai.lib.layout import FlickDirection, StageTransformAnchor, ZoomVerticalAlign
 from sekai.lib.level_config import EngineRevision
 from sekai.lib.note import NoteKind
@@ -595,6 +595,8 @@ def _build_timescale_group(
             TransitionStyle(change.transition_style)
         except (ValueError, TypeError) as exc:
             raise ValueError(f"Timescale change {index}: unknown easing or transition style") from exc
+        if ease_overshoot(EaseType(change.timescale_ease)) > 0:
+            raise ValueError(f"Timescale change {index}: back and elastic easing are not supported")
     group = TimescaleGroup(force_note_speed=level_group.force_note_speed)
     change_entities: list[TimescaleChange] = []
     for level_change in sorted(level_group.changes, key=lambda c: c.beat):

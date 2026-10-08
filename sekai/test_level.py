@@ -1,5 +1,6 @@
 from sekai.arc_test_level import level as arc_level
 from sekai.color_demo_level import level as color_demo_level
+from sekai.easing_demo_level import level as easing_demo_level
 from sekai.elevation_demo_level import level as elevation_demo_level
 from sekai.level_utils import (
     LevelBpmChange,
@@ -1039,3 +1040,4 @@ def load_levels():
     yield elevation_demo_level
     yield note_elevation_test_level
     yield color_demo_level
+    yield easing_demo_level
