@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import Any, ClassVar
 from unittest.mock import patch
 
+from sekai.lib import layout
 from sekai.lib import stage as stage_lib
 from sekai.lib.ease import EaseType
 from sekai.watch import note as watch_note
@@ -100,6 +101,7 @@ def make_stage(index, easing, *, masking=True) -> Any:
         first_style_change_ref=styles,
         first_transform_change_ref=EventRef(),
         props=+stage_lib.StageProps,
+        visual_transform=+layout.StageTransform,
         fever_boundary=lambda: None,
     )
 
@@ -118,6 +120,16 @@ class WatchStageCacheTests(unittest.TestCase):
     def setUp(self):
         EventRef.events = {}
         self.now = 0
+        self.enterContext(patch.object(layout, "Layout", SimpleNamespace(field_h=2, approach_start=0)))
+        self.enterContext(patch.object(layout, "Options", SimpleNamespace(alternative_approach_curve=False)))
+        self.enterContext(
+            patch.object(
+                stage_lib, "current_layout_transform",
+                return_value=layout.LayoutTransform(
+                    t=0.5, w_scale=0.15, h_scale=-1, x_translate=0, rotate=0.2, stage_tilt=0.8, size_zoom=1
+                ),
+            )
+        )
         self.enterContext(patch.object(stage_lib.runtime, "time", side_effect=lambda: self.now))
         self.enterContext(patch.object(watch_note, "time", side_effect=lambda: self.now))
         self.enterContext(patch.object(stage_lib, "get_archetype_by_name", return_value=SimpleNamespace))
@@ -194,6 +206,34 @@ class WatchStageCacheTests(unittest.TestCase):
         # Reading a different time never reads the current frame cache.
         assert note.visual_extents_at(1) != right
 
+    def test_transform_cache_refreshes_at_event_steps_and_rewinds(self):
+        for easing in EaseType:
+            EventRef.events = {}
+            stage = make_stage(1, easing)
+            stage.first_transform_change_ref = event_list([
+                {
+                    "time": t,
+                    "ease": easing,
+                    "rotate": rotation,
+                    "x_lane_translate": rotation * 2,
+                    "y_lane_translate": -rotation,
+                    "elevation": elevation,
+                    "anchor": anchor,
+                }
+                for t, rotation, elevation, anchor in zip(
+                    (0, 4, 4, 8), (0, 0.7, -0.5, 0.3), (0, 2, -1, 3), (0, 1, 0, 1), strict=True
+                )
+            ])
+            for self.now in (-1, 0, 2 - 1e-10, 2, 2 + 1e-10, 4 - 1e-10, 4, 4 + 1e-10, 6, 8, 9, 4, 0, 8, 1):
+                WatchDynamicStage.update_sequential(stage)
+                if not stage.props.has_transform():
+                    continue
+                expected = stage_lib.get_stage_props(stage, self.now, right_limit=True).stage_transform()
+                for name in ("sr", "px", "py", "tx", "ty"):
+                    assert getattr(stage.visual_transform, name) == getattr(expected, name)
+                for name in ("a00", "a01", "a02", "a10", "a11", "a12", "elevation"):
+                    assert getattr(stage.visual_transform.projection, name) == getattr(expected.projection, name)
+
     def test_no_event_stage_and_unstaged_note_use_default_values(self):
         stage: Any = SimpleNamespace(
             index=1,
@@ -202,6 +242,7 @@ class WatchStageCacheTests(unittest.TestCase):
             first_style_change_ref=EventRef(),
             first_transform_change_ref=EventRef(),
             props=+stage_lib.StageProps,
+            visual_transform=+layout.StageTransform,
             fever_boundary=lambda: None,
         )
         for self.now in (-1, 0, 3, 1):

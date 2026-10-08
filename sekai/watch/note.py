@@ -614,7 +614,11 @@ class WatchBaseNote(WatchArchetype):
     def _basic_visual_stage_transform(self) -> StageTransform:
         result = +StageTransform
         if self.stage_ref.index > 0:
-            result @= self.stage_ref.get().props.stage_transform(self.elevation)
+            stage = self.stage_ref.get()
+            if self.elevation == 0.0 and stage.props.has_transform():
+                result @= stage.visual_transform
+            else:
+                result @= stage.props.stage_transform(self.elevation)
         elif self.elevation != 0.0:
             result @= compute_stage_transform(current_layout_transform(), 0.0, 0.0, 0.0, 0.0, elevation=self.elevation)
         else:
