@@ -133,7 +133,7 @@ class WatchBaseNote(WatchArchetype):
 
     kind: NoteKind = entity_data()
     # 0: untouched, 1: initialized for score sorting, 2: stage/timeline geometry ready.
-    data_init_done: int = shared_memory()
+    data_init_done: int = entity_data()
     # Another note may call init_data before this note finishes preprocessing.
     preprocess_done: bool = entity_data()
     rel_lane: float = entity_data()
@@ -144,14 +144,14 @@ class WatchBaseNote(WatchArchetype):
     scheduled_spawn_time: float = shared_memory()
     # Replay imports overwrite entity data, so keep coordinates in shared memory.
     target_position: TargetPosition = shared_memory()
-    not_render: float = entity_memory()
+    not_render: float = entity_data()
 
     trajectory_first: TrajectoryCache = entity_memory()
     trajectory_second: TrajectoryCache = entity_memory()
 
     active_connector_info: ActiveConnectorInfo = shared_memory()
 
-    hitbox: Hitbox = entity_memory()
+    hitbox: Hitbox = shared_memory()
     attach_eased_frac: float = shared_memory()
     # Keep score order separate from slide geometry and safe from replay imports.
     score_next_ref: EntityRef[WatchBaseNote] = shared_memory()
@@ -559,7 +559,7 @@ class WatchBaseNote(WatchArchetype):
                 result.transform @= blend_stage_transform(
                     head_geometry.transform,
                     tail_geometry.transform,
-                    ease(self.connector_ease, self.head_ease_frac),
+                    self.attach_eased_frac,
                 )
         else:
             result @= self._basic_input_geometry(context)
@@ -742,7 +742,7 @@ class WatchBaseNote(WatchArchetype):
                 result @= blend_stage_transform(
                     head._basic_stage_transform_at(t),
                     tail._basic_stage_transform_at(t),
-                    ease(self.connector_ease, self.head_ease_frac),
+                    self.attach_eased_frac,
                 )
         else:
             result @= self._basic_stage_transform_at(t)
