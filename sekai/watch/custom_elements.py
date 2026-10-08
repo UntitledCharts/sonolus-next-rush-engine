@@ -1,8 +1,10 @@
 from sonolus.script.archetype import EntityRef, WatchArchetype, callback, entity_memory
 from sonolus.script.runtime import is_replay, is_skip, time
+from sonolus.script.sprite import Sprite
 
 from sekai.lib import archetype_names
 from sekai.lib.custom_elements import (
+    ComboNumberCache,
     LifeManager,
     ScoreIndicator,
     draw_combo_label,
@@ -12,6 +14,7 @@ from sekai.lib.custom_elements import (
     draw_judgment_text,
 )
 from sekai.lib.options import Options
+from sekai.lib.skin import ActiveSkin
 from sekai.watch import note
 from sekai.watch.events import Fever
 
@@ -57,6 +60,11 @@ class ComboJudge(WatchArchetype):
     next_ref: EntityRef[note.WatchBaseNote] = entity_memory()
     note_index: int = entity_memory()
     checker: float = entity_memory()
+    combo_cache: ComboNumberCache = entity_memory()
+    draw_time: float = entity_memory()
+    ap: bool = entity_memory()
+    combo: int = entity_memory()
+    judgment_sprite: Sprite = entity_memory()
     name = archetype_names.COMBO_JUDGE
 
     def spawn_time(self) -> float:
@@ -68,23 +76,20 @@ class ComboJudge(WatchArchetype):
         else:
             return 1e8
 
-    def update_parallel(self):
+    def initialize(self):
         current_note = note.WatchBaseNote.at(self.note_index)
-        draw_combo_label(
-            ap=current_note.ap,
-            combo=current_note.combo,
+        self.draw_time = current_note.calc_time
+        self.ap = current_note.ap
+        self.combo = current_note.combo
+        self.combo_cache.set_combo(self.combo)
+        self.judgment_sprite = ActiveSkin.judgment.get_sprite(
+            current_note.judgment, current_note.judgment_window, current_note.accuracy
         )
-        draw_combo_number(
-            draw_time=self.spawn_time(),
-            ap=current_note.ap,
-            combo=current_note.combo,
-        )
-        draw_judgment_text(
-            draw_time=self.spawn_time(),
-            judgment=current_note.judgment,
-            windows=current_note.judgment_window,
-            accuracy=current_note.accuracy,
-        )
+
+    def update_parallel(self):
+        draw_combo_label(ap=self.ap, combo=self.combo)
+        draw_combo_number(draw_time=self.draw_time, ap=self.ap, cache=self.combo_cache)
+        draw_judgment_text(draw_time=self.draw_time, sprite=self.judgment_sprite)
 
     @callback(order=3)
     def update_sequential(self):
@@ -113,6 +118,7 @@ class ComboJudge(WatchArchetype):
 class JudgmentAccuracy(WatchArchetype):
     next_ref: EntityRef[note.WatchBaseNote] = entity_memory()
     note_index: int = entity_memory()
+    accuracy_sprite: Sprite = entity_memory()
     name = archetype_names.JUDGMENT_ACCURACY
 
     def spawn_time(self) -> float:
@@ -127,14 +133,17 @@ class JudgmentAccuracy(WatchArchetype):
         else:
             return current_note.calc_time + 0.5
 
-    def update_parallel(self):
+    def initialize(self):
         current_note = note.WatchBaseNote.at(self.note_index)
-        draw_judgment_accuracy(
-            judgment=current_note.judgment,
-            windows=current_note.judgment_window,
-            accuracy=current_note.accuracy,
-            wrong_way=current_note.wrong_way_check,
+        self.accuracy_sprite = ActiveSkin.accuracy_warning.get_sprite(
+            current_note.judgment,
+            current_note.judgment_window.perfect,
+            current_note.accuracy,
+            current_note.wrong_way_check,
         )
+
+    def update_parallel(self):
+        draw_judgment_accuracy(sprite=self.accuracy_sprite)
 
 
 class DamageFlash(WatchArchetype):

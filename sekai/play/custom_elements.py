@@ -3,10 +3,12 @@ from sonolus.script.bucket import Judgment
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp
 from sonolus.script.runtime import level_score, time
+from sonolus.script.sprite import Sprite
 
 from sekai.lib import archetype_names
 from sekai.lib.buckets import SekaiWindow
 from sekai.lib.custom_elements import (
+    ComboNumberCache,
     LifeManager,
     ScoreIndicator,
     draw_combo_label,
@@ -17,6 +19,7 @@ from sekai.lib.custom_elements import (
 )
 from sekai.lib.initialization import calculate_note_weight
 from sekai.lib.options import Options
+from sekai.lib.skin import ActiveSkin
 from sekai.play import note
 from sekai.play.events import Fever
 
@@ -36,15 +39,12 @@ def spawn_custom(
         spawn_time=time(),
         judgment=judgment,
         accuracy=accuracy,
-        windows=windows,
+        judgment_sprite=ActiveSkin.judgment.get_sprite(judgment, windows, accuracy),
     )
     if Options.custom_accuracy and judgment != Judgment.PERFECT and played_hit_effects:
         JudgmentAccuracy.spawn(
             spawn_time=time(),
-            judgment=judgment,
-            accuracy=accuracy,
-            windows=windows,
-            wrong_way=wrong_way,
+            accuracy_sprite=ActiveSkin.accuracy_warning.get_sprite(judgment, windows.perfect, accuracy, wrong_way),
         )
     if Options.custom_damage and judgment == Judgment.MISS:
         DamageFlash.spawn(spawn_time=time())
@@ -62,7 +62,8 @@ class ComboJudge(PlayArchetype):
     spawn_time: float = entity_memory()
     judgment: Judgment = entity_memory()
     accuracy: float = entity_memory()
-    windows: SekaiWindow = entity_memory()
+    judgment_sprite: Sprite = entity_memory()
+    combo_cache: ComboNumberCache = entity_memory()
     my_judge_id: int = entity_memory()
     note_index: int = entity_memory()
 
@@ -75,13 +76,8 @@ class ComboJudge(PlayArchetype):
             self.despawn = True
             return
         draw_combo_label(ap=ComboJudgeMemory.ap, combo=self.combo)
-        draw_combo_number(draw_time=self.spawn_time, ap=ComboJudgeMemory.ap, combo=self.combo)
-        draw_judgment_text(
-            draw_time=self.spawn_time,
-            judgment=self.judgment,
-            windows=self.windows,
-            accuracy=self.accuracy,
-        )
+        draw_combo_number(draw_time=self.spawn_time, ap=ComboJudgeMemory.ap, cache=self.combo_cache)
+        draw_judgment_text(draw_time=self.spawn_time, sprite=self.judgment_sprite)
 
     @callback(order=3)
     def update_sequential(self):
@@ -101,6 +97,8 @@ class ComboJudge(PlayArchetype):
 
         if self.judgment != Judgment.PERFECT:
             ComboJudgeMemory.ap = True
+
+        self.combo_cache.set_combo(self.combo)
 
         self.check_fever_count()
 
@@ -225,10 +223,7 @@ class JudgmentAccuracyMemory:
 
 class JudgmentAccuracy(PlayArchetype):
     spawn_time: float = entity_memory()
-    judgment: Judgment = entity_memory()
-    accuracy: float = entity_memory()
-    windows: SekaiWindow = entity_memory()
-    wrong_way: bool = entity_memory()
+    accuracy_sprite: Sprite = entity_memory()
     check: bool = entity_memory()
     combo: int = entity_memory()
     name = archetype_names.JUDGMENT_ACCURACY
@@ -240,9 +235,7 @@ class JudgmentAccuracy(PlayArchetype):
         if time() >= self.spawn_time + 0.5:
             self.despawn = True
             return
-        draw_judgment_accuracy(
-            judgment=self.judgment, accuracy=self.accuracy, windows=self.windows, wrong_way=self.wrong_way
-        )
+        draw_judgment_accuracy(sprite=self.accuracy_sprite)
 
     @callback(order=3)
     def update_sequential(self):
