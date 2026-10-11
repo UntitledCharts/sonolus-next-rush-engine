@@ -1384,19 +1384,45 @@ def _ease_derivative_bounds() -> Array:
     return Array(*values)
 
 
+def _curve_span_tables() -> tuple[Array, Array]:
+    runs, offsets = [0], [0]
+    for span in range(1, CURVE_BINS + 1):
+        run, offset = 1, 0
+        while run * 2 <= span:
+            offset += CURVE_BINS - run + 1
+            run *= 2
+        runs.append(run)
+        offsets.append(offset)
+    return Array(*runs), Array(*offsets)
+
+
 CURVE_DERIVATIVE_BOUNDS = _ease_derivative_bounds()
+# Resolve the two covering runs once for both derivatives instead of searching twice per span.
+CURVE_SPAN_RUNS, CURVE_SPAN_OFFSETS = _curve_span_tables()
+
+
+def _ease_derivative_indices(start: float, end: float) -> tuple[int, int]:
+    first = int(clamp(floor(start * CURVE_BINS), 0, CURVE_BINS - 1))
+    last = int(clamp(ceil(end * CURVE_BINS) - 1, first, CURVE_BINS - 1))
+    span = last - first + 1
+    run = CURVE_SPAN_RUNS[span]
+    offset = CURVE_SPAN_OFFSETS[span]
+    return offset + first, offset + last - run + 1
 
 
 def ease_derivative_bound(ease_type: EaseType, order: int, start: float, end: float) -> float:
-    first = clamp(floor(start * CURVE_BINS), 0, CURVE_BINS - 1)
-    last = clamp(ceil(end * CURVE_BINS) - 1, first, CURVE_BINS - 1)
-    run = 1
-    offset = 0
-    while run * 2 <= last - first + 1:
-        offset += CURVE_BINS - run + 1
-        run *= 2
-    base = (ease_type * 2 + order - 1) * CURVE_TABLE_SIZE + offset
-    return max(CURVE_DERIVATIVE_BOUNDS[base + first], CURVE_DERIVATIVE_BOUNDS[base + last - run + 1])
+    first, last = _ease_derivative_indices(start, end)
+    base = (ease_type * 2 + order - 1) * CURVE_TABLE_SIZE
+    return max(CURVE_DERIVATIVE_BOUNDS[base + first], CURVE_DERIVATIVE_BOUNDS[base + last])
+
+
+def _ease_slope_and_curvature(ease_type: EaseType, start: float, end: float) -> tuple[float, float]:
+    first, last = _ease_derivative_indices(start, end)
+    base = ease_type * 2 * CURVE_TABLE_SIZE
+    slope = max(CURVE_DERIVATIVE_BOUNDS[base + first], CURVE_DERIVATIVE_BOUNDS[base + last])
+    base += CURVE_TABLE_SIZE
+    curvature = max(CURVE_DERIVATIVE_BOUNDS[base + first], CURVE_DERIVATIVE_BOUNDS[base + last])
+    return slope, curvature
 
 
 def connector_curve_detail(
@@ -1424,9 +1450,8 @@ def connector_curve_detail(
     lane_change = max(abs(left_change), abs(right_change)) / abs(tail_eased - head_eased)
     approach_rate = abs(log(end_travel / start_travel))
     width = tilt_width_factor(max(start_travel, end_travel)) * DynamicLayout.w_scale
-    bend = span * ease_derivative_bound(ease_type, 2, start, end) + approach_rate * ease_derivative_bound(
-        ease_type, 1, start, end
-    )
+    slope, curvature = _ease_slope_and_curvature(ease_type, start, end)
+    bend = span * curvature + approach_rate * slope
     return sqrt(width * lane_change * span * bend / (8 * CONNECTOR_CURVE_ERROR))
 
 
