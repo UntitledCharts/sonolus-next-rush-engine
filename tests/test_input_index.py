@@ -20,7 +20,8 @@ from sonolus.script.debug import simulation_context
 from sonolus.script.engine import EngineData, PlayMode
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import Interval
-from sonolus.script.quad import Rect
+from sonolus.script.quad import Quad, Rect
+from sonolus.script.record import Record
 from sonolus.script.runtime import Touch
 from sonolus.script.values import alloc
 from sonolus.script.vec import Vec2
@@ -168,6 +169,32 @@ class InputIndexTests(unittest.TestCase):
                         for target in registry.values():
                             target.captured_touch_id = 99
 
+    def test_priority_cache_matches_scans_before_and_after_many_queries(self):
+        with simulation_context():
+            specs = [
+                {
+                    "beat": (i * 31) % 97 - 48,
+                    "target_time": 1,
+                    "trace": i < 24,
+                    "captured": 0,
+                    "x": 0,
+                    "width": 1,
+                    "kind": NoteKind.NORM_TAP,
+                    "interval": (0, 2),
+                }
+                for i in range(96)
+            ]
+            active, _ = make_notes(specs)
+            touch = SimpleNamespace(time=1, position=Vec2(0, 0))
+            with patch.object(
+                manager, "note", SimpleNamespace(NoteMemory=SimpleNamespace(active_tap_input_notes=active))
+            ):
+                query = TapPriorityQuery.new()
+                for beat in range(-60, 60):
+                    assert query.contains(active, touch, beat, manager.has_priority_tap) == manager.has_priority_tap(
+                        cast(Touch, touch), beat
+                    )
+
     def test_full_allocator_matches_previous_choices_and_lockouts(self):
         rng = random.Random(277)
         with simulation_context():
@@ -217,10 +244,79 @@ class InputIndexTests(unittest.TestCase):
                 ):
                     manager.preassign_taps()
                 assert (empty, releases) == expected_events, case
-                assert [ref.index for ref in actual] == [ref.index for ref in expected], case
+                if any(touch.started for touch in touches[: manager.INPUT_SLOTS]):
+                    assert [ref.index for ref in actual] == [ref.index for ref in expected], case
                 assert [(n.captured_touch_id, n.captured_touch_time) for n in actual_registry.values()] == [
                     (n.captured_touch_id, n.captured_touch_time) for n in expected_registry.values()
                 ], case
+
+
+class IdleInputTests(unittest.TestCase):
+    def test_empty_windows_and_ineligible_touches_skip_sorting_and_assignment(self):
+        for assign, flag, active_name in (
+            (manager.preassign_taps, "started", "active_tap_input_notes"),
+            (manager.preassign_releases, "ended", "active_release_input_notes"),
+        ):
+            for count, touch_count, eligible_index in ((0, 2, 0), (32, 0, -1), (256, 16, -1), (32, 17, 16)):
+                active = [None] * count
+                touches = [SimpleNamespace(**{flag: i == eligible_index}) for i in range(touch_count)]
+                with (
+                    patch.object(manager, "note", SimpleNamespace(NoteMemory=SimpleNamespace(**{active_name: active}))),
+                    patch.object(manager, "processed_touches", return_value=touches),
+                    patch.object(manager, "sort_input_notes") as sort,
+                    patch.object(manager, "disallow_empty") as disallow,
+                ):
+                    assign()
+                    sort.assert_not_called()
+                    disallow.assert_not_called()
+
+    def test_later_eligible_input_preserves_stable_ties_after_idle_callbacks(self):
+        with simulation_context():
+            for assign, flag, active_name in (
+                (manager.preassign_taps, "started", "active_tap_input_notes"),
+                (manager.preassign_releases, "ended", "active_release_input_notes"),
+            ):
+                specs = [
+                    {
+                        "beat": i,
+                        "target_time": 1 if i % 3 else 1.01,
+                        "trace": False,
+                        "captured": 0,
+                        "x": 0,
+                        "width": 1,
+                        "kind": NoteKind.NORM_TAP,
+                        "interval": (0, 2),
+                    }
+                    for i in range(32)
+                ]
+                active, registry = make_notes(specs)
+                for target in registry.values():
+                    target.active_head_ref = SimpleNamespace(index=0)
+                touch = SimpleNamespace(id=1, started=False, ended=False, time=1, start_time=0.9, position=Vec2(0, 0))
+                with (
+                    patch.object(manager, "note", SimpleNamespace(NoteMemory=SimpleNamespace(**{active_name: active}))),
+                    patch.object(manager, "processed_touches", return_value=[touch]),
+                    patch.object(manager, "time", return_value=1),
+                    patch.object(manager, "DynamicLayout", SimpleNamespace(w_scale=1)),
+                    patch.object(manager, "disallow_empty"),
+                    patch.object(manager, "disallow_release"),
+                    patch.object(manager, "is_allowed_release", return_value=True),
+                ):
+                    for _ in range(3):
+                        assign()
+                    setattr(touch, flag, True)
+                    assign()
+                assert registry[2].captured_touch_id == 1
+                assert sum(target.captured_touch_id != 0 for target in registry.values()) == 1
+                assert [ref.index for ref in active] == sorted(registry, key=lambda i: registry[i].target_time)
+
+
+class FixtureConnectorInfo(Record):
+    input_bounds: Quad
+
+
+class FixtureHead(PlayArchetype):
+    active_connector_info: FixtureConnectorInfo = shared_memory()
 
 
 class FixtureNote(PlayArchetype):
@@ -232,11 +328,13 @@ class FixtureNote(PlayArchetype):
     kind: NoteKind = shared_memory()
     unadjusted_input_interval: Interval = shared_memory()
     hitbox: Hitbox = shared_memory()
+    active_head_ref: EntityRef[FixtureHead] = shared_memory()
 
 
 @level_memory
 class FixtureNotes:
     active_tap_input_notes: VarArray[EntityRef[FixtureNote], Dim[256]]
+    active_release_input_notes: VarArray[EntityRef[FixtureNote], Dim[256]]
 
 
 def fixture_time():
@@ -248,18 +346,20 @@ def run_fixture(probe, assign):
     manager.InputState.disallowed_empty_touches.clear()
     manager.InputState.disallowed_release_touches.clear()
     FixtureNotes.active_tap_input_notes.clear()
+    FixtureNotes.active_release_input_notes.clear()
     DynamicLayout.w_scale = 1
     for i in range(probe.touch_count):
         touch = alloc(Touch)
         touch.id = i + 1
-        touch.started = True
+        touch.started = probe.touch_events == 0 or (probe.touch_events == 3 and i == 16)
+        touch.ended = probe.touch_events == 2 or (probe.touch_events == 4 and i == 16)
         touch.time = 1
         touch.start_time = 0.9
         touch.position = Vec2(0, 0)
         manager.InputState.processed_touches.append(touch)
     for i in range(probe.note_count):
         target = FixtureNote.at(i + 1)
-        target.beat = 1 if probe.same_beat else i
+        target.beat = 1 if probe.same_beat else (i * 31) % probe.note_count if probe.beat_order else i
         target.target_time = 1 if probe.shape == 2 else 1 + (probe.note_count - i if probe.shape == 1 else i) / 512
         target.is_trace_flick = i < probe.trace_count
         target.kind = NoteKind.NORM_TRACE_FLICK if target.is_trace_flick else NoteKind.NORM_TAP
@@ -267,7 +367,9 @@ def run_fixture(probe, assign):
         target.captured_touch_time = 0
         target.unadjusted_input_interval = Interval(0, 2)
         target.hitbox = Hitbox(HitboxTarget(Vec2(-1, 0), Vec2(1, 0)), Rect(-1, 1, 1, -1).as_quad())
+        target.active_head_ref.index = 0
         FixtureNotes.active_tap_input_notes.append(target.ref())
+        FixtureNotes.active_release_input_notes.append(target.ref())
     assign()
     probe.captured = 0
     probe.snapshot = 0
@@ -283,11 +385,18 @@ class CompiledInputProbe(PlayArchetype):
     touch_count: int = imported()
     shape: int = imported()
     same_beat: bool = imported()
+    touch_events: int = imported()
+    beat_order: bool = imported()
     captured: int = entity_memory()
     snapshot: float = entity_memory()
 
     def update_sequential(self):
         run_fixture(self, manager.preassign_taps)
+
+
+class CompiledReleaseProbe(CompiledInputProbe):
+    def update_sequential(self):
+        run_fixture(self, manager.preassign_releases)
 
 
 class CompiledInputIndexTests(unittest.TestCase):
@@ -298,7 +407,9 @@ class CompiledInputIndexTests(unittest.TestCase):
             patch.object(manager, "note", fixture_module),
             patch.object(manager, "time", fixture_time),
         ):
-            packaged = package_engine(EngineData(play=PlayMode(archetypes=[FixtureNote, CompiledInputProbe])))
+            packaged = package_engine(
+                EngineData(play=PlayMode(archetypes=[FixtureHead, FixtureNote, CompiledInputProbe, CompiledReleaseProbe]))
+            )
         payload = cast(dict[str, Any], unpackage_data(packaged.play_data))
         nodes = []
         for node in payload["nodes"]:
@@ -308,31 +419,42 @@ class CompiledInputIndexTests(unittest.TestCase):
                 else FunctionNode(Op(node["func"]), tuple(nodes[i] for i in node["args"]))
             )
         rom = gzip.decompress(packaged.rom)
-        archetype = payload["archetypes"][1]
-        for shape, traces, touches, same_beat, expected in (
-            (0, 0, 2, False, 5),
-            (1, 32, 2, False, 94),
-            (2, 32, 2, False, 5),
-            (2, 31, 2, True, 34),
-            (2, 32, 16, False, 1496),
-            (2, 32, 17, False, 1496),
+        for probe_index, count, shape, traces, touches, events, same_beat, expected_count, expected in (
+            (2, 32, 0, 0, 2, 0, False, 2, 5),
+            (2, 32, 1, 32, 2, 0, False, 2, 94),
+            (2, 32, 2, 32, 2, 0, False, 2, 5),
+            (2, 32, 2, 31, 2, 0, True, 2, 34),
+            (2, 32, 2, 32, 16, 0, False, 16, 1496),
+            (2, 32, 2, 32, 17, 0, False, 16, 1496),
+            (2, 256, 1, 256, 16, 1, False, 0, 0),
+            (2, 32, 1, 0, 17, 3, False, 0, 0),
+            (2, 0, 0, 0, 2, 0, False, 0, 0),
+            (3, 32, 1, 0, 2, 2, False, 2, 94),
+            (3, 32, 2, 0, 2, 2, False, 2, 5),
+            (3, 32, 2, 0, 17, 2, False, 16, 1496),
+            (3, 256, 1, 0, 16, 1, False, 0, 0),
+            (3, 32, 1, 0, 17, 4, False, 0, 0),
+            (3, 0, 0, 0, 2, 2, False, 0, 0),
+            (2, 128, 2, 64, 2, 0, False, 2, 5),
+            (2, 128, 2, 127, 2, 0, True, 2, 130),
         ):
+            archetype = payload["archetypes"][probe_index]
             runner = Interpreter()
             runner.blocks = {block: [0.0] * 32768 for block in PlayBlock}
             runner.blocks[PlayBlock.EngineRom] = list(struct.unpack(f"<{len(rom) // 4}f", rom))
             values = {
-                "note_count": 32,
+                "note_count": count,
                 "trace_count": traces,
                 "touch_count": touches,
                 "shape": shape,
                 "same_beat": same_beat,
+                "touch_events": events,
+                "beat_order": count == 128,
             }
             for field in archetype["imports"]:
                 runner.set(PlayBlock.EntityData, field["index"], values[field["name"]])
             runner.run(nodes[archetype["updateSequential"]["index"]])
-            assert runner.get(PlayBlock.EntityMemory, CompiledInputProbe._memory_fields_["captured"].offset) == min(
-                touches, 16
-            )
+            assert runner.get(PlayBlock.EntityMemory, CompiledInputProbe._memory_fields_["captured"].offset) == expected_count
             assert runner.get(PlayBlock.EntityMemory, CompiledInputProbe._memory_fields_["snapshot"].offset) == expected
 
 
