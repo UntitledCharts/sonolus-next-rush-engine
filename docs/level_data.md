@@ -1,5 +1,13 @@
 # Next Sekai Level Data Format
 
+## String Fields
+
+Fields documented as `string`, such as `editorName`, store literal text in `ref`, rather than an entity reference.
+
+```json
+{"name": "editorName", "ref": "Main group"}
+```
+
 ## Types
 
 ### EaseType
@@ -61,6 +69,17 @@ Represents a dynamic stage. The presence of at least one **Stage** enables dynam
 * **firstPivotChange (ref?[StagePivotChange])**: A reference to the first **StagePivotChange** event.
 * **firstStyleChange (ref?[StageStyleChange])**: A reference to the first **StageStyleChange** event.
 * **firstTransformChange (ref?[StageTransformChange])**: A reference to the first **StageTransformChange** event.
+* **editorName (string)**: [Editor] Display name.
+* **editorFolder (ref?[EditorStageFolder])**: [Editor] The folder containing this stage.
+
+## EditorStageFolder
+
+[Editor] A folder of dynamic stages. Ignored by the engine.
+
+### Fields
+
+* **editorName (string)**: Display name. Defaults to the entity name.
+* **editorIndex (int)**: Number of preceding stages; positions empty folders. Defaults to the end.
 
 ## StageMaskChange
 
@@ -131,6 +150,7 @@ An event that controls the visual style of a stage.
 * **noteAlpha (float)**: Multiplies the alpha of the notes currently on the stage, including connectors. Defaults to 1.
 * **ease (EaseType)**
 * **next (ref?[StageStyleChange])**: A reference to the next **StageStyleChange** event.
+* **editorLane (float)**: [Editor] Horizontal marker position, in lanes. Defaults to 0.
 
 ## StageTransformChange
 
@@ -158,6 +178,7 @@ The standard bpm change archetype.
 
 * **#BEAT (float)**
 * **#BPM (float)**
+* **meter (float)**: [Editor] Beats per measure. Must be positive. Defaults to 4.
 
 ## #TIMESCALE_GROUP
 
@@ -167,6 +188,17 @@ Represents a timescale group and is referenced by notes and timescale changes.
 
 * **first (ref[#TIMESCALE_CHANGE])**: [Temporary] a reference to the first change
 * **forceNoteSpeed (float)**: If greater than 0 (valid range 1–12), overrides the effective note speed for notes attached to this group, and bypasses the stage-cover FIXED_ONLY scroll-speed compensation. A value of 0 means follow the user's #NOTE_SPEED option.
+* **editorName (string)**: [Editor] Display name.
+* **editorFolder (ref?[EditorGroupFolder])**: [Editor] The folder containing this group.
+
+## EditorGroupFolder
+
+[Editor] A folder of timescale groups. Ignored by the engine.
+
+### Fields
+
+* **editorName (string)**: Display name. Defaults to the entity name.
+* **editorIndex (int)**: Number of preceding groups; positions empty folders. Defaults to the end.
 
 ## #TIMESCALE_CHANGE
 
@@ -184,6 +216,7 @@ A timescale change event.
   * SCROLL = 1
 * **next (ref[#TIMESCALE_CHANGE])**: [Temporary] a reference to the next change
 * **hideNotes**: Whether to hide notes while this change is active.
+* **editorLane (float)**: [Editor] Horizontal marker position, in lanes. Defaults to -6.
 
 ## *Note
 
