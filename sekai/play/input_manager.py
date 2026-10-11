@@ -14,6 +14,7 @@ from sekai.lib.layout import DynamicLayout, Layout, segment_closeness_score, sta
 from sekai.lib.note import is_head
 from sekai.lib.options import Options
 from sekai.play import note
+from sekai.play.input_index import TapPriorityQuery, sort_input_notes
 
 INPUT_SLOTS = 16
 INPUT_SCORE_TIME_SCALE = 0.05
@@ -132,7 +133,7 @@ def is_previous_touch_disallowed() -> bool:
 
 def preassign_taps():
     active = note.NoteMemory.active_tap_input_notes
-    active.sort(key=lambda ref: ref.get().target_time)
+    sort_input_notes(active)
 
     input_assigned = +Array[bool, Dim[INPUT_SLOTS]]
     for i in range(INPUT_SLOTS):
@@ -151,6 +152,8 @@ def preassign_taps():
             if input_assigned[i]:
                 continue
             touch = processed_touches()[i]
+            # Captures change between allocation rounds, so each query scope is fresh.
+            priority = TapPriorityQuery.new()
             for note_i in range(len(active)):
                 target_note = active[note_i].get()
                 if target_note.captured_touch_id != 0:
@@ -161,7 +164,7 @@ def preassign_taps():
                     continue
                 # Trace flicks consume tap starts, but yield to other notes on the same beat.
                 # A touch inside both hitboxes is in their overlap, regardless of stage transforms.
-                if target_note.is_trace_flick and has_priority_tap(touch, target_note.beat):
+                if target_note.is_trace_flick and priority.contains(active, touch, target_note.beat, has_priority_tap):
                     continue
                 score = (
                     segment_closeness_score(touch.position, target_note.hitbox.target) / DynamicLayout.w_scale
@@ -213,7 +216,7 @@ def has_priority_tap(touch: Touch, beat: float) -> bool:
 
 def preassign_releases():
     active = note.NoteMemory.active_release_input_notes
-    active.sort(key=lambda ref: ref.get().target_time)
+    sort_input_notes(active)
 
     input_assigned = +Array[bool, Dim[INPUT_SLOTS]]
     for i in range(INPUT_SLOTS):
