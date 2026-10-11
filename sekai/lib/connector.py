@@ -1,5 +1,5 @@
 from enum import IntEnum
-from math import ceil, cos, floor, inf, log, pi, sin, sqrt
+from math import ceil, cos, e, floor, inf, log, pi, sin, sqrt
 from typing import Literal, Self, assert_never, cast
 
 from sonolus.script.archetype import EntityRef
@@ -1401,6 +1401,74 @@ CURVE_DERIVATIVE_BOUNDS = _ease_derivative_bounds()
 CURVE_SPAN_RUNS, CURVE_SPAN_OFFSETS = _curve_span_tables()
 
 
+def _exponential_chord_bounds() -> Array:
+    # Maximum of the Green function for r'' - rate*r', on a unit interval.
+    # It decreases with |rate|; the left bin endpoint is a conservative lookup.
+    values = [1 / 8]
+    for i in range(1, 193):
+        rate = i / 16
+        change = e**rate - 1
+        critical = log(change / rate) / rate
+        peak = (critical - 1 / rate + 1 / change) / rate
+        values.append(min(1 / 8, peak + 1e-7))
+    return Array(*values)
+
+
+EXPONENTIAL_CHORD_BOUNDS = _exponential_chord_bounds()
+
+
+def polynomial_connector_detail(
+    ease_type: EaseType,
+    head_eased: float,
+    tail_eased: float,
+    start: float,
+    end: float,
+    edge_change: float,
+    start_travel: float,
+    end_travel: float,
+    quality: float,
+    translation_change: float = 0.0,
+) -> float:
+    """Bound actual chord error for polynomial easing under exponential approach.
+
+    x(t) = travel(t)*(a + b*t + c*t*t). Subtracting the chord removes a;
+    the residual satisfies r'' - rate*r' = travel(t)*(rate*(b + 2*c*t) + 2*c).
+    Bound this source at both endpoints and its sole interior extremum.
+    """
+    if edge_change == 0 and translation_change == 0:
+        return 0.0
+    span = end - start
+    b = span / (tail_eased - head_eased)
+    c = 0.0
+    if ease_type == EaseType.IN_QUAD:
+        c = b * span
+        b *= 2 * start
+    elif ease_type == EaseType.OUT_QUAD:
+        c = -b * span
+        b *= 2 * (1 - start)
+    rate = log(end_travel / start_travel)
+    first = rate * b + 2 * c
+    last = first + 2 * rate * c
+    source = max(start_travel * abs(first), end_travel * abs(last))
+    if rate * c != 0:
+        critical = -(rate * b + 4 * c) / (2 * rate * c)
+        if 0 < critical < 1:
+            source = max(source, 2 * abs(c) * start_travel * e ** (rate * critical))
+    source *= edge_change * abs(DynamicLayout.w_scale)
+    source += translation_change * max(abs(2 * c - rate * b), abs(2 * c - rate * (b + 2 * c)))
+    # Include a margin for f32 ROM and runtime rounding.
+    scaled_error = source * quality * quality / (CONNECTOR_CURVE_ERROR * 0.999)
+    count = max(1, ceil(sqrt(scaled_error / 8)))
+    while count > 1:
+        trial = count - 1
+        bucket = int(min(192, floor(abs(rate) * 16 / trial)))
+        if scaled_error * EXPONENTIAL_CHORD_BOUNDS[bucket] > trial * trial:
+            break
+        count = trial
+    # ceil(detail * quality) must retain count after division roundoff.
+    return (count - 1e-6) / quality
+
+
 def _ease_derivative_indices(start: float, end: float) -> tuple[int, int]:
     first = int(clamp(floor(start * CURVE_BINS), 0, CURVE_BINS - 1))
     last = int(clamp(ceil(end * CURVE_BINS) - 1, first, CURVE_BINS - 1))
@@ -1624,7 +1692,65 @@ def draw_connector_default(
     )
     constant_transform = has_transform and transforms_equal
     heterogeneous_endpoints = (has_transform and not constant_transform) or (mask_enabled and not same_mask_stage)
-    if heterogeneous_endpoints:
+    quality = get_connector_quality_option(kind)
+    polynomial_transform = not has_transform or constant_transform
+    polynomial_detail = False
+    edge_scale = 1.0
+    translation_change = 0.0
+    if has_transform and not constant_transform:
+        assert head_transform is not None
+        assert tail_transform is not None
+        if (
+            head_transform.sr == tail_transform.sr
+            and head_transform.px == tail_transform.px
+            and head_transform.py == tail_transform.py
+            and head_transform.projection == tail_transform.projection
+        ):
+            polynomial_transform = True
+            translation_change = sqrt(
+                (tail_transform.tx - head_transform.tx) ** 2 + (tail_transform.ty - head_transform.ty) ** 2
+            )
+    if (
+        EaseType.LINEAR <= ease_type <= EaseType.OUT_QUAD
+        and quality > 0
+        and polynomial_transform
+        and not mask_enabled
+        and constant_interp_frac < 0
+        and DynamicLayout.stage_tilt == 1
+        and DynamicLayout.width_offset == 0
+        and not Options.alternative_approach_curve
+        and min(start_travel, end_travel) > 0
+        and min(start_ease_frac, end_ease_frac) >= 0
+        and max(start_ease_frac, end_ease_frac) <= 1
+        and abs(tail_eased - head_eased) >= 1e-6
+    ):
+        polynomial_detail = True
+        if has_transform and polynomial_transform:
+            assert head_transform is not None
+            projection = head_transform.projection
+            if projection != IDENTITY_STAGE_SCREEN_TRANSFORM:
+                cs = cos(-DynamicLayout.rotate)
+                sn = sin(-DynamicLayout.rotate)
+                edge_scale = sqrt(
+                    (projection.a00 * cs + projection.a01 * sn) ** 2
+                    + (projection.a10 * cs + projection.a11 * sn) ** 2
+                )
+        geometry_detail = polynomial_connector_detail(
+            ease_type,
+            head_eased,
+            tail_eased,
+            start_ease_frac,
+            end_ease_frac,
+            edge_scale * max(
+                abs(tail_lane - tail_size - head_lane + head_size),
+                abs(tail_lane + tail_size - head_lane - head_size),
+            ),
+            start_travel,
+            end_travel,
+            quality,
+            translation_change,
+        )
+    elif heterogeneous_endpoints:
         geometry_detail = 20.0
     else:
         geometry_detail = connector_curve_detail(
@@ -1638,7 +1764,6 @@ def draw_connector_default(
             start_travel,
             end_travel,
         )
-    quality = get_connector_quality_option(kind)
     circular_fracs = VarArray[float, Dim[128]].new()
     if (
         EaseType.IN_CIRC <= ease_type <= EaseType.OUT_IN_CIRC
@@ -1772,17 +1897,34 @@ def draw_connector_default(
             piece_end_travel = approach(
                 lerp(start_visual_progress, end_visual_progress, (piece + 1) / CONNECTOR_CURVE_PIECES)
             )
-            detail = connector_curve_detail(
-                ease_type,
-                head_eased,
-                tail_eased,
-                lerp(start_ease_frac, end_ease_frac, piece / CONNECTOR_CURVE_PIECES),
-                lerp(start_ease_frac, end_ease_frac, (piece + 1) / CONNECTOR_CURVE_PIECES),
-                tail_lane - tail_size - (head_lane - head_size),
-                tail_lane + tail_size - (head_lane + head_size),
-                piece_start_travel,
-                piece_end_travel,
-            )
+            if polynomial_detail:
+                detail = polynomial_connector_detail(
+                    ease_type,
+                    head_eased,
+                    tail_eased,
+                    lerp(start_ease_frac, end_ease_frac, piece / CONNECTOR_CURVE_PIECES),
+                    lerp(start_ease_frac, end_ease_frac, (piece + 1) / CONNECTOR_CURVE_PIECES),
+                    edge_scale * max(
+                        abs(tail_lane - tail_size - head_lane + head_size),
+                        abs(tail_lane + tail_size - head_lane - head_size),
+                    ),
+                    piece_start_travel,
+                    piece_end_travel,
+                    quality,
+                    translation_change,
+                )
+            else:
+                detail = connector_curve_detail(
+                    ease_type,
+                    head_eased,
+                    tail_eased,
+                    lerp(start_ease_frac, end_ease_frac, piece / CONNECTOR_CURVE_PIECES),
+                    lerp(start_ease_frac, end_ease_frac, (piece + 1) / CONNECTOR_CURVE_PIECES),
+                    tail_lane - tail_size - (head_lane - head_size),
+                    tail_lane + tail_size - (head_lane + head_size),
+                    piece_start_travel,
+                    piece_end_travel,
+                )
             piece_counts.append(max(1, ceil(detail * quality), alpha_count))
             total += piece_counts[piece]
             piece_start_travel = piece_end_travel
