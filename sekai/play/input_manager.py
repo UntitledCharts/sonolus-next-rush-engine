@@ -133,6 +133,10 @@ def is_previous_touch_disallowed() -> bool:
 
 def preassign_taps():
     active = note.NoteMemory.active_tap_input_notes
+    if len(active) == 0 or not any(
+        processed_touches()[i].started for i in range(min(INPUT_SLOTS, len(processed_touches())))
+    ):
+        return
     sort_input_notes(active)
 
     input_assigned = +Array[bool, Dim[INPUT_SLOTS]]
@@ -202,9 +206,14 @@ def preassign_taps():
             break
 
 
-def has_priority_tap(touch: Touch, beat: float) -> bool:
+def has_priority_tap(touch: Touch, beat: float, query: TapPriorityQuery | None = None) -> bool:
     for ref in note.NoteMemory.active_tap_input_notes:
         target_note = ref.get()
+        if query is not None and target_note.captured_touch_id == 0:
+            if target_note.is_trace_flick:
+                query.observed_traces += 1
+            else:
+                query.has_candidates = True
         if target_note.is_trace_flick or target_note.beat != beat or target_note.captured_touch_id != 0:
             continue
         if touch.time not in target_note.unadjusted_input_interval:
@@ -216,6 +225,10 @@ def has_priority_tap(touch: Touch, beat: float) -> bool:
 
 def preassign_releases():
     active = note.NoteMemory.active_release_input_notes
+    if len(active) == 0 or not any(
+        processed_touches()[i].ended for i in range(min(INPUT_SLOTS, len(processed_touches())))
+    ):
+        return
     sort_input_notes(active)
 
     input_assigned = +Array[bool, Dim[INPUT_SLOTS]]
