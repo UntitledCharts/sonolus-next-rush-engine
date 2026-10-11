@@ -116,6 +116,8 @@ class WatchConnector(WatchArchetype):
             and head.elevation == tail.elevation
         )
         self.kind = self.segment_head.segment_kind
+        if self.active_head_ref.index <= 0 and get_connector_alpha_option(self.kind) <= 0:
+            return
         self.ease_type = head.connector_ease
         self.visual_active_interval.start = min(head.target_time, tail.target_time)
         self.visual_active_interval.end = max(head.target_time, tail.target_time)
