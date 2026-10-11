@@ -119,6 +119,8 @@ class WatchDynamicStage(WatchArchetype):
     note_visibility_end: float = entity_data()
 
     props: StageProps = shared_memory()
+    # Shared frame geometry for notes, including components used by attachment blends.
+    visual_transform: StageTransform = shared_memory()
 
     @callback(order=-2)
     def preprocess(self):
@@ -149,6 +151,8 @@ class WatchDynamicStage(WatchArchetype):
     @callback(order=-2)
     def update_sequential(self):
         self.props @= get_stage_props(self, right_limit=True)
+        if self.props.has_transform():
+            self.visual_transform @= self.props.stage_transform()
         self.fever_boundary()
 
     def fever_boundary(self):
@@ -157,7 +161,7 @@ class WatchDynamicStage(WatchArchetype):
             r = self.props.lane + self.props.width
             stage_transform = +StageTransform
             if self.props.has_transform():
-                stage_transform @= self.props.stage_transform()
+                stage_transform @= self.visual_transform
             else:
                 stage_transform @= identity_stage_transform()
             transform = stage_transform.to_screen_transform()
@@ -194,7 +198,7 @@ class WatchDynamicStage(WatchArchetype):
                 r = self.props.lane + self.props.width
                 stage_transform = +StageTransform
                 if self.props.has_transform():
-                    stage_transform @= self.props.stage_transform()
+                    stage_transform @= self.visual_transform
                 else:
                     stage_transform @= identity_stage_transform()
                 draw_judgment_effect(
