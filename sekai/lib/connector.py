@@ -710,6 +710,78 @@ def get_connector_quality_option(kind: ConnectorKind) -> float:
             assert_never(base_kind)
 
 
+def get_connector_sprites(kind: ConnectorKind) -> tuple[BaseConnectorKind, Sprite, Sprite]:
+    normal_sprite = Sprite(-1)
+    active_sprite = Sprite(-1)
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
+        case (
+            ConnectorKind.ACTIVE_NORMAL
+            | ConnectorKind.ACTIVE_CRITICAL
+            | ConnectorKind.FAKE_ACTIVE_NORMAL
+            | ConnectorKind.FAKE_ACTIVE_CRITICAL
+        ):
+            sprites = get_active_connector_sprites(cast(ActiveConnectorKind, kind))
+            normal_sprite @= sprites.connection.normal
+            active_sprite @= sprites.connection.active
+        case (
+            ConnectorKind.GUIDE_NEUTRAL
+            | ConnectorKind.GUIDE_RED
+            | ConnectorKind.GUIDE_GREEN
+            | ConnectorKind.GUIDE_BLUE
+            | ConnectorKind.GUIDE_YELLOW
+            | ConnectorKind.GUIDE_PURPLE
+            | ConnectorKind.GUIDE_CYAN
+            | ConnectorKind.GUIDE_BLACK
+        ):
+            sprites = get_guide_connector_sprite(cast(GuideConnectorKind, kind))
+            normal_sprite @= sprites
+        case ConnectorKind.DAMAGE:
+            normal_sprite @= get_damage_connector_sprite(kind)
+            active_sprite @= get_damage_connector_active_sprite(kind)
+        case ConnectorKind.FAKE_DAMAGE:
+            normal_sprite @= get_damage_connector_sprite(kind)
+        case ConnectorKind.NONE:
+            pass
+        case _:
+            assert_never(base_kind)
+
+    return base_kind, normal_sprite, active_sprite
+
+
+class ConnectorRenderStyle(Record):
+    """Skin, option, and depth components that stay fixed during a level."""
+
+    base_kind: ConnectorKind
+    is_fake: bool
+    normal_sprite: Sprite
+    active_sprite: Sprite
+    z_normal: ZIndexes
+    z_active: ZIndexes
+    alpha: float
+    quality: float
+
+    @classmethod
+    def new(cls, kind: ConnectorKind, target_time: float, lane: float, layer: ConnectorLayer) -> Self:
+        base_kind, normal_sprite, active_sprite = get_connector_sprites(kind)
+        z_normal = get_connector_z(kind, target_time, lane, active=False, layer=layer)
+        z_active = get_connector_z(kind, target_time, lane, active=True, layer=layer)
+        # Only the elapsed-time component changes while rendering, including Watch rewinds.
+        z_normal.z3 = target_time
+        z_active.z3 = target_time
+        return cls(
+            base_kind,
+            base_kind
+            in {ConnectorKind.FAKE_ACTIVE_NORMAL, ConnectorKind.FAKE_ACTIVE_CRITICAL, ConnectorKind.FAKE_DAMAGE},
+            normal_sprite,
+            active_sprite,
+            z_normal,
+            z_active,
+            get_connector_alpha_option(kind),
+            get_connector_quality_option(kind),
+        )
+
+
 def draw_connector(
     kind: ConnectorKind,
     visual_state: ConnectorVisualState,
@@ -743,6 +815,7 @@ def draw_connector(
     elevation_transform: ElevationTransform | None = None,
     head_alpha_frac: float = -1.0,
     tail_alpha_frac: float = -1.0,
+    render_style: ConnectorRenderStyle | None = None,
 ):
     elevation_dynamic = ease_over_elevation and not shared_transform
     match presentation:
@@ -771,46 +844,20 @@ def draw_connector(
         case _:
             assert_never(presentation)
 
-    if Options.disable_fake_notes and is_fake_connector(kind):
+    if Options.disable_fake_notes and (is_fake_connector(kind) if render_style is None else render_style.is_fake):
         return
 
     if head_note_alpha <= 0 and tail_note_alpha <= 0:
         return
 
-    normal_sprite = Sprite(-1)
-    active_sprite = Sprite(-1)
-    base_kind = get_connector_base_kind(kind)
-    match base_kind:
-        case (
-            ConnectorKind.ACTIVE_NORMAL
-            | ConnectorKind.ACTIVE_CRITICAL
-            | ConnectorKind.FAKE_ACTIVE_NORMAL
-            | ConnectorKind.FAKE_ACTIVE_CRITICAL
-        ):
-            sprites = get_active_connector_sprites(cast(ActiveConnectorKind, kind))
-            normal_sprite @= sprites.connection.normal
-            active_sprite @= sprites.connection.active
-        case (
-            ConnectorKind.GUIDE_NEUTRAL
-            | ConnectorKind.GUIDE_RED
-            | ConnectorKind.GUIDE_GREEN
-            | ConnectorKind.GUIDE_BLUE
-            | ConnectorKind.GUIDE_YELLOW
-            | ConnectorKind.GUIDE_PURPLE
-            | ConnectorKind.GUIDE_CYAN
-            | ConnectorKind.GUIDE_BLACK
-        ):
-            sprites = get_guide_connector_sprite(cast(GuideConnectorKind, kind))
-            normal_sprite @= sprites
-        case ConnectorKind.DAMAGE:
-            normal_sprite @= get_damage_connector_sprite(kind)
-            active_sprite @= get_damage_connector_active_sprite(kind)
-        case ConnectorKind.FAKE_DAMAGE:
-            normal_sprite @= get_damage_connector_sprite(kind)
-        case ConnectorKind.NONE:
-            return
-        case _:
-            assert_never(base_kind)
+    if render_style is None:
+        base_kind, normal_sprite, active_sprite = get_connector_sprites(kind)
+    else:
+        normal_sprite = +render_style.normal_sprite
+        active_sprite = +render_style.active_sprite
+        base_kind = cast(BaseConnectorKind, render_style.base_kind)
+    if base_kind == ConnectorKind.NONE:
+        return
 
     match base_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_CRITICAL:
@@ -866,10 +913,19 @@ def draw_connector(
     if time() >= tail_target_time and not bypass_tail_target_time_check:
         return
 
-    z_normal = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=False, layer=layer)
+    z_normal = +ZIndexes
     z_active = +ZIndexes
+    if render_style is None:
+        z_normal @= get_connector_z(kind, segment_head_target_time, segment_head_lane, active=False, layer=layer)
+    else:
+        z_normal @= render_style.z_normal
+        z_normal.z3 -= time()
     if visual_state == ConnectorVisualState.ACTIVE and active_sprite.is_available:
-        z_active @= get_connector_z(kind, segment_head_target_time, segment_head_lane, active=True, layer=layer)
+        if render_style is None:
+            z_active @= get_connector_z(kind, segment_head_target_time, segment_head_lane, active=True, layer=layer)
+        else:
+            z_active @= render_style.z_active
+            z_active.z3 -= time()
     else:
         z_active @= z_normal
 
@@ -940,6 +996,8 @@ def draw_connector(
                     elevation_transform=elevation_transform,
                     elevation_start_frac=0.0 if first_piece else split_frac,
                     elevation_end_frac=1.0 if last_piece else split_frac,
+                    alpha_option=None if render_style is None else render_style.alpha,
+                    quality=None if render_style is None else render_style.quality,
                 )
         case SegmentPresentation.FULL_SCREEN:
             if head_transform is not None and tail_transform is not None:
@@ -1876,6 +1934,8 @@ def draw_connector_default(
     elevation_transform: ElevationTransform | None = None,
     elevation_start_frac: float = 0.0,
     elevation_end_frac: float = 1.0,
+    alpha_option: float | None = None,
+    quality: float | None = None,
 ):
     start_visual_progress = clamp(head_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
     end_visual_progress = clamp(tail_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
@@ -1914,7 +1974,8 @@ def draw_connector_default(
         return
     start_alpha = lerp(head_alpha, tail_alpha, start_frac)
     end_alpha = lerp(head_alpha, tail_alpha, end_frac)
-    alpha_option = get_connector_alpha_option(kind)
+    if alpha_option is None:
+        alpha_option = get_connector_alpha_option(kind)
     if alpha_option <= 0 or max(start_alpha, end_alpha) <= 0:
         return
     if not elevation_dynamic and connector_is_off_screen(
@@ -1963,7 +2024,8 @@ def draw_connector_default(
             start_travel,
             end_travel,
         )
-    quality = get_connector_quality_option(kind)
+    if quality is None:
+        quality = get_connector_quality_option(kind)
     circular_fracs = VarArray[float, Dim[128]].new()
     if ease_over_elevation and quality > 0:
         assert elevation_transform is not None

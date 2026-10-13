@@ -20,6 +20,7 @@ from sekai.lib.connector import (
     ActiveConnectorInfo,
     ActiveConnectorKind,
     ConnectorKind,
+    ConnectorRenderStyle,
     ConnectorSfxEvent,
     ConnectorSfxState,
     ConnectorSfxTimes,
@@ -34,7 +35,6 @@ from sekai.lib.connector import (
     draw_connector,
     draw_connector_slot_glow_effect,
     get_connector_alpha_frac,
-    get_connector_alpha_option,
     get_connector_base_kind,
     get_connector_fractions,
     get_connector_input_leniency,
@@ -89,6 +89,7 @@ class Connector(PlayArchetype):
 
     kind: ConnectorKind = entity_data()
     ease_type: EaseType = entity_data()
+    render_style: ConnectorRenderStyle = entity_data()
     shared_stage_transform: bool = entity_data()
     start_time: float = entity_data()
     scheduled_spawn_time: float = entity_data()
@@ -135,6 +136,9 @@ class Connector(PlayArchetype):
         )
         self.kind = self.segment_head.segment_kind
         self.ease_type = head.connector_ease
+        self.render_style = ConnectorRenderStyle.new(
+            self.kind, self.segment_head.target_time, self.segment_head.lane, self.segment_head.segment_layer
+        )
         self.visual_active_interval.start = min(head.target_time, tail.target_time)
         self.visual_active_interval.end = max(head.target_time, tail.target_time)
         if self.legacy_hidden_pop:
@@ -324,7 +328,7 @@ class Connector(PlayArchetype):
                 ):
                     return
             self.draw_fake_damage_head()
-            if get_connector_alpha_option(self.kind) <= 0:
+            if self.render_style.alpha <= 0:
                 return
             head_note_alpha = head.visual_note_alpha
             tail_note_alpha = tail.visual_note_alpha
@@ -434,6 +438,7 @@ class Connector(PlayArchetype):
                 elevation_transform=elevation_transform,
                 head_alpha_frac=head_alpha_frac,
                 tail_alpha_frac=tail_alpha_frac,
+                render_style=self.render_style,
             )
 
     def draw_fake_damage_head(self):
