@@ -54,6 +54,11 @@ def note_progress(note: Any, first: TrajectoryCache, second: TrajectoryCache, no
         return _basic_progress(note, first, now)
     head = note.attach_head_ref.get()
     tail = note.attach_tail_ref.get()
+    if head.beat == tail.beat:
+        # Follow elevation before judgment, then clamp to the judge line.
+        if now >= head.target_time:
+            return 1.0
+        return lerp(_basic_progress(head, first, now), _basic_progress(tail, second, now), note.head_ease_frac)
     head_progress = _basic_progress(head, first, now) if now < head.target_time else 1.0
     tail_progress = _basic_progress(tail, second, now)
     head_frac = 0.0 if now < head.target_time else safe_unlerp_clamped(head.target_time, tail.target_time, now)
@@ -93,7 +98,7 @@ def note_stage_visibility_end(note: Any) -> float:
         return _basic_note_stage_visibility_end(note)
     head = note.attach_head_ref.get()
     tail = note.attach_tail_ref.get()
-    fraction = safe_unlerp_clamped(head.target_time, tail.target_time, note.target_time)
+    fraction = note.head_ease_frac
     if fraction <= 0:
         return _basic_note_stage_visibility_end(head)
     if fraction >= 1:
@@ -116,7 +121,7 @@ def note_stage_visibility_start(note: Any, start: float) -> float:
         return _basic_note_stage_visibility_start(note, start)
     head = note.attach_head_ref.get()
     tail = note.attach_tail_ref.get()
-    fraction = safe_unlerp_clamped(head.target_time, tail.target_time, note.target_time)
+    fraction = note.head_ease_frac
     if fraction <= 0:
         return _basic_note_stage_visibility_start(head, start)
     if fraction >= 1:
@@ -146,7 +151,7 @@ def _append_connector_visibility_stages(
     else:
         head = note.attach_head_ref.get()
         tail = note.attach_tail_ref.get()
-        fraction = safe_unlerp_clamped(head.target_time, tail.target_time, note.target_time)
+        fraction = note.head_ease_frac
         if fraction <= 0:
             stages.append(_ConnectorVisibilityStage(head.stage_ref.index, bound))
         elif fraction >= 1:

@@ -31,6 +31,9 @@ Handles common initialization logic for the engine. Must appear exactly once as 
 
 ### Fields
 
+* **revision (int)**: The engine revision the level was made for. Defaults to 1.
+  * 1: Scoring changes.
+  * 2: Elevation is not scaled by stage tilt.
 * **initialLife (int)**: The initial life value for the level. Defaults to 1000.
 * **firstCamera (ref?[CameraChange])**: An optional reference to the first **CameraChange** entity.
 
@@ -163,7 +166,7 @@ A transform applied to a stage.
 * **rotate (float)**: Rotation of the stage in degrees about its default judge-line center (the stage's pivot `yOffset` does not move the rotation center). Positive values match the camera `rotate` direction. Defaults to 0.
 * **xLaneTranslate (float)**: Horizontal translation of the stage, in lane-width units. The direction respects the camera rotation and the amount respects the camera zoom. Defaults to 0.
 * **yLaneTranslate (float)**: Vertical translation of the stage, in the same lane-width units as `xLaneTranslate` (positive moves the stage up the screen, in the camera's rotated frame). Defaults to 0.
-* **elevation (float)**: Elevation of the stage before its rotation and translation. In terms of lane widths, adjusted for tilt. Defaults to 0.
+* **elevation (float)**: Elevation of the stage before its rotation and translation, in lane widths. Defaults to 0.
 * **anchor (StageTransformAnchor)**: Where the vertical translation is measured from. Takes on one of the following values:
   * DEFAULT = 0
   * CENTER = 1

@@ -1,4 +1,5 @@
 from enum import IntEnum
+from typing import cast
 
 from sonolus.script.easing import (
     ease_in_back,
@@ -108,11 +109,11 @@ class EaseMode(IntEnum):
 
 
 def ease_family(ease_type: EaseType) -> EaseFamily:
-    return (ease_type - EaseType.IN_QUAD) // 4
+    return cast(EaseFamily, (ease_type - EaseType.IN_QUAD) // 4)
 
 
 def ease_mode(ease_type: EaseType) -> EaseMode:
-    return (ease_type - EaseType.IN_QUAD) % 4
+    return cast(EaseMode, (ease_type - EaseType.IN_QUAD) % 4)
 
 
 def is_curved_ease(ease_type: EaseType) -> bool:
@@ -170,9 +171,9 @@ def ease_complement(ease_type: EaseType) -> EaseType:
         return EaseType.OUT_STEP
     if ease_type >= EaseType.IN_QUAD:
         if ease_mode(ease_type) == EaseMode.IN:
-            return ease_type + 1
+            return cast(EaseType, ease_type + 1)
         if ease_mode(ease_type) == EaseMode.OUT:
-            return ease_type - 1
+            return cast(EaseType, ease_type - 1)
     return ease_type
 
 

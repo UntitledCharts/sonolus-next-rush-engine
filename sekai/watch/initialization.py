@@ -1,4 +1,5 @@
 from math import floor
+from typing import cast
 
 from sonolus.script.archetype import (
     EntityRef,
@@ -61,7 +62,7 @@ from sekai.watch.static_stage import WatchScheduledLaneEffect, WatchStaticStage
 class WatchInitialization(WatchArchetype):
     name = archetype_names.INITIALIZATION
 
-    revision: EngineRevision = imported(name="revision", default=EngineRevision.LATEST)
+    revision: EngineRevision = imported(name="revision", default=EngineRevision.SONOLUS_1_1_0)
     replay_revision: EngineRevision = imported(name="replayRevision", default=EngineRevision.BASE)
     initial_life: int = imported(name="initialLife", default=1000)
     first_camera_ref: EntityRef[WatchCameraChange] = imported(name="firstCamera")
@@ -346,7 +347,7 @@ def schedule_auto_connector_sfx_events(list_head: int):
 
         if active_time >= inactive_time and active_connector_index > 0:
             schedule_connector_sfx(
-                WatchConnector.at(active_connector_index).segment_head.segment_kind,
+                cast(ActiveConnectorKind, WatchConnector.at(active_connector_index).segment_head.segment_kind),
                 WatchConnector.at(active_connector_index).segment_head.timescale_group,
                 current_time,
                 next_time,
@@ -367,7 +368,7 @@ def schedule_auto_connector_sfx_events(list_head: int):
 
     if active_time >= inactive_time and active_connector_index > 0:
         schedule_connector_sfx(
-            WatchConnector.at(active_connector_index).segment_head.segment_kind,
+            cast(ActiveConnectorKind, WatchConnector.at(active_connector_index).segment_head.segment_kind),
             WatchConnector.at(active_connector_index).segment_head.timescale_group,
             current_time,
             LastNote.last_time,
@@ -380,12 +381,12 @@ def schedule_unified_replay_connector_sfx():
     last_time = -1e8
     for next_time, event in Streams.connector_sfx_events.iter_items_from(-2):
         if last_kind != ConnectorKind.NONE and connector_sfx_is_active(last_times):
-            schedule_connector_sfx_between(last_kind, last_time, next_time)
+            schedule_connector_sfx_between(cast(ActiveConnectorKind, last_kind), last_time, next_time)
         last_times @= event.times
         last_kind = event.kind
         last_time = next_time
     if last_kind != ConnectorKind.NONE and connector_sfx_is_active(last_times):
-        schedule_connector_sfx_between(last_kind, last_time, LastNote.last_time)
+        schedule_connector_sfx_between(cast(ActiveConnectorKind, last_kind), last_time, LastNote.last_time)
 
 
 def schedule_replay_connector_sfx(stream, kind: ActiveConnectorKind):

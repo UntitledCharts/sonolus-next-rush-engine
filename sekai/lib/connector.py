@@ -1,6 +1,7 @@
+from collections.abc import Callable
 from enum import IntEnum
 from math import ceil, cos, floor, inf, log, pi, sin, sqrt
-from typing import Literal, Self, assert_never, cast
+from typing import Any, Literal, Self, assert_never, cast, overload
 
 from sonolus.script.archetype import EntityRef
 from sonolus.script.array import Array, Dim
@@ -64,6 +65,8 @@ from sekai.lib.skin import (
 from sekai.lib.stage import VisualMask
 from sekai.lib.timescale import iter_timescale_changes_in_group_from_time
 
+type ElevationTransform = Callable[[float, float], StageTransform]
+
 CONNECTOR_TRAIL_SPAWN_PERIOD = 0.1
 CONNECTOR_SLOT_SPAWN_PERIOD = 0.2
 CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY = 5.0
@@ -73,7 +76,7 @@ CONNECTOR_ZERO_SIZE_FALLBACK = 1e-3
 CONNECTOR_ALPHA_ERROR = 1 / 192
 CONNECTOR_ALPHA_SEGMENT_LENGTH = 2 * (32 / 1080)
 CONNECTOR_MIN_SEGMENT_LENGTH = 2 * (4 / 1080)
-CONNECTOR_CURVE_ERROR = 2 * (2.5 / 1080)
+CONNECTOR_CURVE_ERROR = 2 * (2 / 1080)
 CONNECTOR_CURVE_PIECES = 8
 CONNECTOR_CURVE_PIECE_THRESHOLD = 32
 
@@ -138,6 +141,58 @@ def get_connector_fractions(
         target_frac,
     )
     return target_frac, interp_frac
+
+
+def _connector_alpha_position(note: Any) -> float:
+    if note.is_attached:
+        head = note.attach_head_ref.get()
+        tail = note.attach_tail_ref.get()
+        if head.beat == tail.beat:
+            return lerp(head.elevation, tail.elevation, note.head_ease_frac)
+    return note.elevation
+
+
+def _connector_alpha_root_frac(note: Any, head: Any, tail: Any) -> float:
+    if note.index == head.index:
+        return 0.0
+    if note.index == tail.index:
+        return 1.0
+    if note.is_attached and note.attach_head_ref.index == head.index and note.attach_tail_ref.index == tail.index:
+        return note.head_ease_frac
+    return -1.0
+
+
+def get_connector_alpha_frac(note: Any, segment_head: Any, segment_tail: Any) -> float:
+    """Return linear alpha progress from authored time or elevation."""
+    if segment_head.beat != segment_tail.beat:
+        return safe_unlerp_clamped(segment_head.target_time, segment_tail.target_time, note.target_time)
+    if note.index == segment_head.index:
+        return 0.0
+    if note.index == segment_tail.index:
+        return 1.0
+
+    # Attachment fractions handle equal note heights on stages with different elevations.
+    source_ref = +segment_head.ref()
+    if not segment_head.is_attached:
+        source_ref @= segment_tail.ref()
+        if not segment_tail.is_attached:
+            source_ref @= note.ref()
+    source = source_ref.get()
+    if source.is_attached:
+        head = source.attach_head_ref.get()
+        tail = source.attach_tail_ref.get()
+        if head.beat == tail.beat:
+            start = _connector_alpha_root_frac(segment_head, head, tail)
+            end = _connector_alpha_root_frac(segment_tail, head, tail)
+            position = _connector_alpha_root_frac(note, head, tail)
+            if min(start, end, position) >= 0:
+                return safe_unlerp_clamped(start, end, position)
+
+    return safe_unlerp_clamped(
+        _connector_alpha_position(segment_head),
+        _connector_alpha_position(segment_tail),
+        _connector_alpha_position(note),
+    )
 
 
 class ConnectorKind(IntEnum):
@@ -281,6 +336,8 @@ DamageConnectorKind = Literal[
     ConnectorKind.FAKE_DAMAGE_BLACK,
 ]
 
+SlideConnectorKind = ActiveConnectorKind | DamageConnectorKind
+
 GuideConnectorKind = Literal[
     ConnectorKind.GUIDE_NEUTRAL,
     ConnectorKind.GUIDE_RED,
@@ -291,6 +348,15 @@ GuideConnectorKind = Literal[
     ConnectorKind.GUIDE_CYAN,
     ConnectorKind.GUIDE_BLACK,
 ]
+
+BaseActiveConnectorKind = Literal[
+    ConnectorKind.ACTIVE_NORMAL,
+    ConnectorKind.ACTIVE_CRITICAL,
+    ConnectorKind.FAKE_ACTIVE_NORMAL,
+    ConnectorKind.FAKE_ACTIVE_CRITICAL,
+]
+BaseDamageConnectorKind = Literal[ConnectorKind.DAMAGE, ConnectorKind.FAKE_DAMAGE]
+BaseConnectorKind = BaseActiveConnectorKind | BaseDamageConnectorKind | GuideConnectorKind | Literal[ConnectorKind.NONE]
 
 
 class ConnectorVisualState(IntEnum):
@@ -327,7 +393,29 @@ class ConnectorMaskStatus(IntEnum):
     INSIDE = 1
 
 
-def get_connector_base_kind(kind: ConnectorKind) -> ConnectorKind:
+@overload
+def get_connector_base_kind(kind: ActiveConnectorKind) -> BaseActiveConnectorKind: ...
+
+
+@overload
+def get_connector_base_kind(kind: DamageConnectorKind) -> BaseDamageConnectorKind: ...
+
+
+@overload
+def get_connector_base_kind(
+    kind: ActiveConnectorKind | DamageConnectorKind,
+) -> BaseActiveConnectorKind | BaseDamageConnectorKind: ...
+
+
+@overload
+def get_connector_base_kind(kind: GuideConnectorKind) -> GuideConnectorKind: ...
+
+
+@overload
+def get_connector_base_kind(kind: ConnectorKind) -> BaseConnectorKind: ...
+
+
+def get_connector_base_kind(kind: ConnectorKind) -> BaseConnectorKind:
     if ConnectorKind.ACTIVE_NORMAL_NEUTRAL <= kind <= ConnectorKind.ACTIVE_NORMAL_BLACK:
         return ConnectorKind.ACTIVE_NORMAL
     if ConnectorKind.ACTIVE_CRITICAL_NEUTRAL <= kind <= ConnectorKind.ACTIVE_CRITICAL_BLACK:
@@ -340,7 +428,7 @@ def get_connector_base_kind(kind: ConnectorKind) -> ConnectorKind:
         return ConnectorKind.FAKE_ACTIVE_CRITICAL
     if ConnectorKind.FAKE_DAMAGE_NEUTRAL <= kind <= ConnectorKind.FAKE_DAMAGE_BLACK:
         return ConnectorKind.FAKE_DAMAGE
-    return kind
+    return cast(BaseConnectorKind, kind)
 
 
 def get_connector_style(kind: ConnectorKind) -> NoteStyle:
@@ -371,7 +459,8 @@ def get_connector_input_leniency(kind: ConnectorKind) -> float:
 
 def get_active_connector_sprites(kind: ActiveConnectorKind) -> ActiveConnectorSpriteSet:
     result = +ActiveConnectorSpriteSet
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             result @= ActiveSkin.active_slide_connector
             if get_connector_style(kind) != NoteStyle.DEFAULT:
@@ -381,7 +470,7 @@ def get_active_connector_sprites(kind: ActiveConnectorKind) -> ActiveConnectorSp
             if get_connector_style(kind) != NoteStyle.DEFAULT:
                 result @= get_styled_active_connector_sprites(get_connector_style(kind), True)
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
     return result
 
 
@@ -429,7 +518,8 @@ def get_connector_z(
     kind: ConnectorKind, target_time: float, lane: float, active: bool, layer: ConnectorLayer, *, elevation: float = 0.0
 ) -> ZIndexes:
     result = +ZIndexes
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case (
             ConnectorKind.ACTIVE_NORMAL
             | ConnectorKind.FAKE_ACTIVE_NORMAL
@@ -442,7 +532,7 @@ def get_connector_z(
                         layers.active_slide_connector_top,
                         time=target_time,
                         lane=lane,
-                        etc=get_active_connector_z_offset(kind, active),
+                        etc=get_active_connector_z_offset(cast(SlideConnectorKind, kind), active),
                         elevation=elevation,
                         invert_time=True,
                     )
@@ -451,7 +541,7 @@ def get_connector_z(
                         layers.active_slide_connector_bottom,
                         time=target_time,
                         lane=lane,
-                        etc=get_active_connector_z_offset(kind, active),
+                        etc=get_active_connector_z_offset(cast(SlideConnectorKind, kind), active),
                         elevation=elevation,
                         invert_time=True,
                     )
@@ -460,7 +550,7 @@ def get_connector_z(
                         layers.active_slide_connector_under,
                         time=target_time,
                         lane=lane,
-                        etc=get_active_connector_z_offset(kind, active),
+                        etc=get_active_connector_z_offset(cast(SlideConnectorKind, kind), active),
                         elevation=elevation,
                         invert_time=True,
                     )
@@ -469,7 +559,7 @@ def get_connector_z(
                         layers.active_slide_connector_over,
                         time=target_time,
                         lane=lane,
-                        etc=get_active_connector_z_offset(kind, active),
+                        etc=get_active_connector_z_offset(cast(SlideConnectorKind, kind), active),
                         elevation=elevation,
                         invert_time=True,
                     )
@@ -490,12 +580,16 @@ def get_connector_z(
             )
         case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
             result @= get_guide_connector_layer_z(
-                layer, target_time, lane, get_active_connector_z_offset(kind, active), elevation=elevation
+                layer,
+                target_time,
+                lane,
+                get_active_connector_z_offset(cast(SlideConnectorKind, kind), active),
+                elevation=elevation,
             )
         case ConnectorKind.NONE:
             pass
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
     return result
 
 
@@ -546,7 +640,8 @@ def get_guide_connector_layer_z(
 
 
 def get_active_connector_z_offset(kind: ActiveConnectorKind | DamageConnectorKind, active: bool) -> int:
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             return 3 - active
         case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
@@ -554,11 +649,12 @@ def get_active_connector_z_offset(kind: ActiveConnectorKind | DamageConnectorKin
         case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
             return 9 - active
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
 
 
 def get_connector_alpha_option(kind: ConnectorKind) -> float:
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case (
             ConnectorKind.ACTIVE_NORMAL
             | ConnectorKind.FAKE_ACTIVE_NORMAL
@@ -582,11 +678,12 @@ def get_connector_alpha_option(kind: ConnectorKind) -> float:
         case ConnectorKind.NONE:
             return 0.0
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
 
 
 def get_connector_quality_option(kind: ConnectorKind) -> float:
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case (
             ConnectorKind.ACTIVE_NORMAL
             | ConnectorKind.FAKE_ACTIVE_NORMAL
@@ -610,7 +707,7 @@ def get_connector_quality_option(kind: ConnectorKind) -> float:
         case ConnectorKind.NONE:
             return 0
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
 
 
 def draw_connector(
@@ -642,7 +739,12 @@ def draw_connector(
     head_mask: VisualMask | None = None,
     tail_mask: VisualMask | None = None,
     shared_transform: bool = False,
+    ease_over_elevation: bool = False,
+    elevation_transform: ElevationTransform | None = None,
+    head_alpha_frac: float = -1.0,
+    tail_alpha_frac: float = -1.0,
 ):
+    elevation_dynamic = ease_over_elevation and not shared_transform
     match presentation:
         case SegmentPresentation.DEFAULT:
             if (
@@ -656,6 +758,7 @@ def draw_connector(
                 )
                 or (
                     head_visual_progress == tail_visual_progress
+                    and not elevation_dynamic
                     and (shared_transform or head_transform == tail_transform)
                 )
             ):
@@ -676,14 +779,15 @@ def draw_connector(
 
     normal_sprite = Sprite(-1)
     active_sprite = Sprite(-1)
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case (
             ConnectorKind.ACTIVE_NORMAL
             | ConnectorKind.ACTIVE_CRITICAL
             | ConnectorKind.FAKE_ACTIVE_NORMAL
             | ConnectorKind.FAKE_ACTIVE_CRITICAL
         ):
-            sprites = get_active_connector_sprites(kind)
+            sprites = get_active_connector_sprites(cast(ActiveConnectorKind, kind))
             normal_sprite @= sprites.connection.normal
             active_sprite @= sprites.connection.active
         case (
@@ -696,7 +800,7 @@ def draw_connector(
             | ConnectorKind.GUIDE_CYAN
             | ConnectorKind.GUIDE_BLACK
         ):
-            sprites = get_guide_connector_sprite(kind)
+            sprites = get_guide_connector_sprite(cast(GuideConnectorKind, kind))
             normal_sprite @= sprites
         case ConnectorKind.DAMAGE:
             normal_sprite @= get_damage_connector_sprite(kind)
@@ -706,9 +810,9 @@ def draw_connector(
         case ConnectorKind.NONE:
             return
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
 
-    match get_connector_base_kind(kind):
+    match base_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_CRITICAL:
             segment_head_alpha = 1.0
             segment_tail_alpha = 1.0
@@ -736,13 +840,17 @@ def draw_connector(
             segment_head_alpha = 1.0
             segment_tail_alpha = 1.0
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
 
+    if head_alpha_frac < 0:
+        head_alpha_frac = safe_unlerp_clamped(segment_head_target_time, segment_tail_target_time, head_target_time)
+    if tail_alpha_frac < 0:
+        tail_alpha_frac = safe_unlerp_clamped(segment_head_target_time, segment_tail_target_time, tail_target_time)
     head_alpha = (
         lerp(
             segment_head_alpha,
             segment_tail_alpha,
-            safe_unlerp_clamped(segment_head_target_time, segment_tail_target_time, head_target_time),
+            head_alpha_frac,
         )
         * head_note_alpha
     )
@@ -750,7 +858,7 @@ def draw_connector(
         lerp(
             segment_head_alpha,
             segment_tail_alpha,
-            safe_unlerp_clamped(segment_head_target_time, segment_tail_target_time, tail_target_time),
+            tail_alpha_frac,
         )
         * tail_note_alpha
     )
@@ -770,7 +878,9 @@ def draw_connector(
             # Split in-out steps at the jump.
             piece_count = 1
             split_frac = 1.0
-            if ease_type == EaseType.IN_OUT_STEP and head_ease_frac < 0.5 < tail_ease_frac:
+            if ease_type == EaseType.IN_OUT_STEP and (
+                head_ease_frac < 0.5 < tail_ease_frac or (ease_over_elevation and tail_ease_frac < 0.5 < head_ease_frac)
+            ):
                 piece_count = 2
                 split_frac = (0.5 - head_ease_frac) / (tail_ease_frac - head_ease_frac)
             for piece in range(piece_count):
@@ -826,6 +936,10 @@ def draw_connector(
                     tail_mask=tail_mask,
                     shared_transform=shared_transform,
                     constant_interp_frac=constant_interp_frac,
+                    ease_over_elevation=ease_over_elevation,
+                    elevation_transform=elevation_transform,
+                    elevation_start_frac=0.0 if first_piece else split_frac,
+                    elevation_end_frac=1.0 if last_piece else split_frac,
                 )
         case SegmentPresentation.FULL_SCREEN:
             if head_transform is not None and tail_transform is not None:
@@ -951,6 +1065,9 @@ class ConnectorRenderCache(Record):
         has_transform: bool,
         head: StageTransform | None,
         tail: StageTransform | None,
+        ease_over_elevation: bool = False,
+        elevation_transform: ElevationTransform | None = None,
+        elevation_frac: float = 0.0,
     ):
         width = tilt_width_factor(travel)
         left_x = (lane - size) * width * DynamicLayout.w_scale + DynamicLayout.x_translate
@@ -972,7 +1089,13 @@ class ConnectorRenderCache(Record):
         if has_transform:
             assert head is not None
             assert tail is not None
-            if self.translation_only:
+            if ease_over_elevation:
+                assert elevation_transform is not None
+                transform = elevation_transform(interp_frac, elevation_frac).to_screen_transform()
+                self.left @= transform.apply(self.left)
+                self.right @= transform.apply(self.right)
+                self.elevation = transform.elevation
+            elif self.translation_only:
                 if self.constant_transform:
                     x_offset = head.tx
                     y_offset = head.ty
@@ -1100,6 +1223,10 @@ def draw_connector_default_segment(
     tail_transform: StageTransform | None,
     render_cache: ConnectorRenderCache,
     cache_edges: bool = False,
+    ease_over_elevation: bool = False,
+    elevation_transform: ElevationTransform | None = None,
+    start_elevation_frac: float = 0.0,
+    end_elevation_frac: float = 1.0,
 ):
     if base_a <= 0:
         render_cache.edge_valid = False
@@ -1113,13 +1240,31 @@ def draw_connector_default_segment(
         # The draw loop invalidates this edge at clipped spans and invisible gaps.
         if not cache_edges or not render_cache.edge_valid:
             render_cache.update_edge(
-                start_lane, start_size, start_travel, start_interp_frac, has_transform, head_transform, tail_transform
+                start_lane,
+                start_size,
+                start_travel,
+                start_interp_frac,
+                has_transform,
+                head_transform,
+                tail_transform,
+                ease_over_elevation,
+                elevation_transform,
+                start_elevation_frac,
             )
         start_left = +render_cache.left
         start_right = +render_cache.right
         start_elevation = render_cache.elevation
         render_cache.update_edge(
-            end_lane, end_size, end_travel, end_interp_frac, has_transform, head_transform, tail_transform
+            end_lane,
+            end_size,
+            end_travel,
+            end_interp_frac,
+            has_transform,
+            head_transform,
+            tail_transform,
+            ease_over_elevation,
+            elevation_transform,
+            end_elevation_frac,
         )
         if has_transform:
             # Keep the segment below both endpoint notes without accumulating depth offsets.
@@ -1166,6 +1311,10 @@ def draw_connector_masked_segment(
     head_mask: VisualMask,
     tail_mask: VisualMask,
     same_mask_stage: bool,
+    ease_over_elevation: bool = False,
+    elevation_transform: ElevationTransform | None = None,
+    start_elevation_frac: float = 0.0,
+    end_elevation_frac: float = 1.0,
 ):
     # Clipping can move the endpoints, so the previous edge cannot be reused.
     render_cache.edge_valid = False
@@ -1234,6 +1383,10 @@ def draw_connector_masked_segment(
                     head_transform=head_transform,
                     tail_transform=tail_transform,
                     render_cache=render_cache,
+                    ease_over_elevation=ease_over_elevation,
+                    elevation_transform=elevation_transform,
+                    start_elevation_frac=lerp(start_elevation_frac, end_elevation_frac, subsegment_start_frac),
+                    end_elevation_frac=lerp(start_elevation_frac, end_elevation_frac, subsegment_end_frac),
                 )
             subsegment_start_frac = subsegment_end_frac
             subsegment_start_lane = subsegment_end_lane
@@ -1246,40 +1399,74 @@ def draw_connector_masked_segment(
         last_mask_right = lerp(head_mask.right, tail_mask.right, start_interp_frac)
         next_mask_left = lerp(head_mask.left, tail_mask.left, end_interp_frac)
         next_mask_right = lerp(head_mask.right, tail_mask.right, end_interp_frac)
-        last_render_lane, last_render_size, last_masked_size = masked_connector_extents_by_limits(
+        # Split moving-mask crossings so hidden endpoints cannot discard a visible interior.
+        split_fracs = VarArray[float, Dim[6]].new()
+        split_fracs.append(1.0)
+        for distances in Array(
+            Vec2(start_lane - start_size - last_mask_left, end_lane - end_size - next_mask_left),
+            Vec2(start_lane - start_size - last_mask_right, end_lane - end_size - next_mask_right),
+            Vec2(start_lane + start_size - last_mask_left, end_lane + end_size - next_mask_left),
+            Vec2(start_lane + start_size - last_mask_right, end_lane + end_size - next_mask_right),
+            Vec2(last_mask_right - last_mask_left, next_mask_right - next_mask_left),
+        ):
+            start_distance = distances.x
+            end_distance = distances.y
+            if min(start_distance, end_distance) < 0 < max(start_distance, end_distance):
+                split_fracs.append(-start_distance / (end_distance - start_distance))
+        split_fracs.sort()
+
+        subsegment_start_lane, subsegment_start_size, subsegment_start_masked_size = masked_connector_extents_by_limits(
             start_lane,
             start_size,
             last_mask_left,
             last_mask_right,
         )
-        next_render_lane, next_render_size, next_masked_size = masked_connector_extents_by_limits(
-            end_lane,
-            end_size,
-            next_mask_left,
-            next_mask_right,
-        )
-        if last_masked_size > 0 or next_masked_size > 0:
-            draw_connector_default_segment(
-                visual_state=visual_state,
-                normal_sprite=normal_sprite,
-                active_sprite=active_sprite,
-                z_normal=z_normal,
-                z_active=z_active,
-                base_a=base_a,
-                segment_head_target_time=segment_head_target_time,
-                start_lane=last_render_lane,
-                start_size=last_render_size,
-                start_travel=start_travel,
-                start_interp_frac=start_interp_frac,
-                end_lane=next_render_lane,
-                end_size=next_render_size,
-                end_travel=end_travel,
-                end_interp_frac=end_interp_frac,
-                has_transform=has_transform,
-                head_transform=head_transform,
-                tail_transform=tail_transform,
-                render_cache=render_cache,
+        subsegment_start_frac = 0.0
+        subsegment_start_travel = start_travel
+        subsegment_start_interp_frac = start_interp_frac
+        for subsegment_end_frac in split_fracs:
+            if subsegment_end_frac <= subsegment_start_frac:
+                continue
+            subsegment_end_lane, subsegment_end_size, subsegment_end_masked_size = masked_connector_extents_by_limits(
+                lerp(start_lane, end_lane, subsegment_end_frac),
+                lerp(start_size, end_size, subsegment_end_frac),
+                lerp(last_mask_left, next_mask_left, subsegment_end_frac),
+                lerp(last_mask_right, next_mask_right, subsegment_end_frac),
             )
+            subsegment_end_travel = lerp(start_travel, end_travel, subsegment_end_frac)
+            subsegment_end_interp_frac = lerp(start_interp_frac, end_interp_frac, subsegment_end_frac)
+            if subsegment_start_masked_size > 0 or subsegment_end_masked_size > 0:
+                draw_connector_default_segment(
+                    visual_state=visual_state,
+                    normal_sprite=normal_sprite,
+                    active_sprite=active_sprite,
+                    z_normal=z_normal,
+                    z_active=z_active,
+                    base_a=base_a,
+                    segment_head_target_time=segment_head_target_time,
+                    start_lane=subsegment_start_lane,
+                    start_size=subsegment_start_size,
+                    start_travel=subsegment_start_travel,
+                    start_interp_frac=subsegment_start_interp_frac,
+                    end_lane=subsegment_end_lane,
+                    end_size=subsegment_end_size,
+                    end_travel=subsegment_end_travel,
+                    end_interp_frac=subsegment_end_interp_frac,
+                    has_transform=has_transform,
+                    head_transform=head_transform,
+                    tail_transform=tail_transform,
+                    render_cache=render_cache,
+                    ease_over_elevation=ease_over_elevation,
+                    elevation_transform=elevation_transform,
+                    start_elevation_frac=lerp(start_elevation_frac, end_elevation_frac, subsegment_start_frac),
+                    end_elevation_frac=lerp(start_elevation_frac, end_elevation_frac, subsegment_end_frac),
+                )
+            subsegment_start_frac = subsegment_end_frac
+            subsegment_start_lane = subsegment_end_lane
+            subsegment_start_size = subsegment_end_size
+            subsegment_start_masked_size = subsegment_end_masked_size
+            subsegment_start_travel = subsegment_end_travel
+            subsegment_start_interp_frac = subsegment_end_interp_frac
     render_cache.edge_valid = False
 
 
@@ -1359,7 +1546,8 @@ def _ease_derivative_bounds() -> Array:
     """Estimate slope and curvature bounds for each ease."""
     values = []
     h = 1e-4
-    for ease_type in range(EaseType.OUT_IN_STEP + 1):
+    for ease_index in range(EaseType.OUT_IN_STEP + 1):
+        ease_type = cast(EaseType, ease_index)
         curved = is_curved_ease(ease_type) or ease_type == EaseType.LINEAR
         for order in (1, 2):
             runs = []
@@ -1388,8 +1576,8 @@ CURVE_DERIVATIVE_BOUNDS = _ease_derivative_bounds()
 
 
 def ease_derivative_bound(ease_type: EaseType, order: int, start: float, end: float) -> float:
-    first = clamp(floor(start * CURVE_BINS), 0, CURVE_BINS - 1)
-    last = clamp(ceil(end * CURVE_BINS) - 1, first, CURVE_BINS - 1)
+    first = cast(int, clamp(floor(start * CURVE_BINS), 0, CURVE_BINS - 1))
+    last = cast(int, clamp(ceil(end * CURVE_BINS) - 1, first, CURVE_BINS - 1))
     run = 1
     offset = 0
     while run * 2 <= last - first + 1:
@@ -1411,19 +1599,21 @@ def connector_curve_detail(
     end_travel: float,
 ) -> float:
     """Estimate segments needed to limit visible curve error."""
+    start_width = tilt_width_factor(start_travel)
+    end_width = tilt_width_factor(end_travel)
     if (
         is_step_ease(ease_type)
         or (left_change == 0 and right_change == 0)
         or abs(tail_eased - head_eased) < 1e-6
-        or min(start_travel, end_travel) <= 0
+        or min(start_width, end_width) <= 0
     ):
         return 0.0
     start = min(start_ease_frac, end_ease_frac)
     end = max(start_ease_frac, end_ease_frac)
     span = end - start
     lane_change = max(abs(left_change), abs(right_change)) / abs(tail_eased - head_eased)
-    approach_rate = abs(log(end_travel / start_travel))
-    width = tilt_width_factor(max(start_travel, end_travel)) * DynamicLayout.w_scale
+    approach_rate = abs(log(end_width / start_width))
+    width = max(start_width, end_width) * DynamicLayout.w_scale
     bend = span * ease_derivative_bound(ease_type, 2, start, end) + approach_rate * ease_derivative_bound(
         ease_type, 1, start, end
     )
@@ -1501,6 +1691,160 @@ def circular_connector_fracs(
             depths.append(depth + 1)
 
 
+def elevation_connector_fracs(
+    result: VarArray[float, Dim[128]],
+    ease_type: EaseType,
+    head_eased: float,
+    tail_eased: float,
+    start_ease_frac: float,
+    end_ease_frac: float,
+    start_visual_progress: float,
+    end_visual_progress: float,
+    head_lane: float,
+    head_size: float,
+    tail_lane: float,
+    tail_size: float,
+    elevation_start_frac: float,
+    elevation_end_frac: float,
+    start_frac: float,
+    end_frac: float,
+    elevation_transform: ElevationTransform,
+    quality: float,
+    constant_interp_frac: float,
+    minimum_detail: float = 0.0,
+    head_mask: VisualMask | None = None,
+    tail_mask: VisualMask | None = None,
+) -> None:
+    """Sample projected connector edges, including stage transforms."""
+    result.clear()
+    if quality <= 0:
+        result.append(1.0)
+        return
+
+    def edges_at(frac: float) -> tuple[Vec2, Vec2, Vec2, Vec2, float]:
+        global_frac = lerp(start_frac, end_frac, frac)
+        interp_frac = constant_interp_frac
+        if interp_frac < 0:
+            interp_frac = get_connector_interp_frac_from_eased_endpoints(
+                ease_type, head_eased, tail_eased, lerp(start_ease_frac, end_ease_frac, frac), global_frac
+            )
+        lane = lerp(head_lane, tail_lane, interp_frac)
+        size = lerp(head_size, tail_size, interp_frac)
+        if size <= 0:
+            size = CONNECTOR_ZERO_SIZE_FALLBACK
+        left_lane = lane - size
+        right_lane = lane + size
+        if head_mask is not None and tail_mask is not None and head_mask.enabled and tail_mask.enabled:
+            mask_left = lerp(head_mask.left, tail_mask.left, interp_frac)
+            mask_right = lerp(head_mask.right, tail_mask.right, interp_frac)
+            left_lane = clamp(left_lane, mask_left, mask_right)
+            right_lane = clamp(right_lane, mask_left, mask_right)
+        travel = approach(lerp(start_visual_progress, end_visual_progress, frac))
+        width = tilt_width_factor(travel) * DynamicLayout.w_scale
+        y = travel * DynamicLayout.h_scale + DynamicLayout.t
+        raw_left = Vec2((lane - size) * width + DynamicLayout.x_translate, y).rotate(-DynamicLayout.rotate)
+        raw_right = Vec2((lane + size) * width + DynamicLayout.x_translate, y).rotate(-DynamicLayout.rotate)
+        left = Vec2(left_lane * width + DynamicLayout.x_translate, y).rotate(-DynamicLayout.rotate)
+        right = Vec2(right_lane * width + DynamicLayout.x_translate, y).rotate(-DynamicLayout.rotate)
+        stage = elevation_transform(interp_frac, lerp(elevation_start_frac, elevation_end_frac, global_frac))
+        transform = stage.to_screen_transform()
+        return (
+            transform.apply(left),
+            transform.apply(right),
+            transform.apply(raw_left),
+            transform.apply(raw_right),
+            stage.sr,
+        )
+
+    ends = VarArray[float, Dim[17]].new()
+    lefts = VarArray[Vec2, Dim[17]].new()
+    rights = VarArray[Vec2, Dim[17]].new()
+    raw_lefts = VarArray[Vec2, Dim[17]].new()
+    raw_rights = VarArray[Vec2, Dim[17]].new()
+    rotations = VarArray[float, Dim[17]].new()
+    depths = VarArray[int, Dim[17]].new()
+    first = 0.0
+    first_left, first_right, first_raw_left, first_raw_right, first_rotation = edges_at(first)
+    final_left, final_right, final_raw_left, final_raw_right, final_rotation = edges_at(1.0)
+    ends.append(1.0)
+    lefts.append(final_left)
+    rights.append(final_right)
+    raw_lefts.append(final_raw_left)
+    raw_rights.append(final_raw_right)
+    rotations.append(final_rotation)
+    depths.append(0)
+    tolerance = CONNECTOR_CURVE_ERROR / (2 * quality * quality)
+    while len(ends) > 0:
+        last, last_left, last_right = ends.pop(), lefts.pop(), rights.pop()
+        last_raw_left, last_raw_right = raw_lefts.pop(), raw_rights.pop()
+        last_rotation, depth = rotations.pop(), depths.pop()
+        error_squared = 0.0
+        middle_left = Vec2(0, 0)
+        middle_right = Vec2(0, 0)
+        middle_raw_left = Vec2(0, 0)
+        middle_raw_right = Vec2(0, 0)
+        middle_rotation = 0.0
+        min_rotation = min(first_rotation, last_rotation)
+        max_rotation = max(first_rotation, last_rotation)
+        for sample in Array(0.25, 0.5, 0.75):
+            left, right, raw_left, raw_right, rotation = edges_at(lerp(first, last, sample))
+            min_rotation = min(min_rotation, rotation)
+            max_rotation = max(max_rotation, rotation)
+            left_delta = left - (first_left + (last_left - first_left) * sample)
+            right_delta = right - (first_right + (last_right - first_right) * sample)
+            raw_left_delta = raw_left - (first_raw_left + (last_raw_left - first_raw_left) * sample)
+            raw_right_delta = raw_right - (first_raw_right + (last_raw_right - first_raw_right) * sample)
+            # Include raw edges to detect curves entering the mask between samples.
+            error_squared = max(
+                error_squared,
+                left_delta.x * left_delta.x + left_delta.y * left_delta.y,
+                right_delta.x * right_delta.x + right_delta.y * right_delta.y,
+                raw_left_delta.x * raw_left_delta.x + raw_left_delta.y * raw_left_delta.y,
+                raw_right_delta.x * raw_right_delta.x + raw_right_delta.y * raw_right_delta.y,
+            )
+            if sample == 0.5:
+                middle_left @= left
+                middle_right @= right
+                middle_raw_left @= raw_left
+                middle_raw_right @= raw_right
+                middle_rotation = rotation
+        if (
+            error_squared <= tolerance * tolerance
+            # Unwrapped angles prevent full turns from aliasing all samples.
+            and max_rotation - min_rotation <= pi / 4
+            and (last - first) * minimum_detail <= 1
+        ) or depth >= 16:
+            result.append(last)
+            first = last
+            first_left @= last_left
+            first_right @= last_right
+            first_raw_left @= last_raw_left
+            first_raw_right @= last_raw_right
+            first_rotation = last_rotation
+        elif len(result) + len(ends) + 2 > 128:
+            # Fall back to uniform sampling across the full curve.
+            result.clear()
+            for index in range(128):
+                result.append((index + 1) / 128)
+            return
+        else:
+            middle = (first + last) / 2
+            ends.append(last)
+            lefts.append(last_left)
+            rights.append(last_right)
+            raw_lefts.append(last_raw_left)
+            raw_rights.append(last_raw_right)
+            rotations.append(last_rotation)
+            depths.append(depth + 1)
+            ends.append(middle)
+            lefts.append(middle_left)
+            rights.append(middle_right)
+            raw_lefts.append(middle_raw_left)
+            raw_rights.append(middle_raw_right)
+            rotations.append(middle_rotation)
+            depths.append(depth + 1)
+
+
 def draw_connector_default(
     kind: ConnectorKind,
     visual_state: ConnectorVisualState,
@@ -1528,13 +1872,19 @@ def draw_connector_default(
     tail_mask: VisualMask | None = None,
     shared_transform: bool = False,
     constant_interp_frac: float = -1.0,
+    ease_over_elevation: bool = False,
+    elevation_transform: ElevationTransform | None = None,
+    elevation_start_frac: float = 0.0,
+    elevation_end_frac: float = 1.0,
 ):
     start_visual_progress = clamp(head_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
     end_visual_progress = clamp(tail_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
-    transforms_equal = shared_transform or head_transform == tail_transform
-    start_visual_progress, end_visual_progress = clip_connector_progress_to_screen(
-        start_visual_progress, end_visual_progress, head_transform, tail_transform, transforms_equal
-    )
+    elevation_dynamic = ease_over_elevation and not shared_transform
+    transforms_equal = not elevation_dynamic and (shared_transform or head_transform == tail_transform)
+    if not elevation_dynamic:
+        start_visual_progress, end_visual_progress = clip_connector_progress_to_screen(
+            start_visual_progress, end_visual_progress, head_transform, tail_transform, transforms_equal
+        )
     if start_visual_progress == end_visual_progress and (
         transforms_equal or head_visual_progress != tail_visual_progress
     ):
@@ -1567,7 +1917,7 @@ def draw_connector_default(
     alpha_option = get_connector_alpha_option(kind)
     if alpha_option <= 0 or max(start_alpha, end_alpha) <= 0:
         return
-    if connector_is_off_screen(
+    if not elevation_dynamic and connector_is_off_screen(
         start_travel,
         end_travel,
         head_transform,
@@ -1589,7 +1939,7 @@ def draw_connector_default(
             mask_enabled = False
 
     vertical_span = abs((end_travel - start_travel) * DynamicLayout.h_scale)
-    has_transform = (
+    has_transform = elevation_dynamic or (
         head_transform is not None
         and tail_transform is not None
         and not (
@@ -1615,7 +1965,36 @@ def draw_connector_default(
         )
     quality = get_connector_quality_option(kind)
     circular_fracs = VarArray[float, Dim[128]].new()
-    if (
+    if ease_over_elevation and quality > 0:
+        assert elevation_transform is not None
+        elevation_connector_fracs(
+            circular_fracs,
+            ease_type,
+            head_eased,
+            tail_eased,
+            start_ease_frac,
+            end_ease_frac,
+            start_visual_progress,
+            end_visual_progress,
+            head_lane,
+            head_size,
+            tail_lane,
+            tail_size,
+            elevation_start_frac,
+            elevation_end_frac,
+            start_frac,
+            end_frac,
+            elevation_transform,
+            quality,
+            constant_interp_frac,
+            0.0
+            if min(start_alpha, end_alpha) * alpha_option >= 1
+            else abs(end_alpha - start_alpha) * alpha_option * quality / (2 * CONNECTOR_ALPHA_ERROR),
+            head_mask,
+            tail_mask,
+        )
+        geometry_detail = len(circular_fracs) / quality
+    elif (
         EaseType.IN_CIRC <= ease_type <= EaseType.OUT_IN_CIRC
         and quality > 0
         and constant_interp_frac < 0
@@ -1722,6 +2101,7 @@ def draw_connector_default(
     last_alpha = start_alpha
     last_target_time = lerp(head_target_time, tail_target_time, start_frac)
     last_interp_frac = start_interp_frac
+    last_elevation_frac = lerp(elevation_start_frac, elevation_end_frac, start_frac)
     render_cache = ConnectorRenderCache.new()
     if has_transform:
         assert head_transform is not None
@@ -1777,6 +2157,7 @@ def draw_connector_default(
             if len(circular_fracs) > 0:
                 segment_frac = circular_fracs[piece_segment - 1]
             next_frac = lerp(start_frac, end_frac, segment_frac)
+            next_elevation_frac = lerp(elevation_start_frac, elevation_end_frac, next_frac)
             next_ease_frac = lerp(start_ease_frac, end_ease_frac, segment_frac)
             next_interp_frac = constant_interp_frac
             if constant_interp_frac < 0:
@@ -1830,6 +2211,10 @@ def draw_connector_default(
                     head_mask=head_mask,
                     tail_mask=tail_mask,
                     same_mask_stage=same_mask_stage,
+                    ease_over_elevation=ease_over_elevation,
+                    elevation_transform=elevation_transform,
+                    start_elevation_frac=last_elevation_frac,
+                    end_elevation_frac=next_elevation_frac,
                 )
             elif last_size > 0 or next_size > 0:
                 # Give zero-width endpoints a small drawable width.
@@ -1854,6 +2239,10 @@ def draw_connector_default(
                     tail_transform=tail_transform,
                     render_cache=render_cache,
                     cache_edges=cache_edges,
+                    ease_over_elevation=ease_over_elevation,
+                    elevation_transform=elevation_transform,
+                    start_elevation_frac=last_elevation_frac,
+                    end_elevation_frac=next_elevation_frac,
                 )
 
             else:
@@ -1865,6 +2254,7 @@ def draw_connector_default(
             last_alpha = next_alpha
             last_target_time = next_target_time
             last_interp_frac = next_interp_frac
+            last_elevation_frac = next_elevation_frac
 
 
 def get_cross_fate_opacities(a, t, period):
@@ -2009,7 +2399,8 @@ def update_circular_connector_particle(
     layout = transform.transform_quad(layout_circular_effect(lane, w=3.5, h=2.1, y_offset=y_offset))
     if replace or handle.id == 0:
         particle = +Particle(-1)
-        match get_connector_base_kind(kind):
+        base_kind = get_connector_base_kind(kind)
+        match base_kind:
             case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
                 particle @= ActiveParticles.normal_slide_connector.circular
                 if get_connector_style(kind) != NoteStyle.DEFAULT:
@@ -2019,7 +2410,7 @@ def update_circular_connector_particle(
                 if get_connector_style(kind) != NoteStyle.DEFAULT:
                     particle @= get_styled_connector_particles(get_connector_style(kind), True).circular
             case _:
-                assert_never(kind)
+                assert_never(base_kind)
         replace_looped_particle(handle, particle, layout, duration=1 / Options.effect_animation_speed)
     else:
         update_looped_particle(handle, layout)
@@ -2041,7 +2432,8 @@ def update_linear_connector_particle(
     )
     particle = +Particle
     if replace or handle.id == 0:
-        match get_connector_base_kind(kind):
+        base_kind = get_connector_base_kind(kind)
+        match base_kind:
             case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
                 particle @= ActiveParticles.normal_slide_connector.linear
                 if get_connector_style(kind) != NoteStyle.DEFAULT:
@@ -2051,7 +2443,7 @@ def update_linear_connector_particle(
                 if get_connector_style(kind) != NoteStyle.DEFAULT:
                     particle @= get_styled_connector_particles(get_connector_style(kind), True).linear
             case _:
-                assert_never(kind)
+                assert_never(base_kind)
         replace_looped_particle(handle, particle, layout, duration=1 / Options.effect_animation_speed)
     else:
         update_looped_particle(handle, layout)
@@ -2070,7 +2462,8 @@ def spawn_linear_connector_trail_particle(
         layout_linear_effect(lane, shear=0, y_offset=y_offset), transformed_vec_at(lane, approach(1 - y_offset))
     )
     particle = +Particle
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             particle @= ActiveParticles.normal_slide_connector.trail_linear
             if get_connector_style(kind) != NoteStyle.DEFAULT:
@@ -2080,7 +2473,7 @@ def spawn_linear_connector_trail_particle(
             if get_connector_style(kind) != NoteStyle.DEFAULT:
                 particle @= get_styled_connector_particles(get_connector_style(kind), True).trail_linear
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
     particle.spawn(layout, duration=0.5 / Options.effect_animation_speed)
 
 
@@ -2095,7 +2488,8 @@ def spawn_connector_slot_particles(
     if not Options.note_effect_enabled:
         return
     particle = +Particle
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             particle @= ActiveParticles.normal_slide_connector.slot_linear
             if get_connector_style(kind) != NoteStyle.DEFAULT:
@@ -2105,7 +2499,7 @@ def spawn_connector_slot_particles(
             if get_connector_style(kind) != NoteStyle.DEFAULT:
                 particle @= get_styled_connector_particles(get_connector_style(kind), True).slot_linear
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
     for slot_lane in iter_slot_lanes(lane, size):
         layout = transform.transform_billboard(
             layout_linear_effect(slot_lane, shear=0, y_offset=y_offset),
@@ -2128,7 +2522,8 @@ def draw_connector_slot_glow_effect(
     if not Options.slot_effect_enabled:
         return
     sprite = +Sprite
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             sprite @= ActiveSkin.active_slide_connector.slot_glow
             if get_connector_style(kind) != NoteStyle.DEFAULT:
@@ -2138,7 +2533,7 @@ def draw_connector_slot_glow_effect(
             if get_connector_style(kind) != NoteStyle.DEFAULT:
                 sprite @= get_styled_active_connector_sprites(get_connector_style(kind), True).slot_glow
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
     height = (
         0.85 + (1.2 - 0.85) * ((cos((time() - start_time) * 8 * pi) + 1) / 2)  # min + (max - min) * osc
         if LevelConfig.ui_version == Version.v3
@@ -2167,13 +2562,14 @@ def update_connector_sfx(
     if Options.auto_sfx:
         return
     effect = +Effect
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             effect @= Effects.normal_hold
         case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             effect @= Effects.critical_hold
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
     if replace:
         replace_looped_sfx(handle, effect)
     elif handle.id == 0:
@@ -2189,13 +2585,14 @@ def schedule_connector_sfx(
     if not Options.sfx_enabled:
         return
     effect = +Effect
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
             effect @= Effects.normal_hold
         case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
             effect @= Effects.critical_hold
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
     last_start_time = start_time
     hide = False
     for group in iter_timescale_changes_in_group_from_time(timescale_group, start_time):

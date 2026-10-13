@@ -33,7 +33,7 @@ from sekai.lib.connector import (
     SegmentPresentation,
     get_connector_fractions,
 )
-from sekai.lib.ease import EaseType
+from sekai.lib.ease import EaseType, ease
 from sekai.lib.layout import (
     IDENTITY_STAGE_SCREEN_TRANSFORM,
     DynamicLayout,
@@ -41,11 +41,15 @@ from sekai.lib.layout import (
     Hitbox,
     Layout,
     StageTransform,
+    StageTransformParams,
     blend_stage_transform,
+    blend_stage_transform_at_elevation,
+    blend_stage_transform_over_elevation,
     camera_layout_transform_at_time,
     compute_hitbox,
     compute_hitbox_at_time,
     compute_stage_transform,
+    compute_stage_transform_at_elevation,
     current_layout_transform,
     identity_stage_transform,
 )
@@ -55,8 +59,7 @@ from sekai.lib.note import (
     damage_tick_input_start_beat,
     draw_hitbox_overlay,
     draw_note,
-    get_attach_eased_frac,
-    get_attach_frac,
+    get_attach_frac_for_note,
     get_attach_params,
     get_leniency,
     get_note_bucket,
@@ -198,12 +201,7 @@ class BaseNote(PlayArchetype):
         # so per-note elevation fits alongside RUSH's score and input state.
         if not self.is_attached:
             return 0.0
-        return get_attach_eased_frac(
-            self.connector_ease,
-            self.attach_head_ref.get().target_time,
-            self.attach_tail_ref.get().target_time,
-            self.target_time,
-        )
+        return ease(self.connector_ease, self.head_ease_frac)
 
     @property
     def judgment_window(self) -> SekaiWindow:
@@ -291,6 +289,7 @@ class BaseNote(PlayArchetype):
                 tail_size=attach_tail.size,
                 tail_target_time=attach_tail.target_time,
                 target_time=self.target_time,
+                fraction=self.head_ease_frac,
             )
             self.lane = lane
             self.size = size
@@ -1115,13 +1114,16 @@ class BaseNote(PlayArchetype):
             result.y_offset = lerp(
                 head_geometry.y_offset,
                 tail_geometry.y_offset,
-                get_attach_frac(head.target_time, tail.target_time, self.target_time),
+                self.head_ease_frac,
             )
-            result.transform @= blend_stage_transform(
-                head_geometry.transform,
-                tail_geometry.transform,
-                get_attach_eased_frac(self.connector_ease, head.target_time, tail.target_time, self.target_time),
-            )
+            if head.beat == tail.beat:
+                result.transform @= self.same_beat_attachment_transform(context.time)
+            else:
+                result.transform @= blend_stage_transform(
+                    head_geometry.transform,
+                    tail_geometry.transform,
+                    ease(self.connector_ease, self.head_ease_frac),
+                )
         else:
             result @= self._basic_input_geometry(context)
         return result
@@ -1226,7 +1228,7 @@ class BaseNote(PlayArchetype):
             return lerp(
                 head._basic_visual_y_offset,
                 tail._basic_visual_y_offset,
-                get_attach_frac(head.target_time, tail.target_time, self.target_time),
+                self.head_ease_frac,
             )
         return self._basic_visual_y_offset
 
@@ -1245,7 +1247,7 @@ class BaseNote(PlayArchetype):
             return lerp(
                 head._basic_visual_note_alpha,
                 tail._basic_visual_note_alpha,
-                get_attach_frac(head.target_time, tail.target_time, self.target_time),
+                self.head_ease_frac,
             )
         return self._basic_visual_note_alpha
 
@@ -1261,9 +1263,65 @@ class BaseNote(PlayArchetype):
             return lerp(
                 head._basic_y_offset_at(t),
                 tail._basic_y_offset_at(t),
-                get_attach_frac(head.target_time, tail.target_time, self.target_time),
+                self.head_ease_frac,
             )
         return self._basic_y_offset_at(t)
+
+    def _basic_transform_params(self, t: float | None = None) -> StageTransformParams:
+        result = +StageTransformParams
+        result.elevation = self.elevation
+        if self.stage_ref.index > 0:
+            props = +self.stage_ref.get().props if t is None else get_stage_props(self.stage_ref.get(), t)
+            result.stage_rotate = props.rotate
+            result.x_lane_translate = props.x_lane_translate
+            result.y_lane_translate = props.y_lane_translate
+            result.mask_lane = props.lane
+            result.center_weight = props.center_weight
+            result.elevation += props.elevation
+        return result
+
+    def effective_elevation(self, t: float | None = None) -> float:
+        if self.is_attached:
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            frac = self.head_ease_frac if head.beat == tail.beat else self.attach_eased_frac
+            return lerp(head._basic_transform_params(t).elevation, tail._basic_transform_params(t).elevation, frac)
+        return self._basic_transform_params(t).elevation
+
+    def stage_transform_at_elevation(self, elevation: float, t: float | None = None) -> StageTransform:
+        camera = current_layout_transform() if t is None else camera_layout_transform_at_time(t)
+        result = +StageTransform
+        if self.is_attached:
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            head_params = head._basic_transform_params(t)
+            tail_params = tail._basic_transform_params(t)
+            if head.beat == tail.beat:
+                result @= blend_stage_transform_at_elevation(
+                    camera, head_params, tail_params, self.attach_eased_frac, elevation
+                )
+            else:
+                # Preserve the parent height difference when moving the attachment.
+                delta = elevation - lerp(head_params.elevation, tail_params.elevation, self.attach_eased_frac)
+                result @= blend_stage_transform(
+                    compute_stage_transform_at_elevation(camera, head_params, head_params.elevation + delta),
+                    compute_stage_transform_at_elevation(camera, tail_params, tail_params.elevation + delta),
+                    self.attach_eased_frac,
+                )
+        else:
+            result @= compute_stage_transform_at_elevation(camera, self._basic_transform_params(t), elevation)
+        return result
+
+    def same_beat_attachment_transform(self, t: float | None = None) -> StageTransform:
+        head = self.attach_head_ref.get()
+        tail = self.attach_tail_ref.get()
+        return blend_stage_transform_over_elevation(
+            current_layout_transform() if t is None else camera_layout_transform_at_time(t),
+            head._basic_transform_params(t),
+            tail._basic_transform_params(t),
+            self.attach_eased_frac,
+            self.head_ease_frac,
+        )
 
     def _basic_visual_stage_transform(self) -> StageTransform:
         result = +StageTransform
@@ -1280,11 +1338,14 @@ class BaseNote(PlayArchetype):
         if self.is_attached:
             head = self.attach_head_ref.get()
             tail = self.attach_tail_ref.get()
-            result @= blend_stage_transform(
-                head._basic_visual_stage_transform(),
-                tail._basic_visual_stage_transform(),
-                self.attach_eased_frac,
-            )
+            if head.beat == tail.beat:
+                result @= self.same_beat_attachment_transform()
+            else:
+                result @= blend_stage_transform(
+                    head._basic_visual_stage_transform(),
+                    tail._basic_visual_stage_transform(),
+                    self.attach_eased_frac,
+                )
         else:
             result @= self._basic_visual_stage_transform()
         return result
@@ -1344,11 +1405,14 @@ class BaseNote(PlayArchetype):
         if self.is_attached:
             head = self.attach_head_ref.get()
             tail = self.attach_tail_ref.get()
-            result @= blend_stage_transform(
-                head._basic_stage_transform_at(t),
-                tail._basic_stage_transform_at(t),
-                get_attach_eased_frac(self.connector_ease, head.target_time, tail.target_time, self.target_time),
-            )
+            if head.beat == tail.beat:
+                result @= self.same_beat_attachment_transform(t)
+            else:
+                result @= blend_stage_transform(
+                    head._basic_stage_transform_at(t),
+                    tail._basic_stage_transform_at(t),
+                    ease(self.connector_ease, self.head_ease_frac),
+                )
         else:
             result @= self._basic_stage_transform_at(t)
         return result
@@ -1383,10 +1447,23 @@ class BaseNote(PlayArchetype):
             return True
 
     @property
+    def has_time_attachment(self) -> bool:
+        return self.is_attached and self.attach_head_ref.get().beat != self.attach_tail_ref.get().beat
+
+    @property
     def head_ease_frac(self) -> float:
         if self.is_attached:
-            return get_attach_frac(
-                self.attach_head_ref.get().target_time, self.attach_tail_ref.get().target_time, self.target_time
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            return get_attach_frac_for_note(
+                head.beat,
+                tail.beat,
+                head.target_time,
+                tail.target_time,
+                self.target_time,
+                head.elevation,
+                tail.elevation,
+                self.elevation,
             )
         else:
             return 0.0
@@ -1394,8 +1471,17 @@ class BaseNote(PlayArchetype):
     @property
     def tail_ease_frac(self) -> float:
         if self.is_attached:
-            return get_attach_frac(
-                self.attach_head_ref.get().target_time, self.attach_tail_ref.get().target_time, self.target_time
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            return get_attach_frac_for_note(
+                head.beat,
+                tail.beat,
+                head.target_time,
+                tail.target_time,
+                self.target_time,
+                head.elevation,
+                tail.elevation,
+                self.elevation,
             )
         else:
             return 1.0
@@ -1420,12 +1506,17 @@ class BaseNote(PlayArchetype):
 
 
 def compute_slide_input_bounds(ease_type: EaseType, head: BaseNote, tail: BaseNote, t: float, leniency: float) -> Quad:
+    head_ease_frac = head.head_ease_frac
+    tail_ease_frac = tail.tail_ease_frac
+    if head.beat == tail.beat and (head.has_time_attachment or tail.has_time_attachment):
+        head_ease_frac = 0.0
+        tail_ease_frac = 1.0
     input_frac, input_interp_frac = get_connector_fractions(
         ease_type,
         head.target_time,
-        head.head_ease_frac,
+        head_ease_frac,
         tail.target_time,
-        tail.tail_ease_frac,
+        tail_ease_frac,
         t,
     )
     # Account for input offset by querying camera and stage geometry at the input timestamp.
@@ -1451,11 +1542,20 @@ def compute_slide_input_bounds(ease_type: EaseType, head: BaseNote, tail: BaseNo
         tail_geometry.y_offset,
         input_frac,
     )
-    input_transform = blend_stage_transform(
-        head_geometry.transform,
-        tail_geometry.transform,
-        input_interp_frac,
-    )
+    input_transform = +StageTransform
+    if head.beat == tail.beat:
+        elevation = lerp(head.effective_elevation(t), tail.effective_elevation(t), input_frac)
+        input_transform @= blend_stage_transform(
+            head.stage_transform_at_elevation(elevation, t),
+            tail.stage_transform_at_elevation(elevation, t),
+            input_interp_frac,
+        )
+    else:
+        input_transform @= blend_stage_transform(
+            head_geometry.transform,
+            tail_geometry.transform,
+            input_interp_frac,
+        )
     return compute_hitbox(
         context.layout,
         input_lane,

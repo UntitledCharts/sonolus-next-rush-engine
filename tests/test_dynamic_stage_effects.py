@@ -15,6 +15,7 @@ from sonolus.script.vec import Vec2
 from sekai.lib import initialization, layout, particle_manager
 from sekai.lib import note as note_lib
 from sekai.lib.ease import EaseType
+from sekai.lib.level_config import EngineRevision
 from sekai.lib.note_style import NoteStyle
 from sekai.lib.stage import VisualMask, masked_note_extents_by_limits
 from sekai.play import connector as play_connector
@@ -26,6 +27,11 @@ from sekai.watch import note as watch_note
 
 
 class SlideScoreLinkTests(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(layout, "LevelConfig", SimpleNamespace(revision=EngineRevision.LATEST))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_score_sort_preserves_elevated_slide_in_both_modes(self):
         camera = layout.LayoutTransform(
             t=0, w_scale=0.1, h_scale=-0.5, x_translate=0, rotate=0, stage_tilt=1, size_zoom=1
@@ -94,6 +100,11 @@ class SlideScoreLinkTests(unittest.TestCase):
 
 
 class MaskedEffectTests(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(layout, "LevelConfig", SimpleNamespace(revision=EngineRevision.LATEST))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_unrelated_particle_groups_do_not_share_a_recycling_chunk(self):
         particle = cast(Particle, SimpleNamespace(id=4))
         handler = SimpleNamespace(chunk_serial=0)

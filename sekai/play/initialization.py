@@ -1,3 +1,5 @@
+from typing import cast
+
 from sonolus.script.archetype import EntityRef, PlayArchetype, callback, entity_data, entity_info_at, exported, imported
 from sonolus.script.containers import sort_linked_entities
 from sonolus.script.runtime import level_score
@@ -8,6 +10,7 @@ from sekai.lib.buckets import init_buckets
 from sekai.lib.connector import (
     CONNECTOR_SFX_ACTIVE_TIME_INIT,
     CONNECTOR_SFX_INACTIVE_TIME_INIT,
+    ActiveConnectorKind,
     init_connector_sfx_times,
     is_sfx_connector,
     schedule_connector_sfx,
@@ -224,7 +227,7 @@ def schedule_auto_connector_sfx_events(list_head: int):
 
         if active_time >= inactive_time and active_connector_index > 0:
             schedule_connector_sfx(
-                Connector.at(active_connector_index).segment_head.segment_kind,
+                cast(ActiveConnectorKind, Connector.at(active_connector_index).segment_head.segment_kind),
                 Connector.at(active_connector_index).segment_head.timescale_group,
                 current_time,
                 next_time,
@@ -245,7 +248,7 @@ def schedule_auto_connector_sfx_events(list_head: int):
 
     if active_time >= inactive_time and active_connector_index > 0:
         schedule_connector_sfx(
-            Connector.at(active_connector_index).segment_head.segment_kind,
+            cast(ActiveConnectorKind, Connector.at(active_connector_index).segment_head.segment_kind),
             Connector.at(active_connector_index).segment_head.timescale_group,
             current_time,
             LastNote.last_time,

@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from enum import IntEnum, auto
 from math import ceil, floor
-from typing import assert_never, cast
+from typing import Literal, TypeIs, assert_never, cast
 
 from sonolus.script.archetype import EntityRef, HapticType, PlayArchetype, WatchArchetype, get_archetype_by_name
 from sonolus.script.array import Dim
@@ -172,6 +172,43 @@ class NoteKind(IntEnum):
     ANCHOR = auto()
 
 
+VisibleNoteKind = Literal[
+    NoteKind.NORM_TAP,
+    NoteKind.CRIT_TAP,
+    NoteKind.NORM_FLICK,
+    NoteKind.CRIT_FLICK,
+    NoteKind.NORM_TRACE,
+    NoteKind.CRIT_TRACE,
+    NoteKind.NORM_TRACE_FLICK,
+    NoteKind.CRIT_TRACE_FLICK,
+    NoteKind.NORM_RELEASE,
+    NoteKind.CRIT_RELEASE,
+    NoteKind.NORM_HEAD_TAP,
+    NoteKind.CRIT_HEAD_TAP,
+    NoteKind.NORM_HEAD_FLICK,
+    NoteKind.CRIT_HEAD_FLICK,
+    NoteKind.NORM_HEAD_TRACE,
+    NoteKind.CRIT_HEAD_TRACE,
+    NoteKind.NORM_HEAD_TRACE_FLICK,
+    NoteKind.CRIT_HEAD_TRACE_FLICK,
+    NoteKind.NORM_HEAD_RELEASE,
+    NoteKind.CRIT_HEAD_RELEASE,
+    NoteKind.NORM_TAIL_TAP,
+    NoteKind.CRIT_TAIL_TAP,
+    NoteKind.NORM_TAIL_FLICK,
+    NoteKind.CRIT_TAIL_FLICK,
+    NoteKind.NORM_TAIL_TRACE,
+    NoteKind.CRIT_TAIL_TRACE,
+    NoteKind.NORM_TAIL_TRACE_FLICK,
+    NoteKind.CRIT_TAIL_TRACE_FLICK,
+    NoteKind.NORM_TAIL_RELEASE,
+    NoteKind.CRIT_TAIL_RELEASE,
+    NoteKind.NORM_TICK,
+    NoteKind.CRIT_TICK,
+    NoteKind.DAMAGE,
+]
+
+
 def init_score(note_archetypes: Iterable[type[PlayArchetype | WatchArchetype]]):
     match LevelConfig.score_mode:
         case ScoreMode.WEIGHTED_COMBO | ScoreMode.UNWEIGHTED_COMBO:
@@ -332,6 +369,22 @@ def get_attach_frac(
     return safe_unlerp_clamped(head_target_time, tail_target_time, target_time)
 
 
+def get_attach_frac_for_note(
+    head_beat: float,
+    tail_beat: float,
+    head_target_time: float,
+    tail_target_time: float,
+    target_time: float,
+    head_elevation: float,
+    tail_elevation: float,
+    elevation: float,
+) -> float:
+    # Only exact authored beat equality switches to elevation.
+    if head_beat == tail_beat:
+        return safe_unlerp_clamped(head_elevation, tail_elevation, elevation)
+    return get_attach_frac(head_target_time, tail_target_time, target_time)
+
+
 def get_attach_eased_frac(
     ease_type: EaseType,
     head_target_time: float,
@@ -350,8 +403,13 @@ def get_attach_params(
     tail_size: float,
     tail_target_time: float,
     target_time: float,
+    fraction: float | None = None,
 ):
-    eased_frac = get_attach_eased_frac(ease_type, head_target_time, tail_target_time, target_time)
+    eased_frac = (
+        get_attach_eased_frac(ease_type, head_target_time, tail_target_time, target_time)
+        if fraction is None
+        else ease(ease_type, fraction)
+    )
     lane = lerp(head_lane, tail_lane, eased_frac)
     size = max(0.0, lerp(head_size, tail_size, eased_frac))
     return lane, size
@@ -487,7 +545,7 @@ def note_kind_as_critical(kind: NoteKind) -> NoteKind:
             return kind
 
 
-def get_note_visual_family(kind: NoteKind, direction: FlickDirection) -> NoteVisualFamily:
+def get_note_visual_family(kind: VisibleNoteKind, direction: FlickDirection) -> NoteVisualFamily:
     match kind:
         case NoteKind.NORM_TAP:
             return NoteVisualFamily.NORMAL_NOTE
@@ -550,7 +608,7 @@ def get_note_sprite_set(
     if kind in {NoteKind.HIDE_TICK, NoteKind.HIDE_DAMAGE_TICK, NoteKind.ANCHOR}:
         result @= EMPTY_NOTE_SPRITE_SET
     else:
-        result @= styled_note_sprites(get_note_visual_family(kind, direction), style)
+        result @= styled_note_sprites(get_note_visual_family(cast(VisibleNoteKind, kind), direction), style)
     return result
 
 
@@ -693,7 +751,7 @@ def get_flick_layer(kind: NoteKind) -> float:
             return LAYER_NOTE_ARROW
 
 
-def has_note_particles(kind: NoteKind) -> bool:
+def has_note_particles(kind: NoteKind) -> TypeIs[VisibleNoteKind]:
     return kind not in {NoteKind.HIDE_TICK, NoteKind.HIDE_DAMAGE_TICK, NoteKind.ANCHOR}
 
 

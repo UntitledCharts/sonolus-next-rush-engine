@@ -32,7 +32,7 @@ CIRC_QUADRATURE_ERROR = _circ_quadrature_error(QUADRATURE_WIDTH)
 CIRC_COMBINED_QUADRATURE_ERROR = _circ_quadrature_error(2 * QUADRATURE_WIDTH) / 2
 
 
-def _integration_error_coefficient(ease: int) -> float:
+def _integration_error_coefficient(ease: EaseType) -> float:
     if ease <= EaseType.OUT_IN_QUAD or is_step_ease(ease):
         return 0.0
     family = ease_family(ease)
@@ -73,7 +73,7 @@ INTEGRAL_TOTALS = Array(
 )
 
 
-def integration_error_bound(v0: float, v1: float, ease: int, span: float) -> float:
+def integration_error_bound(v0: float, v1: float, ease: EaseType, span: float) -> float:
     """Return an integration error bound, excluding rounding."""
     return abs(v1 - v0) * span * INTEGRATION_ERROR_COEFFICIENTS[ease]
 
@@ -156,7 +156,7 @@ def _ease_integral(ease: EaseType, u: float) -> float:
     return base + scale * _in_integral(family, y) + extra
 
 
-def speed_at(v0: float, v1: float, ease: int, start: float, end: float, t: float) -> float:
+def speed_at(v0: float, v1: float, ease: EaseType, start: float, end: float, t: float) -> float:
     if is_in_step_ease(ease) or t <= start:
         return v0
     if t >= end:
@@ -170,7 +170,7 @@ def speed_at(v0: float, v1: float, ease: int, start: float, end: float, t: float
     return v0 + (v1 - v0) * ease_value(ease, u)
 
 
-def _quadratic_ease(ease: int, u: float) -> float:
+def _quadratic_ease(ease: EaseType, u: float) -> float:
     if ease == EaseType.LINEAR:
         return u
     if ease == EaseType.IN_QUAD:
@@ -183,7 +183,9 @@ def _quadratic_ease(ease: int, u: float) -> float:
     return ease_out_in_quad(u)
 
 
-def _quadratic_piece(v0: float, v1: float, ease: int, span: float, left: float, right: float, width: float) -> float:
+def _quadratic_piece(
+    v0: float, v1: float, ease: EaseType, span: float, left: float, right: float, width: float
+) -> float:
     # Evaluate falling curves from the lower speed to reduce rounding error.
     if v1 < v0:
         v0, v1 = v1, v0
@@ -197,7 +199,7 @@ def _quadratic_piece(v0: float, v1: float, ease: int, span: float, left: float, 
     return width * (v0 + (v1 - v0) * average_ease)
 
 
-def _piece(v0: float, v1: float, ease: int, span: float, left: float, right: float, width: float) -> float:
+def _piece(v0: float, v1: float, ease: EaseType, span: float, left: float, right: float, width: float) -> float:
     # Evaluate falling curves from the lower speed to reduce rounding error.
     if v1 < v0:
         v0, v1 = v1, v0
@@ -222,7 +224,7 @@ def _piece(v0: float, v1: float, ease: int, span: float, left: float, right: flo
     return width * (v0 + (v1 - v0) * average)
 
 
-def integrate_times(v0: float, v1: float, ease: int, start: float, end: float, left: float, right: float) -> float:
+def integrate_times(v0: float, v1: float, ease: EaseType, start: float, end: float, left: float, right: float) -> float:
     if ease == EaseType.NONE or not EaseType.LINEAR <= ease <= EaseType.OUT_IN_QUAD:
         return integrate_eased_times(v0, v1, ease, start, end, left, right)
     if start == end or left == right:
@@ -242,7 +244,7 @@ def integrate_times(v0: float, v1: float, ease: int, start: float, end: float, l
 
 
 def integrate_eased_times(
-    v0: float, v1: float, ease: int, start: float, end: float, left: float, right: float
+    v0: float, v1: float, ease: EaseType, start: float, end: float, left: float, right: float
 ) -> float:
     if start == end or left == right:
         return 0.0

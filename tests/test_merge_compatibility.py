@@ -11,6 +11,7 @@ from sonolus.script.vec import Vec2
 from sekai.level_utils import LevelNote, build_level
 from sekai.lib import layer, layout
 from sekai.lib.ease import EaseType
+from sekai.lib.level_config import EngineRevision
 from sekai.lib.note import NoteKind
 from sekai.lib.options import StageCoverNoteSpeedCompensation
 from sekai.play import note as play_note
@@ -25,7 +26,7 @@ class ElevationCompatibilityTests(unittest.TestCase):
         )
         for name, value in (
             ("Options", self.options),
-            ("LevelConfig", SimpleNamespace(dynamic_stages=True)),
+            ("LevelConfig", SimpleNamespace(dynamic_stages=True, revision=EngineRevision.LATEST)),
             ("Layout", SimpleNamespace(approach_start=0, field_h=1)),
         ):
             patcher = patch.object(layout, name, value)
@@ -56,10 +57,42 @@ class ElevationCompatibilityTests(unittest.TestCase):
             attach_head_ref=SimpleNamespace(get=lambda: SimpleNamespace(target_time=0)),
             attach_tail_ref=SimpleNamespace(get=lambda: SimpleNamespace(target_time=4)),
             target_time=2,
+            head_ease_frac=0.5,
         )
         assert play_note.BaseNote.attach_eased_frac.fget(fake) == 0.25
         fake.is_attached = False
         assert play_note.BaseNote.attach_eased_frac.fget(fake) == 0
+
+    def test_same_beat_attachment_uses_elevation_fraction_in_both_modes(self):
+        for cls in (play_note.BaseNote, watch_note.WatchBaseNote):
+            with self.subTest(mode=cls.__name__):
+                fake = SimpleNamespace(
+                    is_attached=True,
+                    connector_ease=EaseType.IN_QUAD,
+                    attach_head_ref=SimpleNamespace(get=lambda: SimpleNamespace(beat=1, target_time=2, elevation=0)),
+                    attach_tail_ref=SimpleNamespace(get=lambda: SimpleNamespace(beat=1, target_time=2, elevation=4)),
+                    target_time=2,
+                    elevation=2,
+                )
+                fake.head_ease_frac = cls.head_ease_frac.fget(fake)
+                assert fake.head_ease_frac == 0.5
+                assert cls.tail_ease_frac.fget(fake) == 0.5
+                if cls is play_note.BaseNote:
+                    assert cls.attach_eased_frac.fget(fake) == 0.25
+
+    def test_revision_two_elevation_is_independent_of_stage_tilt(self):
+        for tilt in (0.0, 0.5, 1.0):
+            with self.subTest(tilt=tilt):
+                self.camera.stage_tilt = tilt
+                base_y = -0.5
+                lane_width = self.camera.w_scale * (tilt + (1 - tilt) * layout.STAGE_WIDTH_MID)
+                layout.LevelConfig.revision = EngineRevision.APPARENT_ELEVATION
+                projection = layout.elevation_projection(self.camera, 2)
+                assert isclose(projection.apply(Vec2(0, base_y)).y, base_y + 2 * lane_width)
+                assert isclose(projection.elevation, 2)
+                layout.LevelConfig.revision = EngineRevision.SONOLUS_1_1_0
+                legacy_projection = layout.elevation_projection(self.camera, 2)
+                assert isclose(legacy_projection.apply(Vec2(0, base_y)).y, base_y + 2 * lane_width * tilt)
 
     def test_elevated_note_input_and_visual_geometry_agree(self):
         for module, cls in ((play_note, play_note.BaseNote), (watch_note, watch_note.WatchBaseNote)):

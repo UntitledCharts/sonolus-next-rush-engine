@@ -8,13 +8,12 @@ from sonolus.script.sprite import Sprite
 from sonolus.script.timing import beat_to_time
 
 from sekai.lib.connector import ConnectorKind, ConnectorLayer, SegmentPresentation
-from sekai.lib.ease import EaseType
+from sekai.lib.ease import EaseType, ease
 from sekai.lib.layer import get_z, layers
 from sekai.lib.layout import FlickDirection
 from sekai.lib.note import (
     NoteKind,
-    get_attach_eased_frac,
-    get_attach_frac,
+    get_attach_frac_for_note,
     get_attach_params,
     get_flick_layer,
     get_note_body_layer,
@@ -121,6 +120,7 @@ class PreviewBaseNote(PreviewArchetype):
                 tail_size=attach_tail.size,
                 tail_target_time=attach_tail.target_time,
                 target_time=self.target_time,
+                fraction=self.head_ease_frac,
             )
             self.lane = lane
             self.size = size
@@ -152,8 +152,17 @@ class PreviewBaseNote(PreviewArchetype):
     @property
     def head_ease_frac(self) -> float:
         if self.is_attached:
-            return get_attach_frac(
-                self.attach_head_ref.get().target_time, self.attach_tail_ref.get().target_time, self.target_time
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            return get_attach_frac_for_note(
+                head.beat,
+                tail.beat,
+                head.target_time,
+                tail.target_time,
+                self.target_time,
+                head.elevation,
+                tail.elevation,
+                self.elevation,
             )
         else:
             return 0.0
@@ -161,8 +170,17 @@ class PreviewBaseNote(PreviewArchetype):
     @property
     def tail_ease_frac(self) -> float:
         if self.is_attached:
-            return get_attach_frac(
-                self.attach_head_ref.get().target_time, self.attach_tail_ref.get().target_time, self.target_time
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            return get_attach_frac_for_note(
+                head.beat,
+                tail.beat,
+                head.target_time,
+                tail.target_time,
+                self.target_time,
+                head.elevation,
+                tail.elevation,
+                self.elevation,
             )
         else:
             return 1.0
@@ -182,7 +200,7 @@ class PreviewBaseNote(PreviewArchetype):
             return lerp(
                 head_lane,
                 tail_lane,
-                get_attach_eased_frac(self.connector_ease, head.target_time, tail.target_time, self.target_time),
+                ease(self.connector_ease, self.head_ease_frac),
             )
         return self._basic_visual_lane_at(t, right_limit=right_limit, exact=exact)
 
@@ -208,7 +226,7 @@ class PreviewBaseNote(PreviewArchetype):
         result @= interpolate_visual_masks(
             head._basic_visual_mask_at(t, right_limit=right_limit, exact=exact),
             tail._basic_visual_mask_at(t, right_limit=right_limit, exact=exact),
-            get_attach_eased_frac(self.connector_ease, head.target_time, tail.target_time, self.target_time),
+            ease(self.connector_ease, self.head_ease_frac),
         )
         return result
 

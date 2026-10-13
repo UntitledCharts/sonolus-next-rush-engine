@@ -255,6 +255,7 @@ def build_level(
     title: str,
     bgm: Asset | None,
     entities: list[LevelEntities],
+    revision: EngineRevision = EngineRevision.LATEST,
 ) -> Level:
     bpm_changes: list[LevelBpmChange] = []
     level_ts_groups: list[LevelTimescaleGroup] = []
@@ -435,7 +436,7 @@ def build_level(
     _emit_sim_lines(note_entities, out_entities)
 
     initialization = Initialization(
-        revision=EngineRevision.LATEST,
+        revision=revision,
         initial_life=1000,
     )
     if first_camera is not None:

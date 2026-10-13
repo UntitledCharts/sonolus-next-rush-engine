@@ -27,7 +27,7 @@ from sonolus.script.vec import Vec2
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import get_event_as, next_event_time_in_list, query_event_list
 from sekai.lib.ease import EaseType, eased_range, event_progress
-from sekai.lib.level_config import LevelConfig
+from sekai.lib.level_config import EngineRevision, LevelConfig
 from sekai.lib.options import Options, StageCoverNoteSpeedCompensation, Version
 
 LANE_T = 47 / 850
@@ -280,11 +280,12 @@ def stage_transform_is_identity(st: StageTransform) -> bool:
 def elevation_projection(camera: LayoutTransform, elevation: float) -> StageScreenTransform:
     """Project stage elevation while keeping the perspective vanishing line fixed.
 
-    At full tilt, one elevation unit raises the stage by one lane width.
-    The formula stays finite at zero tilt. Limit elevation so the stage cannot flip.
+    One elevation unit raises the stage by one lane width. Before revision 2, the rise also scales with tilt.
+    Limit elevation so the stage cannot flip.
     """
     tilt = camera.stage_tilt
-    amount = elevation * camera.w_scale * tilt
+    tilt_factor = 1.0 if LevelConfig.revision >= EngineRevision.APPARENT_ELEVATION else tilt
+    amount = elevation * camera.w_scale * tilt_factor
     if tilt > 0:
         amount = min(amount, -camera.h_scale / tilt)
     scale_delta = amount * tilt / camera.h_scale
@@ -298,7 +299,7 @@ def elevation_projection(camera: LayoutTransform, elevation: float) -> StageScre
         a10=scale_delta * sn * cs,
         a11=1 + scale_delta * cs * cs,
         a12=shift * cs,
-        elevation=amount / camera.w_scale / tilt if tilt > 0 else 0.0,
+        elevation=amount / camera.w_scale / tilt_factor if tilt_factor > 0 else 0.0,
     )
 
 
@@ -372,6 +373,59 @@ def blend_stage_transform(a: StageTransform, b: StageTransform, frac: float) -> 
             a12=lerp(a.projection.a12, b.projection.a12, projection_frac),
             elevation=lerp(a.projection.elevation, b.projection.elevation, projection_frac),
         ),
+    )
+
+
+class StageTransformParams(Record):
+    """Stage parameters with combined note and stage elevation."""
+
+    stage_rotate: float
+    x_lane_translate: float
+    y_lane_translate: float
+    mask_lane: float
+    center_weight: float
+    elevation: float
+
+
+def compute_stage_transform_at_elevation(
+    camera: LayoutTransform, params: StageTransformParams, elevation: float
+) -> StageTransform:
+    return compute_stage_transform(
+        camera,
+        params.stage_rotate,
+        params.x_lane_translate,
+        params.y_lane_translate,
+        params.mask_lane,
+        params.center_weight,
+        elevation,
+    )
+
+
+def blend_stage_transform_at_elevation(
+    camera: LayoutTransform,
+    head: StageTransformParams,
+    tail: StageTransformParams,
+    frac: float,
+    elevation: float,
+) -> StageTransform:
+    """Rebuild pivots and translations at a common elevation before blending."""
+    return blend_stage_transform(
+        compute_stage_transform_at_elevation(camera, head, elevation),
+        compute_stage_transform_at_elevation(camera, tail, elevation),
+        frac,
+    )
+
+
+def blend_stage_transform_over_elevation(
+    camera: LayoutTransform,
+    head: StageTransformParams,
+    tail: StageTransformParams,
+    frac: float,
+    elevation_frac: float,
+) -> StageTransform:
+    """Interpolate elevation before projection clamps it, independently of lateral easing."""
+    return blend_stage_transform_at_elevation(
+        camera, head, tail, frac, lerp(head.elevation, tail.elevation, elevation_frac)
     )
 
 

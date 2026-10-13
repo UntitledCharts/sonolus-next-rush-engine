@@ -1,5 +1,5 @@
 from math import ceil
-from typing import assert_never
+from typing import assert_never, cast
 
 from sonolus.script.archetype import EntityRef, PreviewArchetype, callback, entity_data, imported
 from sonolus.script.array import Dim
@@ -11,8 +11,10 @@ from sonolus.script.sprite import Sprite
 from sekai.lib import archetype_names
 from sekai.lib.connector import (
     CONNECTOR_ZERO_SIZE_FALLBACK,
+    ActiveConnectorKind,
     ConnectorKind,
     ConnectorLayer,
+    GuideConnectorKind,
     get_active_connector_sprites,
     get_connector_alpha_option,
     get_connector_base_kind,
@@ -135,14 +137,15 @@ def draw_connector(
         return
 
     normal_sprite = Sprite(-1)
-    match get_connector_base_kind(kind):
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
         case (
             ConnectorKind.ACTIVE_NORMAL
             | ConnectorKind.ACTIVE_CRITICAL
             | ConnectorKind.FAKE_ACTIVE_NORMAL
             | ConnectorKind.FAKE_ACTIVE_CRITICAL
         ):
-            sprites = get_active_connector_sprites(kind)
+            sprites = get_active_connector_sprites(cast(ActiveConnectorKind, kind))
             normal_sprite @= sprites.connection.normal
         case (
             ConnectorKind.GUIDE_NEUTRAL
@@ -154,15 +157,15 @@ def draw_connector(
             | ConnectorKind.GUIDE_CYAN
             | ConnectorKind.GUIDE_BLACK
         ):
-            normal_sprite @= get_guide_connector_sprite(kind)
+            normal_sprite @= get_guide_connector_sprite(cast(GuideConnectorKind, kind))
         case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
             normal_sprite @= get_damage_connector_sprite(kind)
         case ConnectorKind.NONE:
             return
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
 
-    match get_connector_base_kind(kind):
+    match base_kind:
         case (
             ConnectorKind.ACTIVE_NORMAL
             | ConnectorKind.ACTIVE_CRITICAL
@@ -186,7 +189,7 @@ def draw_connector(
         ):
             pass
         case _:
-            assert_never(kind)
+            assert_never(base_kind)
 
     head_alpha = lerp(
         segment_head_alpha,

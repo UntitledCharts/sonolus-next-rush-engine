@@ -1,3 +1,5 @@
+import builtins
+
 from sonolus.script import runtime
 from sonolus.script.record import Record
 
@@ -177,7 +179,7 @@ class ZIndexes(Record):
     z4: float
 
     @property
-    def tuple(self) -> tuple[float, float, float, float]:
+    def tuple(self) -> builtins.tuple[float, float, float, float]:
         return self.z1, self.z2, self.z3, self.z4
 
 

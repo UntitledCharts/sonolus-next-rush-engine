@@ -37,7 +37,7 @@ from sekai.preview.stage import draw_preview_cover, draw_preview_stage
 class PreviewInitialization(PreviewArchetype):
     name = archetype_names.INITIALIZATION
 
-    revision: EngineRevision = imported(name="revision", default=EngineRevision.LATEST)
+    revision: EngineRevision = imported(name="revision", default=EngineRevision.SONOLUS_1_1_0)
     first_camera_ref: EntityRef[PreviewCameraChange] = imported(name="firstCamera")
 
     @callback(order=-1)

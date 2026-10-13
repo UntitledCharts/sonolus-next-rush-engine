@@ -8,8 +8,9 @@ from sekai.lib.options import Options, ScoreMode, Version
 class EngineRevision(IntEnum):
     BASE = 0
     SONOLUS_1_1_0 = 1
+    APPARENT_ELEVATION = 2
 
-    LATEST = 1
+    LATEST = 2
 
 
 @level_data
