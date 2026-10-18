@@ -92,9 +92,12 @@ from sekai.lib.particle import (
     styled_note_particles,
 )
 from sekai.lib.particle_manager import (
+    PARTICLE_PAGE_SIZE,
     ParticleManageKind,
+    ParticlePage,
     begin_particle_chunk,
     emit_particle,
+    prepare_particle_lanes,
 )
 from sekai.lib.skin import (
     EMPTY_NOTE_SPRITE_SET,
@@ -985,6 +988,45 @@ def play_note_hit_effects(
         )
 
 
+def iter_note_particle_pages(
+    kind: NoteKind,
+    direction: FlickDirection,
+    judgment: Judgment,
+    size: float,
+    lane_particles: bool,
+    style: NoteStyle,
+):
+    particles = get_note_particles(kind, direction, style)
+    # Bounds include fractional/pivot alignment; each page jumps to its own lanes.
+    slot_count = min(256, ceil(2 * size) + 1)
+    for component in range(6):
+        count = 0
+        if Options.note_effect_enabled:
+            if component == 0:
+                particle = particles.get_linear(judgment)
+                if particle.is_available:
+                    count = slot_count if particle == particles.linear_good else 1
+            elif component == 1:
+                particle = particles.get_circular(judgment)
+                if particle.is_available:
+                    count = slot_count if particle == particles.circular_good else 1
+            elif (component == 2 and particles.directional.is_available) or (
+                component == 3 and particles.tick.is_available
+            ):
+                count = 1
+            elif component == 4 and particles.get_slot_linear().is_available:
+                count = slot_count
+        if (
+            component == 5
+            and Options.lane_effect_enabled
+            and lane_particles
+            and (particles.lane.is_available or particles.lane_basic.is_available)
+        ):
+            count = min(256, ceil(2 * size) + 2)
+        for page_index in range((count + PARTICLE_PAGE_SIZE - 1) // PARTICLE_PAGE_SIZE):
+            yield component, page_index
+
+
 def schedule_note_particles(
     kind: NoteKind,
     effect_kind: NoteEffectKind,
@@ -1006,22 +1048,27 @@ def schedule_note_particles(
         return
     if kind == NoteKind.DAMAGE and judgment == Judgment.PERFECT:
         return
-    get_archetype_by_name(archetype_names.PARTICLE_MANAGER).spawn(
-        kind=kind,
-        effect_kind=effect_kind,
-        lane=lane,
-        size=size,
-        direction=direction,
-        judgment=judgment,
-        y_offset=y_offset,
-        pivot_lane=pivot_lane,
-        half_offset=half_offset,
-        target_time=target_time,
-        group_id=group_id,
-        lane_particles=lane_particles,
-        transform=transform,
-        style=style,
-    )
+    if size <= 0:
+        return
+    for component, page_index in iter_note_particle_pages(kind, direction, judgment, size, lane_particles, style):
+        get_archetype_by_name(archetype_names.PARTICLE_MANAGER).spawn(
+            kind=kind,
+            effect_kind=effect_kind,
+            lane=lane,
+            size=size,
+            direction=direction,
+            judgment=judgment,
+            y_offset=y_offset,
+            pivot_lane=pivot_lane,
+            half_offset=half_offset,
+            target_time=target_time,
+            group_id=group_id,
+            lane_particles=lane_particles,
+            transform=transform,
+            style=style,
+            component=component,
+            page_index=page_index,
+        )
 
 
 def handle_note_particles(
@@ -1039,6 +1086,9 @@ def handle_note_particles(
     lane_particles: bool = True,
     transform: StageScreenTransform = IDENTITY_STAGE_SCREEN_TRANSFORM,
     style: NoteStyle = NoteStyle.DEFAULT,
+    component: int = -1,
+    page_index: int = 0,
+    page: ParticlePage | None = None,
 ):
     if size <= 0:
         return
@@ -1055,12 +1105,18 @@ def handle_note_particles(
 
     particles = get_note_particles(kind, direction, style)
     speed = Options.effect_animation_speed
+    first_slot = page_index * PARTICLE_PAGE_SIZE
+    slot_count = PARTICLE_PAGE_SIZE if component >= 0 else 256
     if Options.note_effect_enabled:
         linear_particle = particles.get_linear(judgment)
-        if linear_particle.is_available:
+        if component in (-1, 0) and linear_particle.is_available:
             if linear_particle == particles.linear_good:
-                chunk = begin_particle_chunk(linear_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
-                for slot_lane in _iter_bundled_slot_lanes(lane, size):
+                chunk = (
+                    begin_particle_chunk(linear_particle, group_id, ParticleManageKind.MULTI, component, page_index)
+                    if managed
+                    else 0
+                )
+                for slot_lane in _iter_bundled_slot_lanes(lane, size, first=first_slot, count=slot_count):
                     layout = billboard(layout_linear_effect(slot_lane, shear=0, y_offset=y_offset), slot_lane)
                     if not quad_touches_screen(layout):
                         continue
@@ -1072,9 +1128,14 @@ def handle_note_particles(
                         slot_lane,
                         chunk,
                         managed,
+                        page,
                     )
             else:
-                chunk = begin_particle_chunk(linear_particle, group_id, ParticleManageKind.REST) if managed else 0.0
+                chunk = (
+                    begin_particle_chunk(linear_particle, group_id, ParticleManageKind.REST, component, page_index)
+                    if managed
+                    else 0
+                )
                 emit_particle(
                     linear_particle,
                     billboard(layout_linear_effect(lane, shear=0, y_offset=y_offset)),
@@ -1083,12 +1144,17 @@ def handle_note_particles(
                     0.0,
                     chunk,
                     managed,
+                    page,
                 )
         circular_particle = particles.get_circular(judgment)
-        if circular_particle.is_available:
+        if component in (-1, 1) and circular_particle.is_available:
             if circular_particle == particles.circular_good:
-                chunk = begin_particle_chunk(circular_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
-                for slot_lane in _iter_bundled_slot_lanes(lane, size):
+                chunk = (
+                    begin_particle_chunk(circular_particle, group_id, ParticleManageKind.MULTI, component, page_index)
+                    if managed
+                    else 0
+                )
+                for slot_lane in _iter_bundled_slot_lanes(lane, size, first=first_slot, count=slot_count):
                     layout = place(layout_circular_effect(slot_lane, w=1.75, h=1.05, y_offset=y_offset))
                     if not quad_touches_screen(layout):
                         continue
@@ -1100,9 +1166,14 @@ def handle_note_particles(
                         slot_lane,
                         chunk,
                         managed,
+                        page,
                     )
             else:
-                chunk = begin_particle_chunk(circular_particle, group_id, ParticleManageKind.REST) if managed else 0.0
+                chunk = (
+                    begin_particle_chunk(circular_particle, group_id, ParticleManageKind.REST, component, page_index)
+                    if managed
+                    else 0
+                )
                 emit_particle(
                     circular_particle,
                     place(layout_circular_effect(lane, w=1.75, h=1.05, y_offset=y_offset)),
@@ -1111,9 +1182,14 @@ def handle_note_particles(
                     0.0,
                     chunk,
                     managed,
+                    page,
                 )
-        if particles.directional.is_available:
-            chunk = begin_particle_chunk(particles.directional, group_id, ParticleManageKind.REST) if managed else 0.0
+        if component in (-1, 2) and particles.directional.is_available:
+            chunk = (
+                begin_particle_chunk(particles.directional, group_id, ParticleManageKind.REST, component, page_index)
+                if managed
+                else 0
+            )
             degree = (
                 45
                 if kind
@@ -1144,9 +1220,14 @@ def handle_note_particles(
                 0.0,
                 chunk,
                 managed,
+                page,
             )
-        if particles.tick.is_available:
-            chunk = begin_particle_chunk(particles.tick, group_id, ParticleManageKind.REST) if managed else 0.0
+        if component in (-1, 3) and particles.tick.is_available:
+            chunk = (
+                begin_particle_chunk(particles.tick, group_id, ParticleManageKind.REST, component, page_index)
+                if managed
+                else 0
+            )
             emit_particle(
                 particles.tick,
                 billboard(layout_tick_effect(lane, y_offset=y_offset)),
@@ -1155,11 +1236,18 @@ def handle_note_particles(
                 0.0,
                 chunk,
                 managed,
+                page,
             )
         slot_linear_particle = particles.get_slot_linear()
-        if slot_linear_particle.is_available:
-            chunk = begin_particle_chunk(slot_linear_particle, group_id, ParticleManageKind.MULTI) if managed else 0.0
-            for slot_lane in _iter_bundled_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
+        if component in (-1, 4) and slot_linear_particle.is_available:
+            chunk = (
+                begin_particle_chunk(slot_linear_particle, group_id, ParticleManageKind.MULTI, component, page_index)
+                if managed
+                else 0
+            )
+            for slot_lane in _iter_bundled_slot_lanes(
+                lane, size, pivot_lane=pivot_lane, half_offset=half_offset, first=first_slot, count=slot_count
+            ):
                 layout = billboard(layout_linear_effect(slot_lane, shear=0, y_offset=y_offset), slot_lane)
                 if not quad_touches_screen(layout):
                     continue
@@ -1171,8 +1259,9 @@ def handle_note_particles(
                     slot_lane,
                     chunk,
                     managed,
+                    page,
                 )
-    if Options.lane_effect_enabled and lane_particles:
+    if component in (-1, 5) and Options.lane_effect_enabled and lane_particles:
         lane_y_offset = (
             y_offset if kind in {NoteKind.CRIT_FLICK, NoteKind.CRIT_HEAD_FLICK, NoteKind.CRIT_TAIL_FLICK} else 0.0
         )
@@ -1185,7 +1274,8 @@ def handle_note_particles(
             NoteKind.CRIT_TAIL_TRACE_FLICK,
         }
         if particles.lane.is_available:
-            chunk = begin_particle_chunk(particles.lane, group_id, ParticleManageKind.LANE) if managed else 0.0
+            lane_kind = ParticleManageKind.MULTI if extend_down else ParticleManageKind.LANE
+            chunk = begin_particle_chunk(particles.lane, group_id, lane_kind, component, page_index) if managed else 0
             _emit_lane_particles(
                 particles.lane,
                 lane,
@@ -1197,9 +1287,16 @@ def handle_note_particles(
                 transform,
                 extend_down=extend_down,
                 compensate_overshoot=True,
+                manage_kind=lane_kind,
+                first=first_slot,
+                count=slot_count,
+                page=page,
             )
         elif particles.lane_basic.is_available:
-            chunk = begin_particle_chunk(particles.lane_basic, group_id, ParticleManageKind.LANE) if managed else 0.0
+            lane_kind = ParticleManageKind.MULTI if extend_down else ParticleManageKind.LANE
+            chunk = (
+                begin_particle_chunk(particles.lane_basic, group_id, lane_kind, component, page_index) if managed else 0
+            )
             _emit_lane_particles(
                 particles.lane_basic,
                 lane,
@@ -1211,13 +1308,26 @@ def handle_note_particles(
                 transform,
                 extend_down=extend_down,
                 compensate_overshoot=False,
+                manage_kind=lane_kind,
+                first=first_slot,
+                count=slot_count,
+                page=page,
             )
 
 
-def _iter_bundled_slot_lanes(lane: float, size: float, pivot_lane: float = 0.0, half_offset: bool = False):
-    for slot_lane in iter_slot_lanes(lane, size, pivot_lane=pivot_lane, half_offset=half_offset):
-        if -127 <= slot_lane <= 127:
-            yield slot_lane
+def _iter_bundled_slot_lanes(
+    lane: float,
+    size: float,
+    pivot_lane: float = 0.0,
+    half_offset: bool = False,
+    first: int = 0,
+    count: int = 256,
+):
+    shift = pivot_lane + (0 if half_offset else 0.5) - 0.5
+    start = max(floor(lane - shift - size + 1e-6), ceil(-127 - 0.5 - shift))
+    end = min(ceil(lane - shift + size - 1e-6), floor(127 - 0.5 - shift) + 1)
+    for i in range(start + first, min(end, start + first + count)):
+        yield i + 0.5 + shift
 
 
 def _emit_lane_particles(
@@ -1226,12 +1336,16 @@ def _emit_lane_particles(
     size: float,
     y_offset: float,
     duration: float,
-    chunk: float,
+    chunk: int,
     managed: bool,
     transform: StageScreenTransform,
     *,
     extend_down: bool,
     compensate_overshoot: bool,
+    manage_kind: ParticleManageKind = ParticleManageKind.MULTI,
+    first: int = 0,
+    count: int = 256,
+    page: ParticlePage | None = None,
 ):
     """Emit per-lane particles for visible lanes; off-screen stretches become merged quads.
 
@@ -1261,6 +1375,27 @@ def _emit_lane_particles(
     if max_i < min_i:
         return
 
+    if manage_kind == ParticleManageKind.LANE:
+        # Critical flicks retain contiguous, individually addressable lanes.
+        # Merging their off-screen ends would also erase uncovered old lanes.
+        start = max(min_i, -127)
+        end = min(max_i, 126)
+        if managed and start <= end:
+            prepare_particle_lanes(chunk, particle, start + 0.5, end + 0.5)
+        for i in range(start + first, min(end + 1, start + first + count)):
+            slot_lane = i + 0.5
+            emit_particle(
+                particle,
+                place(lane_layout(slot_lane, 0.5)),
+                duration,
+                manage_kind,
+                slot_lane,
+                chunk,
+                managed,
+                page,
+            )
+        return
+
     travel = approach(1 - y_offset)
     lo, hi = visible_lane_range_at(travel, transform)
     bottom_depth = tilt_depth(get_perspective_y(-1, travel), travel)
@@ -1272,55 +1407,66 @@ def _emit_lane_particles(
     end_i = min(max_i, 126, ceil(hi))
 
     if start_i > end_i:
+        if first > 0:
+            return
         merged_center = (min_i + max_i + 1) / 2
         merged_size = (max_i - min_i + 1) / 2
         emit_particle(
             particle,
             place(lane_layout(merged_center, merged_size)),
             duration,
-            ParticleManageKind.LANE,
+            manage_kind,
             clamp(floor(merged_center), -127, 127),
             chunk,
             managed,
+            page,
         )
         return
 
+    ordinal = 0
     if min_i < start_i:
+        ordinal += 1
+    if min_i < start_i and first == 0:
         merged_center = (min_i + start_i) / 2
         merged_size = (start_i - min_i) / 2
         emit_particle(
             particle,
             place(lane_layout(merged_center, merged_size)),
             duration,
-            ParticleManageKind.LANE,
+            manage_kind,
             start_i - 1,
             chunk,
             managed,
+            page,
         )
 
-    if max_i > end_i:
+    if max_i > end_i and first <= ordinal < first + count:
         merged_center = (end_i + max_i + 2) / 2
         merged_size = (max_i - end_i) / 2
         emit_particle(
             particle,
             place(lane_layout(merged_center, merged_size)),
             duration,
-            ParticleManageKind.LANE,
+            manage_kind,
             end_i + 1,
             chunk,
             managed,
+            page,
         )
 
-    for i in range(start_i, end_i + 1):
+    if max_i > end_i:
+        ordinal += 1
+    for i in range(max(start_i, start_i + first - ordinal), min(end_i + 1, start_i + first + count - ordinal)):
         slot_lane = i + 0.5
         emit_particle(
             particle,
             place(lane_layout(slot_lane, 0.5)),
             duration,
-            ParticleManageKind.LANE,
+            manage_kind,
             slot_lane,
             chunk,
             managed,
+            page,
         )
 
 

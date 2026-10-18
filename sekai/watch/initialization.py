@@ -8,6 +8,7 @@ from sonolus.script.archetype import (
     entity_data,
     entity_info_at,
     imported,
+    shared_memory,
 )
 from sonolus.script.bucket import Judgment
 from sonolus.script.containers import sort_linked_entities
@@ -48,6 +49,7 @@ from sekai.lib.level_config import (
 from sekai.lib.note import init_life, init_score
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.particle import ActiveParticles, init_particles
+from sekai.lib.particle_manager import ParticleStorage
 from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.stage import schedule_lane_sfx
 from sekai.lib.streams import Streams
@@ -60,6 +62,7 @@ from sekai.watch.static_stage import WatchScheduledLaneEffect, WatchStaticStage
 
 
 class WatchInitialization(WatchArchetype):
+    particle_storage: ParticleStorage = shared_memory()
     name = archetype_names.INITIALIZATION
 
     revision: EngineRevision = imported(name="revision", default=EngineRevision.SONOLUS_1_1_0)

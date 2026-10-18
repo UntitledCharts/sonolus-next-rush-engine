@@ -10,6 +10,7 @@ from sekai.lib import archetype_names
 from sekai.lib.layout import FlickDirection, StageScreenTransform
 from sekai.lib.note import NoteEffectKind, NoteKind, handle_note_particles
 from sekai.lib.note_style import NoteStyle
+from sekai.lib.particle_manager import ParticlePage, update_particle_page
 
 
 class ParticleManager(PlayArchetype):
@@ -30,9 +31,16 @@ class ParticleManager(PlayArchetype):
     lane_particles: bool = entity_memory()
     transform: StageScreenTransform = entity_memory()
 
+    check: bool = entity_memory()
+
+    component: int = entity_memory()
+    page_index: int = entity_memory()
+    page: ParticlePage = entity_memory()
+
     def update_sequential(self):
-        if self.despawn:
+        if self.check:
             return
+        self.check = True
         handle_note_particles(
             self.kind,
             self.effect_kind,
@@ -47,9 +55,13 @@ class ParticleManager(PlayArchetype):
             lane_particles=self.lane_particles,
             transform=self.transform,
             style=self.style,
+            component=self.component,
+            page_index=self.page_index,
+            page=self.page,
         )
 
     def update_parallel(self):
         if self.despawn:
             return
-        self.despawn = True
+        if update_particle_page(self.page):
+            self.despawn = True

@@ -65,6 +65,7 @@ from sekai.lib.note import (
     hitbox_draw_start,
     is_avoided_damage,
     is_head,
+    iter_note_particle_pages,
     map_note_kind,
     mirror_flick_direction,
     schedule_note_auto_sfx,
@@ -73,6 +74,12 @@ from sekai.lib.note import (
 )
 from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
+from sekai.lib.particle_manager import (
+    ParticlePage,
+    ParticleStorage,
+    destroy_particle_page,
+    update_particle_page,
+)
 from sekai.lib.stage import (
     DivisionParity,
     InputGeometry,
@@ -109,6 +116,7 @@ MIN_START_TIME = 0.0167  # Executes the terminate process with a guaranteed mini
 
 
 class WatchBaseNote(WatchArchetype):
+    particle_storage: ParticleStorage = shared_memory()
     beat: StandardImport.BEAT
     timescale_group: StandardImport.TIMESCALE_GROUP
     stage_ref: EntityRef[WatchDynamicStage] = imported(name="stage")
@@ -292,7 +300,10 @@ class WatchBaseNote(WatchArchetype):
             and has_note_particles(self.kind)
             and not is_avoided_damage(self.kind, self.judgment)
         ):
-            WatchHitEffect.spawn(note_ref=self.ref())
+            for component, page_index in iter_note_particle_pages(
+                self.kind, self.direction, self.judgment, self.size, True, self.style
+            ):
+                WatchHitEffect.spawn(note_ref=self.ref(), component=component, page_index=page_index)
 
         if start_time < inf:
             self.extend_stage_windows(start_time - 1.0, end_time + 1.0)
@@ -509,7 +520,7 @@ class WatchBaseNote(WatchArchetype):
             result @= self.hitbox.bounds
         return result
 
-    def play_hit_effects(self):
+    def play_hit_effects(self, component: int = -1, page_index: int = 0, page: ParticlePage | None = None):
         render_lane, render_size = self.visual_extents
         handle_note_particles(
             self.kind,
@@ -522,6 +533,9 @@ class WatchBaseNote(WatchArchetype):
             pivot_lane=self.visual_pivot_lane,
             half_offset=self.visual_half_offset,
             group_id=self.index,
+            component=component,
+            page_index=page_index,
+            page=page,
             lane_particles=self.visual_lane_particles,
             transform=self.visual_stage_transform().to_screen_transform(),
             style=self.style,
@@ -1005,15 +1019,19 @@ class WatchHitEffect(WatchArchetype):
 
     note_ref: EntityRef[WatchBaseNote] = entity_memory()
     played: bool = entity_memory()
+    component: int = entity_memory()
+    page_index: int = entity_memory()
+    page: ParticlePage = entity_memory()
 
     def spawn_time(self) -> float:
         return self.note_ref.get().despawn_time()
 
     def despawn_time(self) -> float:
-        return self.spawn_time() + 1
+        return self.spawn_time() + 1 / Options.effect_animation_speed + 0.1
 
     def initialize(self):
         self.played = False
+        self.page.entries.clear()
 
     # Run after camera/stage updates; managed RUSH particles also write level memory.
     def update_sequential(self):
@@ -1022,7 +1040,13 @@ class WatchHitEffect(WatchArchetype):
         self.played = True
         if is_skip():
             return
-        self.note_ref.get().play_hit_effects()
+        self.note_ref.get().play_hit_effects(self.component, self.page_index, self.page)
+
+    def update_parallel(self):
+        update_particle_page(self.page)
+
+    def terminate(self):
+        destroy_particle_page(self.page)
 
 
 WATCH_NOTE_ARCHETYPES = derive_note_archetypes(WatchBaseNote)
