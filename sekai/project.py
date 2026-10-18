@@ -1,3 +1,5 @@
+import os
+
 from sonolus.script.engine import Engine, EngineData
 from sonolus.script.project import Project
 
@@ -32,7 +34,8 @@ engine = Engine(
 project = Project(
     engine=engine,
     levels=load_levels,
-    resources=load_resources(),
+    # Engine-only CI builds do not use the development server's resources.
+    resources="resources" if os.environ.get("NEXT_RUSH_SKIP_SERVER_RESOURCES") == "1" else load_resources(),
     converters={
         "chcy-extended": convert_extended_level_data,
     },
