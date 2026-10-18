@@ -78,6 +78,7 @@ from sekai.lib.note import (
 )
 from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
+from sekai.lib.particle_manager import ParticleStorage
 from sekai.lib.stage import (
     DivisionParity,
     InputGeometry,
@@ -115,6 +116,7 @@ DEFAULT_BEST_TOUCH_TIME = -1e8
 
 
 class BaseNote(PlayArchetype):
+    particle_storage: ParticleStorage = shared_memory()
     beat: StandardImport.BEAT
     timescale_group: StandardImport.TIMESCALE_GROUP
     stage_ref: EntityRef[DynamicStage] = imported(name="stage")

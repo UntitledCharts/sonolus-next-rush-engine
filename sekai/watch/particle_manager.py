@@ -8,7 +8,8 @@ from sekai.lib import archetype_names
 from sekai.lib.layout import FlickDirection, StageScreenTransform
 from sekai.lib.note import NoteEffectKind, NoteKind, handle_note_particles
 from sekai.lib.note_style import NoteStyle
-from sekai.lib.particle_manager import clear_particles
+from sekai.lib.options import Options
+from sekai.lib.particle_manager import ParticlePage, destroy_particle_page, update_particle_page
 
 
 class ParticleManager(WatchArchetype):
@@ -34,12 +35,18 @@ class ParticleManager(WatchArchetype):
         return self.target_time
 
     def despawn_time(self) -> float:
-        return self.target_time + 0.1
+        return self.target_time + 1 / Options.effect_animation_speed + 0.1
+
+    component: int = entity_memory()
+    page_index: int = entity_memory()
+    page: ParticlePage = entity_memory()
 
     def update_sequential(self):
         if self.check:
             return
         self.check = True
+        if is_skip():
+            return
         handle_note_particles(
             self.kind,
             self.effect_kind,
@@ -54,10 +61,14 @@ class ParticleManager(WatchArchetype):
             lane_particles=self.lane_particles,
             transform=self.transform,
             style=self.style,
+            component=self.component,
+            page_index=self.page_index,
+            page=self.page,
         )
-        if is_skip():
-            clear_particles()
-            return
+
+    def update_parallel(self):
+        update_particle_page(self.page)
 
     def terminate(self):
         self.check = False
+        destroy_particle_page(self.page)
