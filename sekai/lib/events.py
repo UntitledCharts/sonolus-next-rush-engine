@@ -24,6 +24,7 @@ from sekai.lib.layout import (
     DynamicLayout,
     Layout,
     StageScreenTransform,
+    UIMargin,
     aspect_ratio,
     get_note_spawn_depth,
     get_perspective_y,
@@ -40,7 +41,6 @@ from sekai.lib.layout import (
     layout_skill_bar,
     layout_skill_judgment_line,
     perspective_rect,
-    safe_area,
     screen,
     tilt_depth,
     tilt_width_factor,
@@ -387,12 +387,9 @@ def skill_gap_factor(left_glyph: int, right_glyph: int) -> float:
 
 
 SKILL_BAR_BASE_X = -6.7
-SKILL_BAR_GROUP_OFFSET_X = -0.4
 SKILL_BAR_GROUP_OFFSET_Y = 0.01
 SKILL_BAR_H = 0.08
 SKILL_BAR_HALF_W = SKILL_BAR_H * 21
-SKILL_NOTCH_PUSH = 1.35777
-SKILL_EDGE_MARGIN = 0.3
 SKILL_REF_TOP_EDGE = 0.05529
 SKILL_REF_Y_RATIO = 0.0
 
@@ -457,9 +454,9 @@ def draw_skill_bar(
     y_ratio = 0
     if LevelConfig.ui_version == Version.v3:
         scale_ratio = min(1, aspect_ratio() / TARGET_ASPECT_RATIO)
-        has_side_notch = screen().l != safe_area().l or screen().r != safe_area().r
-        edge_offset = SKILL_NOTCH_PUSH * scale_ratio if has_side_notch else -SKILL_EDGE_MARGIN
-        bar_center_x = screen().l / Layout.fixed_w_scale + SKILL_BAR_HALF_W + edge_offset + SKILL_BAR_GROUP_OFFSET_X
+        # Match the score bar's screen-space inset before converting to fixed UI coordinates.
+        bar_left = screen().l + UIMargin.score_bar_x * scale_ratio
+        bar_center_x = bar_left / Layout.fixed_w_scale + SKILL_BAR_HALF_W
         x_ratio = bar_center_x - SKILL_BAR_BASE_X
         y_ratio = SKILL_REF_TOP_EDGE - (screen().t - Layout.t) / Layout.fixed_h_scale + SKILL_REF_Y_RATIO
 
