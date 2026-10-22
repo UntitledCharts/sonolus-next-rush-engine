@@ -22,6 +22,8 @@ jobs:
         run: uv sync
 
       - name: Build engine
+        env:
+          NEXT_RUSH_SKIP_SERVER_RESOURCES: "1"
         run: uv run sonolus-py build
 
       - name: Upload engine artifact
