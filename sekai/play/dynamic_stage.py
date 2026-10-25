@@ -8,6 +8,7 @@ from sonolus.script.archetype import (
     StandardImport,
     callback,
     entity_data,
+    entity_memory,
     imported,
     shared_memory,
 )
@@ -35,6 +36,7 @@ from sekai.lib.stage import (
     JudgeLineColor,
     JudgeLineStyle,
     StageBorderStyle,
+    StageEventCursors,
     StageProps,
     get_draw_end_time,
     get_draw_start_time,
@@ -136,6 +138,8 @@ class DynamicStage(PlayArchetype):
     y_offset_bounds: Interval = entity_data()
     note_visibility_end: float = entity_data()
 
+    use_event_cursors: bool = entity_data()
+    event_cursors: StageEventCursors = entity_memory()
     props: StageProps = shared_memory()
     # Shared frame geometry for notes, including components used by attachment blends.
     visual_transform: StageTransform = shared_memory()
@@ -148,6 +152,14 @@ class DynamicStage(PlayArchetype):
         init_event_list(self.first_pivot_change_ref)
         init_event_list(self.first_style_change_ref)
         init_event_list(self.first_transform_change_ref)
+        # Tiny event lists already have cheap indexed lookups. Select the
+        # cursor path once, keeping their frame callback on the original path.
+        self.use_event_cursors = (
+            (self.first_mask_change_ref.index > 0 and self.first_mask_change_ref.get().skip_levels >= 3)
+            or (self.first_pivot_change_ref.index > 0 and self.first_pivot_change_ref.get().skip_levels >= 3)
+            or (self.first_style_change_ref.index > 0 and self.first_style_change_ref.get().skip_levels >= 3)
+            or (self.first_transform_change_ref.index > 0 and self.first_transform_change_ref.get().skip_levels >= 3)
+        )
         pivot_ref = +self.first_pivot_change_ref
         while pivot_ref.index > 0:
             pivot = pivot_ref.get()
@@ -168,7 +180,10 @@ class DynamicStage(PlayArchetype):
 
     @callback(order=-2)
     def update_sequential(self):
-        self.props @= get_stage_props(self, right_limit=True)
+        if self.use_event_cursors:
+            self.props @= get_stage_props(self, right_limit=True, cursors=self.event_cursors)
+        else:
+            self.props @= get_stage_props(self, right_limit=True)
         if self.props.has_transform():
             self.visual_transform @= self.props.stage_transform()
         if time() >= self.end_time:

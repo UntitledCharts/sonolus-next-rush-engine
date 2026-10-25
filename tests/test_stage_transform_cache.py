@@ -51,6 +51,7 @@ class StageTransformCacheTests(unittest.TestCase):
     def test_stage_without_transform_does_not_compute_a_frame_cache(self):
         for stages in (DynamicStage, WatchDynamicStage):
             stage: Any = SimpleNamespace(
+                use_event_cursors=True, event_cursors=+stage_lib.StageEventCursors,
                 props=+stage_lib.StageProps,
                 visual_transform=+layout.StageTransform,
                 end_time=100,
@@ -88,6 +89,7 @@ class StageTransformCacheTests(unittest.TestCase):
                                     props.center_weight = index * 0.5
                                     props.elevation = elevation
                                     stage: Any = SimpleNamespace(
+                                        use_event_cursors=True, event_cursors=+stage_lib.StageEventCursors,
                                         props=+stage_lib.StageProps,
                                         visual_transform=+layout.StageTransform,
                                         end_time=100,

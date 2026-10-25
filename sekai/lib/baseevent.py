@@ -66,6 +66,7 @@ def query_event_list[T: BaseEvent, K: float](
     key: K,
     accessor: Callable[[T], K],
     strict: bool = False,
+    cursor: int = 0,
 ) -> tuple[EntityRef[T], EntityRef[T]]:  # pyright: ignore[reportInvalidTypeArguments]
     ref_type = type(first_ref)
     a = ref_type(0)
@@ -79,6 +80,20 @@ def query_event_list[T: BaseEvent, K: float](
         return result
     a.index = first_ref.index
     level = first.skip_levels - 1
+    if cursor > 0 and level >= 2:
+        a.index = cursor
+        if _at_or_before(accessor(a.get()), key, strict):
+            b.index = a.get().next_ref.index
+            if b.index <= 0 or not _at_or_before(accessor(b.get()), key, strict):
+                return result
+            # Walk no farther than the skip-index search costs. Large jumps
+            # fall back to that index instead of scanning the whole event list.
+            for _ in range(level + 1):
+                a.index = b.index
+                b.index = a.get().next_ref.index
+                if b.index <= 0 or not _at_or_before(accessor(b.get()), key, strict):
+                    return result
+        a.index = first_ref.index
     while level >= 0:
         next_skip = +a.get().skip_refs[level].with_archetype(type(first))  # pyright: ignore[reportArgumentType]
         while next_skip.index > 0 and _at_or_before(accessor(next_skip.get()), key, strict):
@@ -87,6 +102,13 @@ def query_event_list[T: BaseEvent, K: float](
         level -= 1
     b.index = a.get().next_ref.index
     return result
+
+
+def query_event_list_from[T: BaseEvent, K: float](
+    first_ref: EntityRef[T], key: K, accessor: Callable[[T], K], cursor: int, strict: bool = False
+) -> tuple[EntityRef[T], EntityRef[T]]:
+    """Use a frame cursor while preserving indexed searches for other callers."""
+    return query_event_list(first_ref, key, accessor, strict, cursor)
 
 
 def next_event_time_in_list(a_ref: EntityRef, b_ref: EntityRef, archetype: type, t: float) -> float:

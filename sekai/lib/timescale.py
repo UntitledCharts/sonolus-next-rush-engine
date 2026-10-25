@@ -361,7 +361,9 @@ def initialize_timescale_group(group: TimescaleGroupLike) -> None:
         _initialize_run_index(run, run_count)
     group.last_ref = previous
     group.valid = True
-    if not group.has_scroll:
+    if group.has_scroll:
+        _prepare_event_index(group, time_only=True)
+    else:
         prepare_visibility_index(group)
 
 
@@ -427,33 +429,39 @@ class _VisibilityTreeBuilder(Record):
     counts: Array[int, Dim[32]]
     refs: Array[int, Dim[128]]
 
-    def parent(self, level: int) -> int:
+    def parent(self, level: int, time_only: bool = False) -> int:
         ref = self.free_ref
         assert ref > 0
         node = _marker(ref)
         self.free_ref = node.next_ref.index
-        bounds = _visibility_node_bounds(self.refs[level * 4])
+        first = self.refs[level * 4]
+        bounds = +_VisibilityBounds
+        if time_only:
+            node.tree_start = _marker(-first).event_start if first < 0 else _marker(first).tree_start
+        else:
+            bounds @= _visibility_node_bounds(first)
         for i in range(4):
             child = 0
             if i < self.counts[level]:
                 child = self.refs[level * 4 + i]
-                if i > 0:
+                if i > 0 and not time_only:
                     bounds.include(_visibility_node_bounds(child))
             node.tree_children[i] = child
-        node.tree_min @= bounds.minimum
-        node.tree_max @= bounds.maximum
-        node.tree_magnitude = bounds.magnitude
-        node.tree_start, node.tree_end = bounds.start, bounds.end
+        if not time_only:
+            node.tree_min @= bounds.minimum
+            node.tree_max @= bounds.maximum
+            node.tree_magnitude = bounds.magnitude
+            node.tree_start, node.tree_end = bounds.start, bounds.end
         return ref
 
-    def append(self, level: int, ref: int) -> None:
+    def append(self, level: int, ref: int, time_only: bool = False) -> None:
         while True:
             assert level < 32
             self.refs[level * 4 + self.counts[level]] = ref
             self.counts[level] += 1
             if self.counts[level] < 4:
                 break
-            ref = self.parent(level)
+            ref = self.parent(level, time_only)
             self.counts[level] = 0
             level += 1
 
@@ -461,6 +469,12 @@ class _VisibilityTreeBuilder(Record):
 def prepare_visibility_index(group: TimescaleGroupLike) -> None:
     """Build a tree of coordinate bounds for intervals between consecutive timescale changes."""
     assert not group.has_scroll
+    _prepare_event_index(group, time_only=False)
+
+
+def _prepare_event_index(group: TimescaleGroupLike, time_only: bool) -> None:
+    # Scroll groups use only tree_children/tree_start. Coordinate-bound pruning
+    # remains disabled for them; no additional per-marker storage is needed.
     group.tree_root = 0
     if group.last_ref > 0 and group.first_ref.index != group.last_ref:
         builder = +_VisibilityTreeBuilder
@@ -468,25 +482,28 @@ def prepare_visibility_index(group: TimescaleGroupLike) -> None:
         ref = group.first_ref.index
         while ref > 0 and _marker(ref).next_ref.index > 0:
             first = ref
-            bounds = _visibility_interval_bounds(ref)
+            if not time_only:
+                bounds = _visibility_interval_bounds(ref)
+                leaf = _marker(ref)
+                leaf.leaf_min @= bounds.minimum
+                leaf.leaf_max @= bounds.maximum
+                leaf.leaf_magnitude = bounds.magnitude
             ref = _marker(ref).next_ref.index
-            leaf = _marker(first)
-            leaf.leaf_min @= bounds.minimum
-            leaf.leaf_max @= bounds.maximum
-            leaf.leaf_magnitude = bounds.magnitude
-            builder.append(0, -first)
+            builder.append(0, -first, time_only)
         for level in range(32):
             if builder.counts[level] == 0:
                 continue
             ref = builder.refs[level * 4]
             if builder.counts[level] > 1:
-                ref = builder.parent(level)
+                ref = builder.parent(level, time_only)
             builder.counts[level] = 0
             if level == 31:
                 group.tree_root = ref
             else:
-                builder.append(level + 1, ref)
+                builder.append(level + 1, ref, time_only)
 
+        if time_only:
+            return
         pending = VarArray[int, Dim[256]].new()
         escapes = VarArray[int, Dim[256]].new()
         if group.tree_root != 0:
@@ -508,7 +525,7 @@ def prepare_visibility_index(group: TimescaleGroupLike) -> None:
                         following = child
 
 
-def _locate(group: TimescaleGroupLike, now: float, ref: int, use_visibility_index: bool = False) -> int:
+def _locate(group: TimescaleGroupLike, now: float, ref: int, use_visibility_index: bool = True) -> int:
     if use_visibility_index and group.tree_root != 0:
         if ref > 0:
             marker = _marker(ref)
@@ -548,7 +565,7 @@ def _locate(group: TimescaleGroupLike, now: float, ref: int, use_visibility_inde
     return ref
 
 
-def locate_time(group: int | EntityRef, now: float, *, use_visibility_index: bool = False) -> int:
+def locate_time(group: int | EntityRef, now: float, *, use_visibility_index: bool = True) -> int:
     index = _group_index(group)
     if index <= 0 or Options.disable_timescale:
         return 0
@@ -558,13 +575,13 @@ def locate_time(group: int | EntityRef, now: float, *, use_visibility_index: boo
 
 
 def locate_target(group: int | EntityRef, hit_time: float) -> TargetPosition:
-    # Target queries can jump between unrelated notes and attached endpoints. Use
-    # the existing tree when available; mixed-scroll groups retain cursor lookup.
+    # Targets can jump between unrelated notes and attached endpoints. Both
+    # group styles have a time index, independent of coordinate-bound pruning.
     ref = locate_time(group, hit_time, use_visibility_index=True)
     return TargetPosition(ref, _coordinate(ref, hit_time))
 
 
-def locate_time_from(group: int | EntityRef, now: float, ref: int, use_visibility_index: bool = False) -> int:
+def locate_time_from(group: int | EntityRef, now: float, ref: int, use_visibility_index: bool = True) -> int:
     # Leave the shared lookup cursor unchanged.
     index = _group_index(group)
     if index <= 0 or Options.disable_timescale:
@@ -735,7 +752,7 @@ def prepare_group(group: int | EntityRef, now: float) -> None:
     entity = _require_group(index)
     if entity.time_valid and entity.last_updated == now:
         return
-    ref = _locate(entity, now, entity.current_event)
+    ref = _locate(entity, now, entity.current_event, use_visibility_index=True)
     entity.current_event, entity.current_run = ref, _run(ref)
     entity.last_updated, entity.time_valid = now, True
     entity.coordinate, entity.current_speed = _coordinate(ref, now), event_speed(ref, now)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sonolus.script.array import Dim
+from sonolus.script.array import Array, Dim
 from sonolus.script.containers import Pair, VarArray
 from sonolus.script.record import Record
 from sonolus.script.values import alloc
@@ -118,3 +118,79 @@ class TapPriorityQuery(Record):
             else:
                 right = middle
         return left < len(self.beats) and self.beats[left] == beat
+
+
+INPUT_CANDIDATE_TOUCHES = 16
+
+
+class InputCandidate(Record):
+    score: float
+    note_index: int
+
+    def worse_than(self, other: InputCandidate) -> bool:
+        return self.score < other.score or (self.score == other.score and self.note_index > other.note_index)
+
+
+class InputCandidates(Record):
+    """Keep only T candidates per touch: at most T-1 can be taken by other touches."""
+
+    entries: Array[InputCandidate, Dim[256]]
+    counts: Array[int, Dim[16]]
+    limit: int
+
+    def _sift(self, base: int, count: int, hole: int, value: InputCandidate, minimum: bool):
+        child = hole * 2 + 1
+        while child < count:
+            if child + 1 < count:
+                left = self.entries[base + child]
+                right = self.entries[base + child + 1]
+                if right.worse_than(left) if minimum else left.worse_than(right):
+                    child += 1
+            candidate = self.entries[base + child]
+            if not (candidate.worse_than(value) if minimum else value.worse_than(candidate)):
+                break
+            self.entries[base + hole] = candidate
+            hole = child
+            child = hole * 2 + 1
+        self.entries[base + hole] = value
+
+    def offer(self, touch_index: int, note_index: int, score: float):
+        base = touch_index * INPUT_CANDIDATE_TOUCHES
+        count = self.counts[touch_index]
+        value = InputCandidate(score, note_index)
+        if count < self.limit:
+            hole = count
+            while hole > 0:
+                parent = (hole - 1) // 2
+                candidate = self.entries[base + parent]
+                if not value.worse_than(candidate):
+                    break
+                self.entries[base + hole] = candidate
+                hole = parent
+            self.entries[base + hole] = value
+            self.counts[touch_index] = count + 1
+        elif self.entries[base].worse_than(value):
+            self._sift(base, count, 0, value, True)
+
+    def finish(self, touch_index: int):
+        # Selection uses a min heap; allocation consumes a max heap. Heapify the
+        # retained T entries in O(T), without sorting all N notes for each touch.
+        base = touch_index * INPUT_CANDIDATE_TOUCHES
+        count = self.counts[touch_index]
+        for hole in range(count // 2 - 1, -1, -1):
+            value = +self.entries[base + hole]
+            self._sift(base, count, hole, value, False)
+
+    def best(self, touch_index: int, active) -> int:
+        base = touch_index * INPUT_CANDIDATE_TOUCHES
+        count = self.counts[touch_index]
+        while count > 0:
+            note_index = self.entries[base].note_index
+            if active[note_index].get().captured_touch_id == 0:
+                return note_index
+            count -= 1
+            self.counts[touch_index] = count
+            if count > 0:
+                value = +self.entries[base + count]
+                self._sift(base, count, 0, value, False)
+        return -1

@@ -17,7 +17,7 @@ from sonolus.script.values import alloc
 from sonolus.script.vec import Vec2
 
 from sekai.lib import archetype_names
-from sekai.lib.baseevent import get_event_as, next_event_time_in_list, query_event_list
+from sekai.lib.baseevent import get_event_as, next_event_time_in_list, query_event_list, query_event_list_from
 from sekai.lib.custom_elements import (
     draw_life_number,
     draw_score_bar_number,
@@ -638,8 +638,39 @@ def get_next_event_time(stage: DynamicStageLike, t: float) -> float:
     return result
 
 
+class StageEventCursors(Record):
+    mask: int
+    pivot: int
+    style: int
+    transform: int
+
+
+def _query_stage_events(first_ref, t, right_limit, cursors: StageEventCursors | None, channel: int):
+    if cursors is None:
+        return query_event_list(first_ref, t, lambda event: event.time, strict=not right_limit)
+    cursor = (
+        cursors.mask
+        if channel == 0
+        else (cursors.pivot if channel == 1 else cursors.style if channel == 2 else cursors.transform)
+    )
+    a, b = query_event_list_from(first_ref, t, lambda event: event.time, cursor, strict=not right_limit)
+    if channel == 0:
+        cursors.mask = a.index
+    elif channel == 1:
+        cursors.pivot = a.index
+    elif channel == 2:
+        cursors.style = a.index
+    else:
+        cursors.transform = a.index
+    return a, b
+
+
 def get_stage_props(
-    stage: DynamicStageLike, target_time: float | None = None, right_limit: bool = False, exact: bool = False
+    stage: DynamicStageLike,
+    target_time: float | None = None,
+    right_limit: bool = False,
+    exact: bool = False,
+    cursors: StageEventCursors | None = None,
 ) -> StageProps:
     t = target_time if target_time is not None else runtime.time()
     result = +StageProps
@@ -651,21 +682,26 @@ def get_stage_props(
     first_style_change_ref = stage.first_style_change_ref
     first_transform_change_ref = stage.first_transform_change_ref
 
-    update_stage_mask_props(result, first_mask_change_ref, t, right_limit, exact)
+    update_stage_mask_props(result, first_mask_change_ref, t, right_limit, exact, cursors)
 
-    update_stage_pivot_props(result, first_pivot_change_ref, t, right_limit, exact)
+    update_stage_pivot_props(result, first_pivot_change_ref, t, right_limit, exact, cursors)
 
-    update_stage_style_props(result, first_style_change_ref, t, right_limit, exact)
+    update_stage_style_props(result, first_style_change_ref, t, right_limit, exact, cursors)
 
-    update_stage_transform_props(result, first_transform_change_ref, t, right_limit, exact)
+    update_stage_transform_props(result, first_transform_change_ref, t, right_limit, exact, cursors)
 
     return result
 
 
 def update_stage_mask_props(
-    result: StageProps, first_mask_change_ref: EntityRef, t: float, right_limit: bool = False, exact: bool = False
+    result: StageProps,
+    first_mask_change_ref: EntityRef,
+    t: float,
+    right_limit: bool = False,
+    exact: bool = False,
+    cursors: StageEventCursors | None = None,
 ):
-    mask_a_ref, mask_b_ref = query_event_list(first_mask_change_ref, t, lambda e: e.time, strict=not right_limit)
+    mask_a_ref, mask_b_ref = _query_stage_events(first_mask_change_ref, t, right_limit, cursors, 0)
     if mask_a_ref.index > 0:
         mask_a = get_event_as(mask_a_ref, _stage_mask_change_archetype())
         result.lane = mask_a.lane
@@ -686,9 +722,14 @@ def update_stage_mask_props(
 
 
 def update_stage_style_props(
-    result: StageProps, first_style_change_ref: EntityRef, t: float, right_limit: bool = False, exact: bool = False
+    result: StageProps,
+    first_style_change_ref: EntityRef,
+    t: float,
+    right_limit: bool = False,
+    exact: bool = False,
+    cursors: StageEventCursors | None = None,
 ):
-    style_a_ref, style_b_ref = query_event_list(first_style_change_ref, t, lambda e: e.time, strict=not right_limit)
+    style_a_ref, style_b_ref = _query_stage_events(first_style_change_ref, t, right_limit, cursors, 2)
     if style_a_ref.index > 0:
         style_a = get_event_as(style_a_ref, _stage_style_change_archetype())
         result.judge_line_color.start = style_a.judge_line_color
@@ -744,11 +785,14 @@ def update_stage_style_props(
 
 
 def update_stage_transform_props(
-    result: StageProps, first_transform_change_ref: EntityRef, t: float, right_limit: bool = False, exact: bool = False
+    result: StageProps,
+    first_transform_change_ref: EntityRef,
+    t: float,
+    right_limit: bool = False,
+    exact: bool = False,
+    cursors: StageEventCursors | None = None,
 ):
-    transform_a_ref, transform_b_ref = query_event_list(
-        first_transform_change_ref, t, lambda e: e.time, strict=not right_limit
-    )
+    transform_a_ref, transform_b_ref = _query_stage_events(first_transform_change_ref, t, right_limit, cursors, 3)
     if transform_a_ref.index > 0:
         transform_a = get_event_as(transform_a_ref, _stage_transform_change_archetype())
         result.rotate = transform_a.rotate
@@ -786,9 +830,14 @@ def get_stage_input_props(stage: DynamicStageLike, t: float) -> StageProps:
 
 
 def update_stage_pivot_props(
-    result: StageProps, first_pivot_change_ref: EntityRef, t: float, right_limit: bool = False, exact: bool = False
+    result: StageProps,
+    first_pivot_change_ref: EntityRef,
+    t: float,
+    right_limit: bool = False,
+    exact: bool = False,
+    cursors: StageEventCursors | None = None,
 ):
-    pivot_a_ref, pivot_b_ref = query_event_list(first_pivot_change_ref, t, lambda e: e.time, strict=not right_limit)
+    pivot_a_ref, pivot_b_ref = _query_stage_events(first_pivot_change_ref, t, right_limit, cursors, 1)
     if pivot_a_ref.index > 0:
         pivot_a = get_event_as(pivot_a_ref, _stage_pivot_change_archetype())
         result.pivot_lane = pivot_a.lane
