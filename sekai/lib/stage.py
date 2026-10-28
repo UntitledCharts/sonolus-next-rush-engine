@@ -43,7 +43,6 @@ from sekai.lib.layout import (
     DynamicLayout,
     Layout,
     LayoutTransform,
-    ScoreGaugeType,
     StageScreenTransform,
     StageTransform,
     StageTransformAnchor,
@@ -59,7 +58,6 @@ from sekai.lib.layout import (
     layout_hidden_cover,
     layout_life_gauge,
     layout_particle_lane,
-    layout_score_gauge,
     layout_sekai_stage,
     layout_stage_cover,
     layout_stage_cover_and_line,
@@ -1601,6 +1599,43 @@ def draw_auto_play(ui_layout):
         ActiveSkin.auto_live.draw(layout, z=get_z_alt(LAYER_JUDGMENT).tuple, a=a)
 
 
+def draw_curved_gauge(sprite: Sprite, background: Sprite, bounds: Quad, progress: float, alpha: float):
+    left = bounds.bl.x
+    right = bounds.br.x
+    bottom = bounds.bl.y
+    top = bounds.tl.y
+    if right <= left or top <= bottom:
+        return
+    radius = min((top - bottom) / 2, (right - left) / 4)
+    # Control points use the quad's normalized coordinates, not screen coordinates.
+    quad = Rect(l=left + radius, r=right - radius, b=bottom, t=top)
+    curvature = 4 * radius / (right - left - 2 * radius)
+    cp_left = Vec2(-1 - curvature, 0)
+    cp_right = Vec2(1 + curvature, 0)
+    background.draw_curved_lr(quad, cp_left, cp_right, n=8, z=get_z_alt(LAYER_JUDGMENT).tuple, a=alpha)
+    progress = clamp(progress, 0, 1)
+    if progress <= 0:
+        return
+    # Keep the texture projection fixed so score colors stay at the same positions.
+    sprite.draw_curved_lr(quad, cp_left, cp_right, n=8, z=get_z_alt(LAYER_JUDGMENT, 1).tuple, a=alpha)
+    if progress >= 1:
+        return
+    end = lerp(left, right, progress)
+    cover_left = max(end - radius, left + radius)
+    cover_width = right - radius - cover_left
+    # The cover's inward left curve leaves the fill's outward right cap visible.
+    # At small values its top and bottom meet the left cap without crossing it.
+    cover = Rect(l=cover_left, r=right - radius, b=bottom, t=top)
+    background.draw_curved_lr(
+        cover,
+        Vec2(-1 + 4 * (end - cover_left) / cover_width, 0),
+        Vec2(1 + 4 * radius / cover_width, 0),
+        n=8,
+        z=get_z_alt(LAYER_JUDGMENT, 2).tuple,
+        a=alpha,
+    )
+
+
 def draw_life_bar(
     life,
     last_time,
@@ -1629,12 +1664,14 @@ def draw_life_bar(
         ActiveSkin.life.bar.get_sprite(LifeBarType.PAUSE, life).draw(
             bar_layout, z=get_z_alt(LAYER_JUDGMENT, 3).tuple, a=alpha
         )
-    ActiveSkin.life.bar.get_sprite(LifeBarType.BACKGROUND, life).draw(bar_layout, z=LAYER_JUDGMENT, a=alpha)
-    gauge_layout = layout_life_gauge(life)
-    ActiveSkin.life.gauge.get_sprite(life).draw(gauge_layout, get_z_alt(LAYER_JUDGMENT, 1).tuple, alpha)
-    if life > 0:
-        edge_layout = layout_life_gauge(life, True)
-        ActiveSkin.life.gauge.get_sprite(life, True).draw(edge_layout, get_z_alt(LAYER_JUDGMENT, 2).tuple, alpha)
+    gauge_layout = layout_life_gauge()
+    draw_curved_gauge(
+        ActiveSkin.life.gauge.get_sprite(life),
+        ActiveSkin.life.bar.get_sprite(LifeBarType.BACKGROUND, life),
+        gauge_layout,
+        life / 1000,
+        alpha,
+    )
 
 
 def draw_score_bar(
@@ -1657,17 +1694,16 @@ def draw_score_bar(
         number=note_score, z=get_z_alt(LAYER_JUDGMENT, 4).tuple, time=time() - note_time, alpha=alpha
     )
     bar_layout = ui_layout.score_bar
-    ActiveSkin.score.bar.draw(bar_layout, z=get_z_alt(LAYER_JUDGMENT, 2).tuple, a=alpha)
+    ActiveSkin.score.bar.draw(bar_layout, z=get_z_alt(LAYER_JUDGMENT, 3).tuple, a=alpha)
     ActiveSkin.score.panel.draw(bar_layout, z=get_z_alt(LAYER_JUDGMENT, 4).tuple, a=alpha)
     rank = get_score_rank(score)
-    if score > 0:
-        gauge = get_gauge_progress(score)
-        ActiveSkin.score.gauge.normal.draw(ui_layout.score_gauge, z=get_z_alt(LAYER_JUDGMENT).tuple, a=alpha)
-
-        gauge_mask_layout = layout_score_gauge(gauge, ScoreGaugeType.MASK)
-        ActiveSkin.score.gauge.mask.draw(gauge_mask_layout, z=get_z_alt(LAYER_JUDGMENT, 1).tuple, a=alpha)
-    else:
-        ActiveSkin.score.gauge.cover.draw(ui_layout.score_gauge, z=get_z_alt(LAYER_JUDGMENT).tuple, a=alpha)
+    draw_curved_gauge(
+        ActiveSkin.score.gauge.normal,
+        ActiveSkin.score.gauge.background,
+        ui_layout.score_gauge,
+        get_gauge_progress(score),
+        alpha,
+    )
     if LevelConfig.ui_version == Version.v3 or rank != ScoreRankType.D:
         ActiveSkin.score.rank.get_sprite(rank).draw(ui_layout.score_rank, z=get_z_alt(LAYER_JUDGMENT, 4).tuple, a=alpha)
     if LevelConfig.ui_version == Version.v3:

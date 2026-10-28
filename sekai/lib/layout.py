@@ -1373,7 +1373,7 @@ def layout_life_bar() -> Quad:
     )
 
 
-def layout_life_gauge(life, edge=False) -> Quad:
+def layout_life_gauge() -> Quad:
     ui = runtime_ui()
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
@@ -1413,30 +1413,12 @@ def layout_life_gauge(life, edge=False) -> Quad:
 
     screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=center_y)
 
-    life = clamp((life / 1000), 0, 1)
-
-    if LevelConfig.ui_version == Version.v3:
-        body_full = w * (289 / 302)
-        cap_w = w * (13 / 302)
-    else:
-        body_full = w * (258 / 281)
-        cap_w = w * (23 / 281)
-
-    body_right = screen_center.x + body_full * life
-    if not edge:
-        return Quad(
-            bl=Vec2(screen_center.x, screen_center.y - h / 2),
-            br=Vec2(body_right, screen_center.y - h / 2),
-            tl=Vec2(screen_center.x, screen_center.y + h / 2),
-            tr=Vec2(body_right, screen_center.y + h / 2),
-        )
-    else:
-        return Quad(
-            bl=Vec2(body_right, screen_center.y - h / 2),
-            br=Vec2(body_right + cap_w, screen_center.y - h / 2),
-            tl=Vec2(body_right, screen_center.y + h / 2),
-            tr=Vec2(body_right + cap_w, screen_center.y + h / 2),
-        )
+    return Quad(
+        bl=Vec2(screen_center.x, screen_center.y - h / 2),
+        br=Vec2(screen_center.x + w, screen_center.y - h / 2),
+        tl=Vec2(screen_center.x, screen_center.y + h / 2),
+        tr=Vec2(screen_center.x + w, screen_center.y + h / 2),
+    )
 
 
 def layout_score_bar() -> Quad:
@@ -1468,12 +1450,7 @@ def layout_score_bar() -> Quad:
     )
 
 
-class ScoreGaugeType(IntEnum):
-    NORMAL = 0
-    MASK = 1
-
-
-def layout_score_gauge(gauge=0.0, score_type: ScoreGaugeType = ScoreGaugeType.NORMAL) -> Quad:
+def layout_score_gauge() -> Quad:
     ui = runtime_ui()
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
@@ -1500,10 +1477,7 @@ def layout_score_gauge(gauge=0.0, score_type: ScoreGaugeType = ScoreGaugeType.NO
                 (0.049 * ui.primary_metric_config.scale * scale_ratio),
                 1e-3,
             )
-            w = max(
-                (h * 20 * ((1 - gauge) if score_type == ScoreGaugeType.MASK else 1)),
-                1e-3,
-            )
+            w = h * 20
         case Version.v1:
             margin_offset = -0.155
             y_offset = 0.021
@@ -1511,10 +1485,7 @@ def layout_score_gauge(gauge=0.0, score_type: ScoreGaugeType = ScoreGaugeType.NO
                 (0.062 * ui.primary_metric_config.scale * scale_ratio),
                 1e-3,
             )
-            w = max(
-                (h * 18.8 * ((1 - gauge) if score_type == ScoreGaugeType.MASK else 1)),
-                1e-3,
-            )
+            w = h * 18.8
 
     bar_base_w = 0.27 * 4.6
     final_scale = ui.primary_metric_config.scale * scale_ratio
@@ -1656,7 +1627,7 @@ def layout_static_ui() -> StaticUiLayout:
     return StaticUiLayout(
         life_bar=layout_life_bar(),
         score_bar=layout_score_bar(),
-        score_gauge=layout_score_gauge(score_type=ScoreGaugeType.NORMAL),
+        score_gauge=layout_score_gauge(),
         score_rank=layout_score_rank(),
         score_rank_text=layout_score_rank_text(),
         custom_tag=layout_custom_tag(),

@@ -478,13 +478,10 @@ class BaseSkin:
     life_bar_danger_background: Sprite = sprite("Life Bar Danger Background")
     life_bar_gauge_normal: Sprite = sprite("Life Bar Gauge Normal")
     life_bar_gauge_danger: Sprite = sprite("Life Bar Gauge Danger")
-    life_bar_gauge_normal_edge: Sprite = sprite("Life Bar Gauge Normal Edge")
-    life_bar_gauge_danger_edge: Sprite = sprite("Life Bar Gauge Danger Edge")
     score_bar: Sprite = sprite("Score Bar")
     score_bar_panel: Sprite = sprite("Score Bar Panel")
     score_bar_gauge: Sprite = sprite("Score Bar Gauge")
-    score_bar_mask: Sprite = sprite("Score Bar Mask")
-    score_bar_cover: Sprite = sprite("Score Bar Cover")
+    score_bar_background: Sprite = sprite("Score Bar Background")
     score_rank_s: Sprite = sprite("Score Rank S")
     score_rank_a: Sprite = sprite("Score Rank A")
     score_rank_b: Sprite = sprite("Score Rank B")
@@ -924,18 +921,11 @@ class LifeBarSpriteSet(Record):
 class LifeGaugeSpriteSet(Record):
     normal: Sprite
     danger: Sprite
-    normal_edge: Sprite
-    danger_edge: Sprite
 
-    def get_sprite(self, life: int, edge: bool = False):
+    def get_sprite(self, life: int):
         result = +Sprite
         if life > 200:
-            if edge:
-                result @= self.normal_edge
-            else:
-                result @= self.normal
-        elif edge:
-            result @= self.danger_edge
+            result @= self.normal
         else:
             result @= self.danger
         return result
@@ -957,8 +947,7 @@ class LifeSpriteSet(Record):
 
 class ScoreGaugeSpriteSet(Record):
     normal: Sprite
-    mask: Sprite
-    cover: Sprite
+    background: Sprite
 
 
 class ScoreRankType(IntEnum):
@@ -1347,12 +1336,8 @@ life_bar = LifeBarSpriteSet(
 life_gauge = LifeGaugeSpriteSet(
     normal=BaseSkin.life_bar_gauge_normal,
     danger=BaseSkin.life_bar_gauge_danger,
-    normal_edge=BaseSkin.life_bar_gauge_normal_edge,
-    danger_edge=BaseSkin.life_bar_gauge_danger_edge,
 )
-score_gauge = ScoreGaugeSpriteSet(
-    normal=BaseSkin.score_bar_gauge, mask=BaseSkin.score_bar_mask, cover=BaseSkin.score_bar_cover
-)
+score_gauge = ScoreGaugeSpriteSet(normal=BaseSkin.score_bar_gauge, background=BaseSkin.score_bar_background)
 score_rank = ScoreRankSpriteSet(
     s=BaseSkin.score_rank_s,
     a=BaseSkin.score_rank_a,
