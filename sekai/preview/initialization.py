@@ -8,6 +8,7 @@ from sonolus.script.timing import beat_to_time
 
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import init_event_list
+from sekai.lib.fever import prepare_fever_windows
 from sekai.lib.layer import ZIndexes, get_z, layers
 from sekai.lib.layout import CameraInfo, get_camera_info, get_next_camera_event_time
 from sekai.lib.level_config import EngineRevision, LevelConfig, init_level_config
@@ -15,7 +16,7 @@ from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.ui import init_ui
 from sekai.preview import note
 from sekai.preview.dynamic_stage import PreviewCameraChange
-from sekai.preview.events import PreviewSkill
+from sekai.preview.events import PreviewFeverChance, PreviewFeverStart, PreviewSkill
 from sekai.preview.layout import (
     PREVIEW_CAMERA_MARKER_ALPHA,
     PREVIEW_DYNAMIC_STAGE_DIVIDER_W,
@@ -45,6 +46,7 @@ class PreviewInitialization(PreviewArchetype):
         init_level_config(self.revision)
         init_skin()
         init_ui()
+        prepare_fever_windows(PreviewFeverChance, PreviewFeverStart)
 
         if not ActiveSkin.lane_background_preview.is_available:
             LevelConfig.dynamic_stages = False

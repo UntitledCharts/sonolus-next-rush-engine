@@ -142,6 +142,8 @@ class BaseNote(PlayArchetype):
 
     # Score order is independent of the imported slide next/prev links.
     score_next_ref: EntityRef[BaseNote] = entity_data()
+    # Fits in the existing shared-memory stride; assigned once in the sorted score pass.
+    fever_index: int = shared_memory()
     kind: NoteKind = entity_data()
     # 0: untouched, 1: score data ready, 2: geometry ready.
     data_init_done: int = entity_data()

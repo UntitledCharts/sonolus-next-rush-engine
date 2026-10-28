@@ -21,7 +21,7 @@ from sekai.lib.initialization import calculate_note_weight
 from sekai.lib.options import Options
 from sekai.lib.skin import ActiveSkin
 from sekai.play import note
-from sekai.play.events import Fever
+from sekai.play.events import FeverChance
 
 
 def spawn_custom(
@@ -107,11 +107,13 @@ class ComboJudge(PlayArchetype):
         self.calculate_life()
 
     def check_fever_count(self):
-        if Fever.fever_chance_time <= self.target_time < Fever.fever_start_time:
+        index = note.BaseNote.at(self.note_index).fever_index
+        if index > 0:
+            fever = FeverChance.at(index)
             if self.judgment in (Judgment.MISS, Judgment.GOOD):
-                Fever.fever_chance_cant_super_fever = True
+                fever.cant_super = True
             else:
-                Fever.fever_chance_current_combo += 1
+                fever.hits += 1
 
     def calculate_score(self):
         if Options.custom_score == 0 and not Options.custom_score_bar:

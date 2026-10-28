@@ -30,6 +30,7 @@ from sekai.lib.connector import (
     schedule_connector_sfx_between,
 )
 from sekai.lib.custom_elements import LifeManager, NeumaierSum, init_fixed_ui_layout
+from sekai.lib.fever import FeverWindows, advance_fever_window, prepare_fever_windows
 from sekai.lib.initialization import LastNote, calculate_note_weight, count_entities, sort_entities_by_time
 from sekai.lib.layout import (
     StaticStageData,
@@ -57,7 +58,7 @@ from sekai.lib.ui import init_ui
 from sekai.watch import custom_elements, note
 from sekai.watch.connector import WatchConnector
 from sekai.watch.dynamic_stage import WatchCameraChange, WatchDynamicStage
-from sekai.watch.events import Fever, Skill
+from sekai.watch.events import Fever, FeverChance, FeverStart, Skill
 from sekai.watch.static_stage import WatchScheduledLaneEffect, WatchStaticStage
 
 
@@ -99,6 +100,7 @@ class WatchInitialization(WatchArchetype):
         LifeManager.life = self.initial_life
         LifeManager.initial_life = self.initial_life
         LifeManager.max_life = max(2000, self.initial_life * 2)
+        Fever.latest_note_time = -1e8
 
         WatchStaticStage.spawn()
         custom_elements.StateManager.spawn()
@@ -125,6 +127,7 @@ class WatchInitialization(WatchArchetype):
 
 
 def sorted_linked_list(entity_count: int):
+    prepare_fever_windows(FeverChance, FeverStart)
     note_head, note_length, skill_head, skill_length = initial_list(entity_count)
 
     sorted_skill_head = +EntityRef[Skill]
@@ -185,6 +188,7 @@ def initial_list(entity_count):
 def setting_combo(head: int, skill: int) -> None:
     ptr = head
     skill_ptr = skill
+    fever_ptr = FeverWindows.chance_head
     combo = 0
     count = 0
     fever_hits = 0
@@ -214,11 +218,17 @@ def setting_combo(head: int, skill: int) -> None:
                     skill_ptr = Skill.at(skill_ptr).next_ref.index
 
         judgment = note.WatchBaseNote.at(ptr).judgment
-        in_fever_window = Fever.fever_chance_time <= note.WatchBaseNote.at(ptr).target_time < Fever.fever_start_time
+        next_fever = advance_fever_window(FeverChance, fever_ptr, note.WatchBaseNote.at(ptr).target_time)
+        if next_fever != fever_ptr:
+            fever_hits = 0
+        fever_ptr = next_fever
+        in_fever_window = (
+            fever_ptr > 0 and FeverChance.at(fever_ptr).start_time <= note.WatchBaseNote.at(ptr).target_time
+        )
         if is_replay() and judgment in (Judgment.GOOD, Judgment.MISS):
             combo = 0
             if in_fever_window:
-                Fever.fever_chance_cant_super_fever = True
+                FeverChance.at(fever_ptr).cant_super = True
         else:
             combo += 1
             if in_fever_window:
@@ -250,12 +260,8 @@ def setting_combo(head: int, skill: int) -> None:
         count += 1
         note.WatchBaseNote.at(ptr).count = count
         if in_fever_window:
-            Fever.fever_first_count = (
-                min(note.WatchBaseNote.at(ptr).count, Fever.fever_first_count)
-                if Fever.fever_first_count != 0
-                else note.WatchBaseNote.at(ptr).count
-            )
-            Fever.fever_last_count = max(note.WatchBaseNote.at(ptr).count, Fever.fever_last_count)
+            FeverChance.at(fever_ptr).counter += 1
+            FeverChance.at(fever_ptr).hits = fever_hits
 
         current_note_weight = level_score().perfect_multiplier * calculate_note_weight(
             perfect_step=count,

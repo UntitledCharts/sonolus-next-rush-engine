@@ -1,18 +1,22 @@
-from sonolus.script.archetype import EntityRef, PreviewArchetype, StandardImport, entity_data, imported, shared_memory
-from sonolus.script.globals import level_data
+from __future__ import annotations
+
+from sonolus.script.archetype import (
+    EntityRef,
+    PreviewArchetype,
+    StandardImport,
+    callback,
+    entity_data,
+    imported,
+    shared_memory,
+)
 from sonolus.script.printing import PrintColor, PrintFormat
 from sonolus.script.timing import beat_to_time
 
 from sekai.lib import archetype_names
+from sekai.lib.fever import FeverWindows
 from sekai.lib.layer import LAYER_FEVER_LINE_BOTTOM, LAYER_FEVER_LINE_TOP, LAYER_SKILL_LINE, get_z_alt
 from sekai.lib.skin import ActiveSkin
 from sekai.preview.layout import layout_preview_bar_line, print_at_time
-
-
-@level_data
-class PreviewEvents:
-    fever_chance_time: float
-    fever_start_time: float
 
 
 class PreviewSkill(PreviewArchetype):
@@ -56,16 +60,20 @@ class PreviewFeverChance(PreviewArchetype):
     beat: StandardImport.BEAT = imported()
 
     time: float = entity_data()
+    end_time: float = entity_data()
+    next_ref: EntityRef[PreviewFeverChance] = entity_data()
 
+    @property
+    def start_time(self) -> float:
+        return self.time
+
+    @callback(order=-4)
     def preprocess(self):
         self.time = beat_to_time(self.beat)
-        PreviewEvents.fever_chance_time = (
-            min(self.time, PreviewEvents.fever_chance_time) if PreviewEvents.fever_chance_time != 0 else self.time
-        )
+        self.next_ref.index = FeverWindows.chance_head
+        FeverWindows.chance_head = self.index
 
     def render(self):
-        if self.time != PreviewEvents.fever_chance_time:
-            return
         ActiveSkin.fever_chance_line.draw(
             layout_preview_bar_line(self.time, "right"),
             z=get_z_alt(LAYER_FEVER_LINE_TOP).tuple,
@@ -77,15 +85,15 @@ class PreviewFeverChance(PreviewArchetype):
             a=0.8,
         )
         print_at_time(
-            round(PreviewEvents.fever_chance_time),
-            PreviewEvents.fever_chance_time,
+            round(self.time),
+            self.time,
             fmt=PrintFormat.TIME,
             color=PrintColor.CYAN,
             side="right",
         )
         print_at_time(
-            round(PreviewEvents.fever_start_time),
-            PreviewEvents.fever_chance_time,
+            round(self.end_time),
+            self.time,
             fmt=PrintFormat.TIME,
             color=PrintColor.BLUE,
             side="left",
@@ -98,16 +106,20 @@ class PreviewFeverStart(PreviewArchetype):
     beat: StandardImport.BEAT = imported()
 
     time: float = entity_data()
+    next_ref: EntityRef[PreviewFeverStart] = entity_data()
+    chance_index: int = entity_data()
 
+    @property
+    def start_time(self) -> float:
+        return self.time
+
+    @callback(order=-4)
     def preprocess(self):
         self.time = beat_to_time(self.beat)
-        PreviewEvents.fever_start_time = (
-            min(self.time, PreviewEvents.fever_start_time) if PreviewEvents.fever_start_time != 0 else self.time
-        )
+        self.next_ref.index = FeverWindows.start_head
+        FeverWindows.start_head = self.index
 
     def render(self):
-        if self.time != PreviewEvents.fever_start_time:
-            return
         ActiveSkin.fever_start_line.draw(
             layout_preview_bar_line(self.time, "right"),
             z=get_z_alt(LAYER_FEVER_LINE_TOP).tuple,
@@ -119,15 +131,15 @@ class PreviewFeverStart(PreviewArchetype):
             a=0.8,
         )
         print_at_time(
-            round(PreviewEvents.fever_start_time),
-            PreviewEvents.fever_start_time,
+            round(self.time),
+            self.time,
             fmt=PrintFormat.TIME,
             color=PrintColor.BLUE,
             side="right",
         )
         print_at_time(
-            round(PreviewEvents.fever_chance_time),
-            PreviewEvents.fever_start_time,
+            round(PreviewFeverChance.at(self.chance_index).time),
+            self.time,
             fmt=PrintFormat.TIME,
             color=PrintColor.CYAN,
             side="left",
