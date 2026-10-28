@@ -476,15 +476,12 @@ class BaseSkin:
     life_bar_disable: Sprite = sprite("Life Bar Disable")
     life_bar_normal_background: Sprite = sprite("Life Bar Normal Background")
     life_bar_danger_background: Sprite = sprite("Life Bar Danger Background")
-    life_bar_normal_background_fill: Sprite = sprite("Life Bar Normal Background Fill")
-    life_bar_danger_background_fill: Sprite = sprite("Life Bar Danger Background Fill")
     life_bar_gauge_normal: Sprite = sprite("Life Bar Gauge Normal")
     life_bar_gauge_danger: Sprite = sprite("Life Bar Gauge Danger")
     score_bar: Sprite = sprite("Score Bar")
     score_bar_panel: Sprite = sprite("Score Bar Panel")
     score_bar_gauge: Sprite = sprite("Score Bar Gauge")
     score_bar_background: Sprite = sprite("Score Bar Background")
-    score_bar_background_fill: Sprite = sprite("Score Bar Background Fill")
     score_rank_s: Sprite = sprite("Score Rank S")
     score_rank_a: Sprite = sprite("Score Rank A")
     score_rank_b: Sprite = sprite("Score Rank B")
@@ -889,7 +886,6 @@ class LifeBarType(IntEnum):
     SKIP = 1
     DISABLE = 2
     BACKGROUND = 3
-    FILL = 4
 
 
 class LifeBarSpriteSet(Record):
@@ -898,8 +894,6 @@ class LifeBarSpriteSet(Record):
     disable: Sprite
     normal_background: Sprite
     danger_background: Sprite
-    normal_background_fill: Sprite
-    danger_background_fill: Sprite
 
     def get_sprite(self, bar_type: LifeBarType, life):
         result = +Sprite
@@ -915,11 +909,6 @@ class LifeBarSpriteSet(Record):
                     result @= self.normal_background
                 else:
                     result @= self.danger_background
-            case LifeBarType.FILL:
-                if life > 200:
-                    result @= self.normal_background_fill
-                else:
-                    result @= self.danger_background_fill
             case _:
                 assert_never(bar_type)
         return result
@@ -959,7 +948,6 @@ class LifeSpriteSet(Record):
 class ScoreGaugeSpriteSet(Record):
     normal: Sprite
     background: Sprite
-    background_fill: Sprite
 
 
 class ScoreRankType(IntEnum):
@@ -1344,8 +1332,6 @@ life_bar = LifeBarSpriteSet(
     disable=BaseSkin.life_bar_disable,
     normal_background=BaseSkin.life_bar_normal_background,
     danger_background=BaseSkin.life_bar_danger_background,
-    normal_background_fill=BaseSkin.life_bar_normal_background_fill,
-    danger_background_fill=BaseSkin.life_bar_danger_background_fill,
 )
 life_gauge = LifeGaugeSpriteSet(
     normal=BaseSkin.life_bar_gauge_normal,
@@ -1354,7 +1340,6 @@ life_gauge = LifeGaugeSpriteSet(
 score_gauge = ScoreGaugeSpriteSet(
     normal=BaseSkin.score_bar_gauge,
     background=BaseSkin.score_bar_background,
-    background_fill=BaseSkin.score_bar_background_fill,
 )
 score_rank = ScoreRankSpriteSet(
     s=BaseSkin.score_rank_s,
@@ -2092,21 +2077,12 @@ def init_skin():
         gauge=life_gauge,
         number=UINumberSpriteSet(ui=first_available_sprite_group(BaseSkin.life_number, BaseSkin.ui_number)),
     )
-    ActiveSkin.life.bar.normal_background_fill = first_available_sprite(
-        BaseSkin.life_bar_normal_background_fill, BaseSkin.life_bar_normal_background
-    )
-    ActiveSkin.life.bar.danger_background_fill = first_available_sprite(
-        BaseSkin.life_bar_danger_background_fill, BaseSkin.life_bar_danger_background
-    )
     ActiveSkin.score = ScoreSpriteSet(
         bar=BaseSkin.score_bar,
         panel=BaseSkin.score_bar_panel,
         gauge=score_gauge,
         rank=score_rank,
         rank_text=score_rank_text,
-    )
-    ActiveSkin.score.gauge.background_fill = first_available_sprite(
-        BaseSkin.score_bar_background_fill, BaseSkin.score_bar_background
     )
 
     ActiveSkin.ui_checker = UIChecker(v1=BaseSkin.v1, v3=BaseSkin.v3)

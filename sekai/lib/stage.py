@@ -1599,9 +1599,7 @@ def draw_auto_play(ui_layout):
         ActiveSkin.auto_live.draw(layout, z=get_z_alt(LAYER_JUDGMENT).tuple, a=a)
 
 
-def draw_curved_gauge(
-    sprite: Sprite, background: Sprite, background_fill: Sprite, bounds: Quad, progress: float, alpha: float
-):
+def draw_curved_gauge(sprite: Sprite, background: Sprite, bounds: Quad, progress: float, alpha: float):
     left = bounds.bl.x
     right = bounds.br.x
     bottom = bounds.bl.y
@@ -1624,7 +1622,7 @@ def draw_curved_gauge(
     cover_left = end - radius
     center_y = (top + bottom) / 2
     control_x = -1 + 2 * radius / (right - cover_left)
-    # An opaque sample of the background avoids applying its rounded alpha a second time.
+    # Reuse the existing background for the empty area; no extra skin sprites are needed.
     # The housing is above this cover and retains the outer outline of the bar.
     # Two quarter curves meet the straight edges tangentially, without pointed joins.
     upper = Quad(
@@ -1633,7 +1631,7 @@ def draw_curved_gauge(
         tr=Vec2(right, top),
         br=Vec2(right, center_y),
     )
-    background_fill.draw_curved_lr(
+    background.draw_curved_lr(
         upper,
         Vec2(control_x, 1),
         cp_right,
@@ -1647,7 +1645,7 @@ def draw_curved_gauge(
         tr=Vec2(right, center_y),
         br=Vec2(right, bottom),
     )
-    background_fill.draw_curved_lr(
+    background.draw_curved_lr(
         lower,
         Vec2(control_x, -1),
         cp_right,
@@ -1689,7 +1687,6 @@ def draw_life_bar(
     draw_curved_gauge(
         ActiveSkin.life.gauge.get_sprite(life),
         ActiveSkin.life.bar.get_sprite(LifeBarType.BACKGROUND, life),
-        ActiveSkin.life.bar.get_sprite(LifeBarType.FILL, life),
         gauge_layout,
         life / 1000,
         alpha,
@@ -1722,7 +1719,6 @@ def draw_score_bar(
     draw_curved_gauge(
         ActiveSkin.score.gauge.normal,
         ActiveSkin.score.gauge.background,
-        ActiveSkin.score.gauge.background_fill,
         ui_layout.score_gauge,
         get_gauge_progress(score),
         alpha,

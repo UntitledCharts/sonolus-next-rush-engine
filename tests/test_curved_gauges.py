@@ -51,14 +51,14 @@ class CurvedGaugeTests(unittest.TestCase):
         self.skin = SimpleNamespace(
             ui_number=UINumberSpriteSet(SpriteGroup(100, 18)),
             life=LifeSpriteSet(
-                LifeBarSpriteSet(*(Sprite(i) for i in range(1, 6)), Sprite(8), Sprite(9)),
+                LifeBarSpriteSet(*(Sprite(i) for i in range(1, 6))),
                 LifeGaugeSpriteSet(Sprite(6), Sprite(7)),
                 UINumberSpriteSet(SpriteGroup(100, 18)),
             ),
             score=ScoreSpriteSet(
                 Sprite(20),
                 Sprite(21),
-                ScoreGaugeSpriteSet(Sprite(22), Sprite(23), Sprite(24)),
+                ScoreGaugeSpriteSet(Sprite(22), Sprite(23)),
                 ScoreRankSpriteSet(*(Sprite(i) for i in range(30, 35))),
                 ScoreRankSpriteSet(*(Sprite(i) for i in range(40, 45))),
             ),
@@ -111,11 +111,11 @@ class CurvedGaugeTests(unittest.TestCase):
     def draw(self, progress, bounds=None, alpha=1):
         self.curved.clear()
         bounds = bounds if bounds is not None else Rect(l=-1.5, r=-0.5, b=0.6, t=0.65).as_quad()
-        stage.draw_curved_gauge(Sprite(22), Sprite(23), Sprite(24), bounds, progress, alpha)
+        stage.draw_curved_gauge(Sprite(22), Sprite(23), bounds, progress, alpha)
         return bounds
 
     def test_zero_full_and_out_of_range_values(self):
-        for value, ids in ((-10, [23]), (0, [23]), (0.5, [23, 22, 24, 24]), (1, [23, 22]), (10, [23, 22])):
+        for value, ids in ((-10, [23]), (0, [23]), (0.5, [23, 22, 23, 23]), (1, [23, 22]), (10, [23, 22])):
             with self.subTest(value=value):
                 self.draw(value)
                 assert [d[0] for d in self.curved] == ids
@@ -136,7 +136,7 @@ class CurvedGaugeTests(unittest.TestCase):
                 assert (draw[2].x, draw[2].y, draw[3].x, draw[3].y) == (-1, 0, 1, 0)
                 assert draw[4] == 2
             if 0 < value < 1:
-                assert self.curved[-1][0] == 24
+                assert self.curved[-1][0] == 23
 
     def test_empty_cover_stays_inside_the_full_gauge_and_reaches_the_exact_value(self):
         for width, height in ((1, 0.05), (0.5, 0.033), (0.001, 0.01), (5, 0.002)):
@@ -237,6 +237,13 @@ class CurvedGaugeTests(unittest.TestCase):
     def test_skin_contract_removes_masks_and_separate_edges(self):
         names = set(BaseSkin._sprites_)
         assert "Score Bar Background" in names
+        assert not names.intersection(
+            {
+                "Life Bar Normal Background Fill",
+                "Life Bar Danger Background Fill",
+                "Score Bar Background Fill",
+            }
+        )
         assert not names.intersection(
             {"Score Bar Mask", "Score Bar Cover", "Life Bar Gauge Normal Edge", "Life Bar Gauge Danger Edge"}
         )
