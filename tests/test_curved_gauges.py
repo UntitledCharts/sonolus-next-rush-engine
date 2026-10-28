@@ -29,7 +29,10 @@ def side_at(draw, side, t):
     cp = cp_left if side == "left" else cp_right
     a = quad.tl if side == "left" else quad.tr
     b = quad.bl if side == "left" else quad.br
-    x = quad.bl.x + (quad.br.x - quad.bl.x) * (cp.x + 1) / 2
+    u, v = (cp.x + 1) / 2, (cp.y + 1) / 2
+    lower = quad.bl.x + (quad.br.x - quad.bl.x) * u
+    upper = quad.tl.x + (quad.tr.x - quad.tl.x) * u
+    x = lower + (upper - lower) * v
     return (1 - t) ** 2 * a.x + 2 * (1 - t) * t * x + t**2 * b.x
 
 
@@ -48,14 +51,14 @@ class CurvedGaugeTests(unittest.TestCase):
         self.skin = SimpleNamespace(
             ui_number=UINumberSpriteSet(SpriteGroup(100, 18)),
             life=LifeSpriteSet(
-                LifeBarSpriteSet(*(Sprite(i) for i in range(1, 6))),
+                LifeBarSpriteSet(*(Sprite(i) for i in range(1, 6)), Sprite(8), Sprite(9)),
                 LifeGaugeSpriteSet(Sprite(6), Sprite(7)),
                 UINumberSpriteSet(SpriteGroup(100, 18)),
             ),
             score=ScoreSpriteSet(
                 Sprite(20),
                 Sprite(21),
-                ScoreGaugeSpriteSet(Sprite(22), Sprite(23)),
+                ScoreGaugeSpriteSet(Sprite(22), Sprite(23), Sprite(24)),
                 ScoreRankSpriteSet(*(Sprite(i) for i in range(30, 35))),
                 ScoreRankSpriteSet(*(Sprite(i) for i in range(40, 45))),
             ),
@@ -108,15 +111,15 @@ class CurvedGaugeTests(unittest.TestCase):
     def draw(self, progress, bounds=None, alpha=1):
         self.curved.clear()
         bounds = bounds if bounds is not None else Rect(l=-1.5, r=-0.5, b=0.6, t=0.65).as_quad()
-        stage.draw_curved_gauge(Sprite(22), Sprite(23), bounds, progress, alpha)
+        stage.draw_curved_gauge(Sprite(22), Sprite(23), Sprite(24), bounds, progress, alpha)
         return bounds
 
     def test_zero_full_and_out_of_range_values(self):
-        for value, ids in ((-10, [23]), (0, [23]), (0.5, [23, 22, 23]), (1, [23, 22]), (10, [23, 22])):
+        for value, ids in ((-10, [23]), (0, [23]), (0.5, [23, 22, 24, 24]), (1, [23, 22]), (10, [23, 22])):
             with self.subTest(value=value):
                 self.draw(value)
                 assert [d[0] for d in self.curved] == ids
-                assert [d[5][2] for d in self.curved] == list(range(len(ids)))
+                assert [d[5][2] for d in self.curved] == [0, 1, 2, 2][: len(ids)]
 
     def test_gradient_projection_is_identical_at_every_positive_value(self):
         self.draw(1)
@@ -125,22 +128,44 @@ class CurvedGaugeTests(unittest.TestCase):
             self.draw(value)
             assert self.curved[1] == full
 
+    def test_rounded_artwork_keeps_its_original_quad_without_a_second_curve(self):
+        for value in (0, 0.5, 1):
+            bounds = self.draw(value)
+            for draw in self.curved[: 2 if value > 0 else 1]:
+                assert draw[1] == bounds
+                assert (draw[2].x, draw[2].y, draw[3].x, draw[3].y) == (-1, 0, 1, 0)
+                assert draw[4] == 2
+            if 0 < value < 1:
+                assert self.curved[-1][0] == 24
+
     def test_empty_cover_stays_inside_the_full_gauge_and_reaches_the_exact_value(self):
         for width, height in ((1, 0.05), (0.5, 0.033), (0.001, 0.01), (5, 0.002)):
             bounds = Rect(l=-2, r=-2 + width, b=0.6, t=0.6 + height).as_quad()
             for value in (1e-8, 0.001, 0.01, 0.1, 0.45, 0.6, 0.75, 0.9, 1 - 1e-8):
                 with self.subTest(width=width, height=height, value=value):
                     self.draw(value, bounds)
-                    _, fill, cover = self.curved
+                    _, fill, upper, lower = self.curved
                     assert isclose(side_at(fill, "left", 0.5), bounds.bl.x, abs_tol=1e-10)
                     assert isclose(side_at(fill, "right", 0.5), bounds.br.x, abs_tol=1e-10)
-                    assert isclose(side_at(cover, "left", 0.5), bounds.bl.x + width * value, abs_tol=1e-10)
-                    for i in range(65):
-                        t = i / 64
-                        l = side_at(cover, "left", t)
-                        r = side_at(cover, "right", t)
-                        assert side_at(fill, "left", t) - 1e-10 <= l <= r + 1e-10
-                        assert isclose(r, side_at(fill, "right", t), abs_tol=1e-10)
+                    end = bounds.bl.x + width * value
+                    assert isclose(upper[1].bl.x, end, abs_tol=1e-10)
+                    assert upper[1].bl == lower[1].tl
+                    assert isclose(side_at(upper, "left", 1), end, abs_tol=1e-10)
+                    assert isclose(side_at(lower, "left", 0), end, abs_tol=1e-10)
+                    for cover in (upper, lower):
+                        for i in range(65):
+                            t = i / 64
+                            l = side_at(cover, "left", t)
+                            r = side_at(cover, "right", t)
+                            assert bounds.bl.x - 1e-10 <= l <= r + 1e-10
+                            assert isclose(r, bounds.br.x, abs_tol=1e-10)
+                    # Control points meet the top/bottom horizontally and the tip vertically.
+                    for cover, q in ((upper, 1), (lower, -1)):
+                        assert cover[2].y == q
+                        quad, cp = cover[1:3]
+                        row_left = quad.tl.x if q == 1 else quad.bl.x
+                        cp_x = row_left + (bounds.br.x - row_left) * (cp.x + 1) / 2
+                        assert isclose(cp_x, end, abs_tol=1e-10)
 
     def test_degenerate_gauges_never_divide_by_zero(self):
         for bounds in (Rect(l=0, r=0, b=0, t=1), Rect(l=0, r=1, b=0, t=0), Rect(l=1, r=0, b=0, t=1)):
