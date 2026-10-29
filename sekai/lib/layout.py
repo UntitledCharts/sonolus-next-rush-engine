@@ -386,6 +386,15 @@ class StageTransformParams(Record):
     center_weight: float
     elevation: float
 
+    def has_transform(self) -> bool:
+        return (
+            self.stage_rotate != 0.0
+            or self.x_lane_translate != 0.0
+            or self.y_lane_translate != 0.0
+            or self.center_weight != 0.0
+            or self.elevation != 0.0
+        )
+
 
 def compute_stage_transform_at_elevation(
     camera: LayoutTransform, params: StageTransformParams, elevation: float
@@ -427,6 +436,31 @@ def blend_stage_transform_over_elevation(
     return blend_stage_transform_at_elevation(
         camera, head, tail, frac, lerp(head.elevation, tail.elevation, elevation_frac)
     )
+
+
+class NoteStageParams(Record):
+    head: StageTransformParams
+    tail: StageTransformParams
+    frac: float
+
+    def has_transform(self) -> bool:
+        return self.head.has_transform() or (self.frac != 0.0 and self.tail.has_transform())
+
+    def screen_transform(self, camera: LayoutTransform) -> StageScreenTransform:
+        result = +StageScreenTransform
+        if self.has_transform():
+            transform = +StageTransform
+            transform @= compute_stage_transform_at_elevation(camera, self.head, self.head.elevation)
+            if self.frac != 0.0:
+                transform @= blend_stage_transform(
+                    transform,
+                    compute_stage_transform_at_elevation(camera, self.tail, self.tail.elevation),
+                    self.frac,
+                )
+            result @= transform.to_screen_transform()
+        else:
+            result @= IDENTITY_STAGE_SCREEN_TRANSFORM
+        return result
 
 
 def stage_aspect_ratio_locked() -> bool:
@@ -2238,6 +2272,17 @@ def current_layout_transform() -> LayoutTransform:
         stage_tilt=DynamicLayout.stage_tilt,
         size_zoom=DynamicLayout.size_zoom,
     )
+
+
+class NoteStageProjection(Record):
+    camera: LayoutTransform
+    transform: StageScreenTransform
+
+    def update(self, stage: NoteStageParams):
+        camera = current_layout_transform()
+        if camera != self.camera:
+            self.camera @= camera
+            self.transform @= stage.screen_transform(camera)
 
 
 def base_layout_transform(camera: CameraInfo) -> LayoutTransform:

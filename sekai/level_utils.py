@@ -144,6 +144,7 @@ class LevelStageStyleChange:
     alpha: float = 1.0  # Deprecated
     division_line_alpha: float = 1.0
     note_alpha: float = 1.0
+    lane_color: NoteStyle = NoteStyle.DEFAULT
     ease: EaseType = EaseType.LINEAR
 
 
@@ -659,6 +660,7 @@ def _build_stage(level_stage: LevelStage) -> tuple[DynamicStage, list[PlayArchet
         StageStyleChange(
             stage_ref=stage.ref(),
             beat=s.beat,
+            lane_color=s.lane_color,
             judge_line_color=s.judge_line_color,
             judge_line_style=s.judge_line_style,
             left_border_style=s.left_border_style,

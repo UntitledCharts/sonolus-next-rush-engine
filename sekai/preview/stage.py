@@ -5,17 +5,19 @@ from sonolus.script.quad import Quad
 from sonolus.script.values import swap
 
 from sekai.lib.layer import ZIndexes, get_z, get_z_alt, layers
-from sekai.lib.skin import ActiveSkin
+from sekai.lib.skin import ActiveSkin, get_lane_background_preview_sprite
 from sekai.lib.stage import (
+    LANE_BACKGROUND_ALPHA,
     DivisionParity,
     DivisionProps,
     DynamicStageLike,
     StageBorderStyle,
     StageProps,
-    border_blend_alpha,
     border_sprite_transition,
     border_style_width,
     border_width,
+    crossfade_alphas,
+    draw_crossfade,
     get_next_event_time,
     get_stage_props,
 )
@@ -74,7 +76,8 @@ def draw_preview_dynamic_stage(stage: DynamicStageLike, start_time: float, end_t
         return
 
     z_sub_base = stage.index * 7
-    z_bg = get_z_alt(layers.stage, z_sub_base + 0)
+    z_bg_a = get_z_alt(layers.stage, z_sub_base + 0)
+    z_bg_b = get_z_alt(layers.stage, z_sub_base + 0.5)
     z_left_a = get_z_alt(layers.stage, z_sub_base + 1)
     z_left_b = get_z_alt(layers.stage, z_sub_base + 2)
     z_right_a = get_z_alt(layers.stage, z_sub_base + 3)
@@ -101,7 +104,7 @@ def draw_preview_dynamic_stage(stage: DynamicStageLike, start_time: float, end_t
             at_event = t_b == next_event
             props_b = get_stage_props(stage, t_b, exact=True)
 
-            draw_dynamic_stage_lane_bg_slice(props_a, props_b, col, t_a, t_b, z_bg)
+            draw_dynamic_stage_lane_bg_slice(props_a, props_b, col, t_a, t_b, z_bg_a, z_bg_b)
             draw_dynamic_stage_border_slice(True, props_a, props_b, col, t_a, t_b, z_left_a, z_left_b)
             draw_dynamic_stage_border_slice(False, props_a, props_b, col, t_a, t_b, z_right_a, z_right_b)
             draw_dynamic_stage_dividers_slice(stage, props_a, props_b, col, t_a, t_b, z_div_a, z_div_b)
@@ -121,7 +124,7 @@ def slice_lane_alpha(props_a: StageProps, props_b: StageProps) -> float:
 
 
 def draw_dynamic_stage_lane_bg_slice(
-    props_a: StageProps, props_b: StageProps, col: int, t_a: float, t_b: float, z: ZIndexes
+    props_a: StageProps, props_b: StageProps, col: int, t_a: float, t_b: float, z_a: ZIndexes, z_b: ZIndexes
 ):
     alpha = slice_lane_alpha(props_a, props_b)
     if alpha <= 0:
@@ -138,7 +141,22 @@ def draw_dynamic_stage_lane_bg_slice(
         return
 
     layout = layout_preview_lane_strip(mask_l_a, mask_r_a, t_a, mask_l_b, mask_r_b, t_b, col)
-    ActiveSkin.lane_background_preview.draw(layout, z=z.tuple, a=clamp(alpha, 0.0, 1.0))
+    lane_color_a = props_a.lane_color
+    lane_color_b = props_b.lane_color
+    if lane_color_a.start == lane_color_b.start and lane_color_a.end == lane_color_b.end:
+        progress = (lane_color_a.progress + lane_color_b.progress) / 2
+    else:
+        progress = lane_color_b.progress
+    draw_crossfade(
+        get_lane_background_preview_sprite(lane_color_b.start),
+        get_lane_background_preview_sprite(lane_color_b.end),
+        layout,
+        z_a,
+        z_b,
+        alpha,
+        progress,
+        LANE_BACKGROUND_ALPHA,
+    )
 
 
 def draw_dynamic_stage_border_slice(
@@ -255,8 +273,9 @@ def draw_dynamic_stage_border_slice(
     if style.start == style.end:
         draw_border(style.start, z_a, alpha)
     else:
-        draw_border(style.start, z_a, border_blend_alpha(alpha, style.progress))
-        draw_border(style.end, z_b, alpha * max(0.0, style.progress))
+        alpha_start, alpha_end = crossfade_alphas(alpha, style.progress)
+        draw_border(style.start, z_a, alpha_start)
+        draw_border(style.end, z_b, alpha_end)
 
 
 def draw_dynamic_stage_dividers_slice(

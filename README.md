@@ -35,21 +35,21 @@ Shorthand used in the tables:
 
 #### Stage
 
-| Role                     | Sprite                                                              |
-| ------------------------ | ------------------------------------------------------------------- |
-| Stage                    | `Sekai Stage` (optional)                                            |
-| Stage Border             | `Sekai Stage Border`                                                |
-| Lane Background          | `Sekai Lane Background`                                             |
-| Lane Divider             | `Sekai Lane Divider`                                                |
-| Lane Background Preview  | `Sekai Lane Background Preview`                                     |
-| Lane Divider Preview     | `Sekai Lane Divider Preview`                                        |
-| Stage Border Preview     | `Sekai Stage Border Preview`                                        |
-| Judgment Line Background | `Sekai Judgment Background <Color>` -> `Sekai Judgment Background`  |
-| Judgment Gradient        | `Sekai Judgment Gradient <Color>`                                   |
-| Judgment Edge            | `Sekai Judgment Edge <Color>`                                       |
-| Judgment Single Line     | `Sekai Judgment Single Line <Color>` -> `Sekai Judgment Edge <Color>` |
-| Judgment Edge Left       | `Sekai Judgment Edge Left <Color>` -> `Sekai Judgment Edge <Color>` |
-| Judgment Center          | `Sekai Judgment Center <Color>`                                     |
+| Role                     | Sprite                                                                     |
+|--------------------------|----------------------------------------------------------------------------|
+| Stage                    | `Sekai Stage` (optional)                                                   |
+| Stage Border             | `Sekai Stage Border`                                                       |
+| Lane Background          | `Sekai Lane Background <Color>` -> `Sekai Lane Background`                 |
+| Lane Divider             | `Sekai Lane Divider`                                                       |
+| Lane Background Preview  | `Sekai Lane Background Preview <Color>` -> `Sekai Lane Background Preview` |
+| Lane Divider Preview     | `Sekai Lane Divider Preview`                                               |
+| Stage Border Preview     | `Sekai Stage Border Preview`                                               |
+| Judgment Line Background | `Sekai Judgment Background <Color>` -> `Sekai Judgment Background`         |
+| Judgment Gradient        | `Sekai Judgment Gradient <Color>`                                          |
+| Judgment Edge            | `Sekai Judgment Edge <Color>`                                              |
+| Judgment Single Line     | `Sekai Judgment Single Line <Color>` -> `Sekai Judgment Edge <Color>`      |
+| Judgment Edge Left       | `Sekai Judgment Edge Left <Color>` -> `Sekai Judgment Edge <Color>`        |
+| Judgment Center          | `Sekai Judgment Center <Color>`                                            |
 
 #### Note Bodies
 

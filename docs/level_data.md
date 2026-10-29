@@ -124,6 +124,16 @@ An event that controls the visual style of a stage.
 
 * **stage (ref[Stage])**: A reference to the **Stage** entity this event belongs to.
 * **#BEAT (float)**
+* **laneColor (NoteStyle)**: The lane background color. Takes on one of the following values:
+  * DEFAULT = 0
+  * NEUTRAL = 1
+  * RED = 2
+  * GREEN = 3
+  * BLUE = 4
+  * YELLOW = 5
+  * PURPLE = 6
+  * CYAN = 7
+  * BLACK = 8
 * **judgeLineColor (JudgeLineColor)**
   * NEUTRAL = 0
   * RED = 1
