@@ -1386,18 +1386,24 @@ def _layout_bar_region(bar: Quad, left: float, top: float, right: float, bottom:
 def layout_life_gauge() -> Quad:
     bar = layout_life_bar()
     # Alpha < 128 aperture bounds measured in the source Life Bar Pause images.
+    result = +Quad
     if LevelConfig.ui_version == Version.v3:
-        return _layout_bar_region(bar, 177 / 1200, 129 / 280, 896 / 1200, 171 / 280)
-    return _layout_bar_region(bar, 118 / 600, 58 / 140, 408 / 600, 72 / 140)
+        result @= _layout_bar_region(bar, 177 / 1200, 129 / 280, 896 / 1200, 171 / 280)
+    else:
+        result @= _layout_bar_region(bar, 118 / 600, 58 / 140, 408 / 600, 72 / 140)
+    return result
 
 
 def layout_life_background(bar: Quad, life: int) -> Quad:
     # Cropped Background bounds in its original 600 x 140 canvas.
+    result = +Quad
     if LevelConfig.ui_version == Version.v3:
-        return _layout_bar_region(bar, 86 / 600, 62 / 140, 450 / 600, 88 / 140)
-    if life > 200:
-        return _layout_bar_region(bar, 115 / 600, 54 / 140, 410 / 600, 75 / 140)
-    return _layout_bar_region(bar, 115 / 600, 55 / 140, 411 / 600, 75 / 140)
+        result @= _layout_bar_region(bar, 86 / 600, 62 / 140, 450 / 600, 88 / 140)
+    elif life > 200:
+        result @= _layout_bar_region(bar, 115 / 600, 54 / 140, 410 / 600, 75 / 140)
+    else:
+        result @= _layout_bar_region(bar, 115 / 600, 55 / 140, 411 / 600, 75 / 140)
+    return result
 
 
 def layout_score_bar() -> Quad:
@@ -1432,23 +1438,29 @@ def layout_score_bar() -> Quad:
 def layout_score_gauge() -> Quad:
     bar = layout_score_bar()
     # Transparent window in the 1200 x 255 (v3) / 800 x 170 (v1) source bar.
+    result = +Quad
     if LevelConfig.ui_version == Version.v3:
-        return _layout_bar_region(bar, 218 / 1200, 99 / 255, 1153 / 1200, 141 / 255)
-    return _layout_bar_region(bar, 126 / 800, 58 / 170, 756 / 800, 88 / 170)
+        result @= _layout_bar_region(bar, 218 / 1200, 99 / 255, 1153 / 1200, 141 / 255)
+    else:
+        result @= _layout_bar_region(bar, 126 / 800, 58 / 170, 756 / 800, 88 / 170)
+    return result
 
 
 def layout_score_background(bar: Quad) -> Quad:
+    result = +Quad
     if LevelConfig.ui_version == Version.v3:
         # Restore the Gauge/Background crop offsets from their common 1200 x 54 canvas:
         # Gauge (1, 2)-(1191, 52), Background (1, 0)-(1193, 53).
-        return _layout_bar_region(
+        result @= _layout_bar_region(
             bar,
             218 / 1200,
             (99 - 2 * 42 / 50) / 255,
             (218 + 1192 * 935 / 1190) / 1200,
             (99 + 51 * 42 / 50) / 255,
         )
-    return _layout_bar_region(bar, 126 / 800, 58 / 170, 756 / 800, 88 / 170)
+    else:
+        result @= _layout_bar_region(bar, 126 / 800, 58 / 170, 756 / 800, 88 / 170)
+    return result
 
 
 def layout_score_rank() -> Quad:
