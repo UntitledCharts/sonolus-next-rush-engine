@@ -1609,47 +1609,30 @@ def draw_curved_gauge(sprite: Sprite, background: Sprite, bounds: Quad, progress
     # Rounded ends already exist in the skin. Keep their full quad and texture projection.
     cp_left = Vec2(-1, 0)
     cp_right = Vec2(1, 0)
-    background.draw_curved_lr(bounds, cp_left, cp_right, n=2, z=get_z_alt(LAYER_JUDGMENT).tuple, a=alpha)
-    progress = clamp(progress, 0, 1)
-    if progress <= 0:
-        return
     # Keep the texture projection fixed so score colors stay at the same positions.
     sprite.draw_curved_lr(bounds, cp_left, cp_right, n=2, z=get_z_alt(LAYER_JUDGMENT, 1).tuple, a=alpha)
+    progress = clamp(progress, 0, 1)
     if progress >= 1:
         return
     end = lerp(left, right, progress)
     radius = min((top - bottom) / 2, (right - left) / 4, end - left)
     cover_left = end - radius
-    center_y = (top + bottom) / 2
-    control_x = -1 + 2 * radius / (right - cover_left)
-    # Reuse the existing background for the empty area; no extra skin sprites are needed.
-    # The housing is above this cover and retains the outer outline of the bar.
-    # Two quarter curves meet the straight edges tangentially, without pointed joins.
-    upper = Quad(
-        bl=Vec2(end, center_y),
+    cover_width = right - cover_left
+    cp_left = Vec2(-1 + 4 * radius / cover_width, 0)
+    cp_right = Vec2(1, 0)
+    # Reuse Bar Background above the gauge, once at full height.
+    # Splitting it vertically repeats the texture's borders at the center.
+    cover = Quad(
+        bl=Vec2(cover_left, bottom),
         tl=Vec2(cover_left, top),
         tr=Vec2(right, top),
-        br=Vec2(right, center_y),
-    )
-    background.draw_curved_lr(
-        upper,
-        Vec2(control_x, 1),
-        cp_right,
-        n=8,
-        z=get_z_alt(LAYER_JUDGMENT, 2).tuple,
-        a=alpha,
-    )
-    lower = Quad(
-        bl=Vec2(cover_left, bottom),
-        tl=Vec2(end, center_y),
-        tr=Vec2(right, center_y),
         br=Vec2(right, bottom),
     )
     background.draw_curved_lr(
-        lower,
-        Vec2(control_x, -1),
+        cover,
+        cp_left,
         cp_right,
-        n=8,
+        n=16 if radius > 0 else 2,
         z=get_z_alt(LAYER_JUDGMENT, 2).tuple,
         a=alpha,
     )

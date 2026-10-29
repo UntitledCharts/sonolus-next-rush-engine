@@ -115,23 +115,23 @@ class CurvedGaugeTests(unittest.TestCase):
         return bounds
 
     def test_zero_full_and_out_of_range_values(self):
-        for value, ids in ((-10, [23]), (0, [23]), (0.5, [23, 22, 23, 23]), (1, [23, 22]), (10, [23, 22])):
+        for value, ids in ((-10, [22, 23]), (0, [22, 23]), (0.5, [22, 23]), (1, [22]), (10, [22])):
             with self.subTest(value=value):
                 self.draw(value)
                 assert [d[0] for d in self.curved] == ids
-                assert [d[5][2] for d in self.curved] == [0, 1, 2, 2][: len(ids)]
+                assert [d[5][2] for d in self.curved] == ([1, 2] if value < 1 else [1])
 
     def test_gradient_projection_is_identical_at_every_positive_value(self):
         self.draw(1)
-        full = self.curved[1]
+        full = self.curved[0]
         for value in (1e-8, 0.001, 0.01, 0.025, 0.05, 0.1, 0.45, 0.6, 0.75, 0.9, 1 - 1e-8):
             self.draw(value)
-            assert self.curved[1] == full
+            assert self.curved[0] == full
 
     def test_rounded_artwork_keeps_its_original_quad_without_a_second_curve(self):
         for value in (0, 0.5, 1):
             bounds = self.draw(value)
-            for draw in self.curved[: 2 if value > 0 else 1]:
+            for draw in self.curved[:1]:
                 assert draw[1] == bounds
                 assert (draw[2].x, draw[2].y, draw[3].x, draw[3].y) == (-1, 0, 1, 0)
                 assert draw[4] == 2
@@ -144,35 +144,39 @@ class CurvedGaugeTests(unittest.TestCase):
             for value in (1e-8, 0.001, 0.01, 0.1, 0.45, 0.6, 0.75, 0.9, 1 - 1e-8):
                 with self.subTest(width=width, height=height, value=value):
                     self.draw(value, bounds)
-                    _, fill, upper, lower = self.curved
+                    fill, mask = self.curved
                     assert isclose(side_at(fill, "left", 0.5), bounds.bl.x, abs_tol=1e-10)
                     assert isclose(side_at(fill, "right", 0.5), bounds.br.x, abs_tol=1e-10)
                     end = bounds.bl.x + width * value
-                    assert isclose(upper[1].bl.x, end, abs_tol=1e-10)
-                    assert upper[1].bl == lower[1].tl
-                    assert isclose(side_at(upper, "left", 1), end, abs_tol=1e-10)
-                    assert isclose(side_at(lower, "left", 0), end, abs_tol=1e-10)
-                    for cover in (upper, lower):
-                        for i in range(65):
-                            t = i / 64
-                            l = side_at(cover, "left", t)
-                            r = side_at(cover, "right", t)
-                            assert bounds.bl.x - 1e-10 <= l <= r + 1e-10
-                            assert isclose(r, bounds.br.x, abs_tol=1e-10)
-                    # Control points meet the top/bottom horizontally and the tip vertically.
-                    for cover, q in ((upper, 1), (lower, -1)):
-                        assert cover[2].y == q
-                        quad, cp = cover[1:3]
-                        row_left = quad.tl.x if q == 1 else quad.bl.x
-                        cp_x = row_left + (bounds.br.x - row_left) * (cp.x + 1) / 2
-                        assert isclose(cp_x, end, abs_tol=1e-10)
+                    assert isclose(side_at(mask, "left", 0.5), end, abs_tol=1e-10)
+                    for i in range(65):
+                        t = i / 64
+                        l = side_at(mask, "left", t)
+                        r = side_at(mask, "right", t)
+                        assert bounds.bl.x - 1e-10 <= l <= r + 1e-10
+                        assert isclose(r, bounds.br.x, abs_tol=1e-10)
+                        assert isclose(l, side_at(mask, "left", 1 - t), abs_tol=1e-10)
+
+    def test_single_background_uses_the_full_texture_height_without_a_middle_seam(self):
+        for sprite, background in ((6, 4), (7, 5), (22, 23)):
+            for value in (0.001, 0.2, 0.5, 0.9, 0.999):
+                with self.subTest(sprite=sprite, progress=value):
+                    bounds = self.draw(value)
+                    self.curved.clear()
+                    stage.draw_curved_gauge(Sprite(sprite), Sprite(background), bounds, value, 1)
+                    assert [d[0] for d in self.curved] == [sprite, background]
+                    mask = self.curved[-1]
+                    assert mask[1].tl.y == mask[1].tr.y == bounds.tl.y
+                    assert mask[1].bl.y == mask[1].br.y == bounds.bl.y
+                    assert mask[2].y == mask[3].y == 0
+                    assert mask[5] > self.curved[0][5]
 
     def test_degenerate_gauges_never_divide_by_zero(self):
         for bounds in (Rect(l=0, r=0, b=0, t=1), Rect(l=0, r=1, b=0, t=0), Rect(l=1, r=0, b=0, t=1)):
             self.draw(0.5, bounds.as_quad())
             assert not self.curved
 
-    def test_background_is_present_for_all_life_states_and_play_modes(self):
+    def test_background_covers_empty_life_for_all_states_and_play_modes(self):
         for version in (Version.v1, Version.v3):
             self.version.ui_version = version
             for self.aspect in (4 / 3, 8 / 5, 16 / 9, 21 / 9):
@@ -180,10 +184,10 @@ class CurvedGaugeTests(unittest.TestCase):
                     for life in (-1, 0, 1, 200, 201, 999, 1000, 2000):
                         self.curved.clear()
                         stage.draw_life_bar(life, 100, self.ui(), 1)
-                        assert self.curved[0][0] == (4 if life > 200 else 5)
-                        assert [d[0] for d in self.curved if d[0] in (6, 7)] == (
-                            [] if life <= 0 else [6 if life > 200 else 7]
+                        assert [d[0] for d in self.curved if d[0] in (4, 5)] == (
+                            [4 if life > 200 else 5] if life < 1000 else []
                         )
+                        assert [d[0] for d in self.curved if d[0] in (6, 7)] == [6 if life > 200 else 7]
         for self.multiplayer, self.play, last_time, expected in (
             (True, True, 100, 3),
             (False, True, 0, 2),
@@ -199,11 +203,11 @@ class CurvedGaugeTests(unittest.TestCase):
         for score in (0, 1, 19999, 20000, 399999, 400000, 619999, 620000, 839999, 840000, 1000000, 2000000):
             self.curved.clear()
             stage.draw_score_bar(score, 0, 1, ui, 1)
-            assert self.curved[0][0] == 23
+            assert self.curved[0][0] == 22
             if score > 0:
                 if full is None:
-                    full = self.curved[1]
-                assert self.curved[1] == full
+                    full = self.curved[0]
+                assert self.curved[0] == full
         assert [stage.get_gauge_progress(s) for s in (0, 20000, 400000, 620000, 840000, 1000000)] == [
             0,
             0.45,
@@ -217,15 +221,15 @@ class CurvedGaugeTests(unittest.TestCase):
         stage.draw_score_bar(400000, 0, 1, self.ui(), 1)
         assert next(d for d in self.draws if d[0] == 20)[2] > self.curved[-1][5]
 
-    def test_intro_fade_has_no_cover_at_the_initial_zero_score_and_full_life(self):
+    def test_intro_fade_keeps_the_gauge_then_background_order(self):
         for alpha in (0, 0.25, 0.5, 0.75, 1):
             self.curved.clear()
             stage.draw_score_bar(0, 0, 1, self.ui(), alpha)
-            assert [d[0] for d in self.curved] == [23]
+            assert [d[0] for d in self.curved] == [22, 23]
             assert all(d[6] == alpha for d in self.curved)
             self.curved.clear()
             stage.draw_life_bar(1000, 100, self.ui(), alpha)
-            assert [d[0] for d in self.curved] == [4, 6]
+            assert [d[0] for d in self.curved] == [6]
             assert all(d[6] == alpha for d in self.curved)
 
     def test_hidden_ui_draws_no_gauges(self):
@@ -234,7 +238,7 @@ class CurvedGaugeTests(unittest.TestCase):
         stage.draw_life_bar(1000, 100, self.ui(), 1)
         assert not self.curved
 
-    def test_skin_contract_removes_masks_and_separate_edges(self):
+    def test_skin_contract_adds_no_masks_fill_sprites_or_separate_edges(self):
         names = set(BaseSkin._sprites_)
         assert "Score Bar Background" in names
         assert not names.intersection(
@@ -245,7 +249,14 @@ class CurvedGaugeTests(unittest.TestCase):
             }
         )
         assert not names.intersection(
-            {"Score Bar Mask", "Score Bar Cover", "Life Bar Gauge Normal Edge", "Life Bar Gauge Danger Edge"}
+            {
+                "Score Bar Mask",
+                "Life Bar Normal Mask",
+                "Life Bar Danger Mask",
+                "Score Bar Cover",
+                "Life Bar Gauge Normal Edge",
+                "Life Bar Gauge Danger Edge",
+            }
         )
 
 
