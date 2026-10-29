@@ -56,8 +56,10 @@ from sekai.lib.layout import (
     identity_stage_transform,
     layout_full_width_stage_cover,
     layout_hidden_cover,
+    layout_life_background,
     layout_life_gauge,
     layout_particle_lane,
+    layout_score_background,
     layout_sekai_stage,
     layout_stage_cover,
     layout_stage_cover_and_line,
@@ -1599,41 +1601,37 @@ def draw_auto_play(ui_layout):
         ActiveSkin.auto_live.draw(layout, z=get_z_alt(LAYER_JUDGMENT).tuple, a=a)
 
 
-def draw_curved_gauge(sprite: Sprite, background: Sprite, bounds: Quad, progress: float, alpha: float):
-    left = bounds.bl.x
-    right = bounds.br.x
-    bottom = bounds.bl.y
-    top = bounds.tl.y
-    if right <= left or top <= bottom:
+def draw_curved_gauge(
+    sprite: Sprite,
+    background: Sprite,
+    bounds: Quad,
+    progress: float,
+    alpha: float,
+    background_bounds: Quad | None = None,
+):
+    if bounds.br.x <= bounds.bl.x or bounds.tl.y <= bounds.bl.y:
         return
-    # Rounded ends already exist in the skin. Keep their full quad and texture projection.
     cp_left = Vec2(-1, 0)
     cp_right = Vec2(1, 0)
-    # Keep the texture projection fixed so score colors stay at the same positions.
-    sprite.draw_curved_lr(bounds, cp_left, cp_right, n=2, z=get_z_alt(LAYER_JUDGMENT, 1).tuple, a=alpha)
-    progress = clamp(progress, 0, 1)
-    if progress >= 1:
-        return
-    end = lerp(left, right, progress)
-    radius = min((top - bottom) / 2, (right - left) / 4, end - left)
-    cover_left = end - radius
-    cover_width = right - cover_left
-    cp_left = Vec2(-1 + 4 * radius / cover_width, 0)
-    cp_right = Vec2(1, 0)
-    # Reuse Bar Background above the gauge, once at full height.
-    # Splitting it vertically repeats the texture's borders at the center.
-    cover = Quad(
-        bl=Vec2(cover_left, bottom),
-        tl=Vec2(cover_left, top),
-        tr=Vec2(right, top),
-        br=Vec2(right, bottom),
-    )
     background.draw_curved_lr(
-        cover,
+        background_bounds if background_bounds is not None else bounds,
         cp_left,
         cp_right,
-        n=16 if radius > 0 else 2,
-        z=get_z_alt(LAYER_JUDGMENT, 2).tuple,
+        n=2,
+        z=get_z_alt(LAYER_JUDGMENT).tuple,
+        a=alpha,
+    )
+    progress = clamp(progress, 0, 1)
+    if progress <= 0:
+        return
+    # Keep the full quad/texture projection. Only the normalized Bezier control point moves.
+    # At t = 1/2 the right curve is halfway between its endpoint and control point.
+    sprite.draw_curved_lr(
+        bounds,
+        cp_left,
+        Vec2(4 * progress - 3, 0),
+        n=16 if progress < 1 else 2,
+        z=get_z_alt(LAYER_JUDGMENT, 1).tuple,
         a=alpha,
     )
 
@@ -1673,6 +1671,7 @@ def draw_life_bar(
         gauge_layout,
         life / 1000,
         alpha,
+        background_bounds=layout_life_background(bar_layout, life),
     )
 
 
@@ -1705,6 +1704,7 @@ def draw_score_bar(
         ui_layout.score_gauge,
         get_gauge_progress(score),
         alpha,
+        background_bounds=layout_score_background(bar_layout),
     )
     if LevelConfig.ui_version == Version.v3 or rank != ScoreRankType.D:
         ActiveSkin.score.rank.get_sprite(rank).draw(ui_layout.score_rank, z=get_z_alt(LAYER_JUDGMENT, 4).tuple, a=alpha)

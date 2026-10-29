@@ -1373,52 +1373,31 @@ def layout_life_bar() -> Quad:
     )
 
 
+def _layout_bar_region(bar: Quad, left: float, top: float, right: float, bottom: float) -> Quad:
+    """Map normalized image pixels into the bar, independently of atlas packing or resolution."""
+    return Rect(
+        l=lerp(bar.tl.x, bar.tr.x, left),
+        r=lerp(bar.tl.x, bar.tr.x, right),
+        t=lerp(bar.tl.y, bar.bl.y, top),
+        b=lerp(bar.tl.y, bar.bl.y, bottom),
+    ).as_quad()
+
+
 def layout_life_gauge() -> Quad:
-    ui = runtime_ui()
+    bar = layout_life_bar()
+    # Alpha < 128 aperture bounds measured in the source Life Bar Pause images.
+    if LevelConfig.ui_version == Version.v3:
+        return _layout_bar_region(bar, 177 / 1200, 129 / 280, 896 / 1200, 171 / 280)
+    return _layout_bar_region(bar, 118 / 600, 58 / 140, 408 / 600, 72 / 140)
 
-    scale_ratio = min(1, aspect_ratio() / (16 / 9))
 
-    bar_h_unscaled = (
-        0.196 * ui.secondary_metric_config.scale
-        if LevelConfig.ui_version == Version.v3
-        else 0.23 * ui.secondary_metric_config.scale
-    )
-    bar_h_current = bar_h_unscaled * scale_ratio
-    y_shift = (bar_h_unscaled - bar_h_current) / 2
-
-    y_offset = 0
-    margin_offset = 0
-    h = 0
-    w = 0
-    match LevelConfig.ui_version:
-        case Version.v3:
-            margin_offset = 0.118
-            y_offset = -0.007
-            h = 0.033 * ui.secondary_metric_config.scale * scale_ratio
-            w = h * 15.2
-        case Version.v1:
-            margin_offset = 0.02
-            y_offset = 0.01
-            h = 0.023 * ui.secondary_metric_config.scale * scale_ratio
-            w = h * 23
-
-    bar_base_w = 0.827
-    final_scale = ui.secondary_metric_config.scale * scale_ratio
-    current_bar_w = bar_base_w * final_scale
-
-    bar_center_x = screen().r - UIMargin.life_bar_x * scale_ratio - (current_bar_w / 2)
-    number_center_x = bar_center_x + (margin_offset * final_scale)
-
-    center_y = UIMargin.life_bar_y + (y_offset * final_scale) + y_shift
-
-    screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=center_y)
-
-    return Quad(
-        bl=Vec2(screen_center.x, screen_center.y - h / 2),
-        br=Vec2(screen_center.x + w, screen_center.y - h / 2),
-        tl=Vec2(screen_center.x, screen_center.y + h / 2),
-        tr=Vec2(screen_center.x + w, screen_center.y + h / 2),
-    )
+def layout_life_background(bar: Quad, life: int) -> Quad:
+    # Cropped Background bounds in its original 600 x 140 canvas.
+    if LevelConfig.ui_version == Version.v3:
+        return _layout_bar_region(bar, 86 / 600, 62 / 140, 450 / 600, 88 / 140)
+    if life > 200:
+        return _layout_bar_region(bar, 115 / 600, 54 / 140, 410 / 600, 75 / 140)
+    return _layout_bar_region(bar, 115 / 600, 55 / 140, 411 / 600, 75 / 140)
 
 
 def layout_score_bar() -> Quad:
@@ -1451,58 +1430,25 @@ def layout_score_bar() -> Quad:
 
 
 def layout_score_gauge() -> Quad:
-    ui = runtime_ui()
+    bar = layout_score_bar()
+    # Transparent window in the 1200 x 255 (v3) / 800 x 170 (v1) source bar.
+    if LevelConfig.ui_version == Version.v3:
+        return _layout_bar_region(bar, 218 / 1200, 99 / 255, 1153 / 1200, 141 / 255)
+    return _layout_bar_region(bar, 126 / 800, 58 / 170, 756 / 800, 88 / 170)
 
-    scale_ratio = min(1, aspect_ratio() / (16 / 9))
 
-    bar_h_unscaled = (
-        0.27 * ui.primary_metric_config.scale
-        if LevelConfig.ui_version == Version.v3
-        else 0.32 * ui.primary_metric_config.scale
-    )
-    bar_h_current = bar_h_unscaled * scale_ratio
-    y_shift = (bar_h_unscaled - bar_h_current) / 2
-
-    # c = 0-0.45 b = 0.45-0.6 a= 0.6-0.75 s=0.75-0.9
-
-    margin_offset = 0
-    y_offset = 0
-    h = 0
-    w = 0
-    match LevelConfig.ui_version:
-        case Version.v3:
-            margin_offset = 0.04
-            y_offset = 0.008
-            h = max(
-                (0.049 * ui.primary_metric_config.scale * scale_ratio),
-                1e-3,
-            )
-            w = h * 20
-        case Version.v1:
-            margin_offset = -0.155
-            y_offset = 0.021
-            h = max(
-                (0.062 * ui.primary_metric_config.scale * scale_ratio),
-                1e-3,
-            )
-            w = h * 18.8
-
-    bar_base_w = 0.27 * 4.6
-    final_scale = ui.primary_metric_config.scale * scale_ratio
-    current_bar_w = bar_base_w * final_scale
-    bar_center_x = screen().l + UIMargin.score_bar_x * scale_ratio + (current_bar_w / 2)
-    number_center_x = bar_center_x - (margin_offset * final_scale)
-
-    center_y = UIMargin.score_bar_y + (y_offset * final_scale) + y_shift
-
-    screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
-
-    return Quad(
-        bl=Vec2(screen_center.x - w, screen_center.y - h / 2),
-        br=Vec2(screen_center.x, screen_center.y - h / 2),
-        tl=Vec2(screen_center.x - w, screen_center.y + h / 2),
-        tr=Vec2(screen_center.x, screen_center.y + h / 2),
-    )
+def layout_score_background(bar: Quad) -> Quad:
+    if LevelConfig.ui_version == Version.v3:
+        # Restore the Gauge/Background crop offsets from their common 1200 x 54 canvas:
+        # Gauge (1, 2)-(1191, 52), Background (1, 0)-(1193, 53).
+        return _layout_bar_region(
+            bar,
+            218 / 1200,
+            (99 - 2 * 42 / 50) / 255,
+            (218 + 1192 * 935 / 1190) / 1200,
+            (99 + 51 * 42 / 50) / 255,
+        )
+    return _layout_bar_region(bar, 126 / 800, 58 / 170, 756 / 800, 88 / 170)
 
 
 def layout_score_rank() -> Quad:
