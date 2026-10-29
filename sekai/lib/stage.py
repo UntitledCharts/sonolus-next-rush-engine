@@ -47,6 +47,7 @@ from sekai.lib.layout import (
     StageScreenTransform,
     StageTransform,
     StageTransformAnchor,
+    StageTransformParams,
     StaticUiLayout,
     approach,
     camera_layout_transform_at_time,
@@ -74,6 +75,7 @@ from sekai.lib.layout import (
     transformed_vec_at,
 )
 from sekai.lib.level_config import LevelConfig
+from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options, StageCoverMode, Version
 from sekai.lib.particle import ActiveParticles
 from sekai.lib.skin import (
@@ -81,6 +83,7 @@ from sekai.lib.skin import (
     JudgmentSpriteSet,
     LifeBarType,
     ScoreRankType,
+    get_lane_background_sprite,
 )
 
 
@@ -119,6 +122,7 @@ class JudgeLineStyle(IntEnum):
 
 FULL_WIDTH_HALF_EXTENT = 48.0
 JUDGE_LINE_BORDER_FACTOR = 5.0
+LANE_BACKGROUND_ALPHA = 0.4
 
 
 def full_width_factor(full_width: bool) -> float:
@@ -189,9 +193,34 @@ def blend_border_layout(start: QuadLike, end: QuadLike, progress: float) -> Quad
     return result
 
 
-def border_blend_alpha(alpha: float, progress: float) -> float:
-    remaining = 1 - clamp(alpha * max(0.0, progress), 0.0, 1.0)
-    return clamp(alpha * max(0.0, 1 - progress) / remaining, 0.0, 1.0) if remaining > 0 else 0.0
+def crossfade_alphas(alpha: float, progress: float, body: float = 1.0) -> tuple[float, float]:
+    """Return alphas for B over A, preserving opacity for sprites with the given body alpha."""
+    a = clamp(alpha, 0.0, 1.0)
+    t = clamp(progress, 0.0, 1.0)
+    b_alpha = a * t
+    remaining = 1 - body * b_alpha
+    a_alpha = a * (1 - t) / remaining if remaining > 0 else 0.0
+    return a_alpha, b_alpha
+
+
+def draw_crossfade(
+    sprite_a: Sprite,
+    sprite_b: Sprite,
+    quad: QuadLike,
+    z_a: ZIndexes,
+    z_b: ZIndexes,
+    alpha: float,
+    progress: float,
+    body: float = 1.0,
+):
+    if sprite_a.id == sprite_b.id:
+        sprite_a.draw(quad, z=z_a.tuple, a=clamp(alpha, 0.0, 1.0))
+        return
+    a_alpha, b_alpha = crossfade_alphas(alpha, progress, body)
+    if a_alpha > 0:
+        sprite_a.draw(quad, z=z_a.tuple, a=a_alpha)
+    if b_alpha > 0:
+        sprite_b.draw(quad, z=z_b.tuple, a=b_alpha)
 
 
 def judge_line_style_weight(style: Transition[JudgeLineStyle], target: JudgeLineStyle) -> float:
@@ -210,11 +239,34 @@ def resolve_judge_line_style(style: Transition[JudgeLineStyle]) -> JudgeLineStyl
     return style.end
 
 
+def _stage_transform(props: StageProps | StageSharedProps, elevation_offset: float) -> StageTransform:
+    return compute_stage_transform(
+        current_layout_transform(),
+        props.rotate,
+        props.x_lane_translate,
+        props.y_lane_translate,
+        props.lane,
+        props.center_weight,
+        props.elevation + elevation_offset,
+    )
+
+
+def _has_transform(props: StageProps | StageSharedProps) -> bool:
+    return (
+        props.rotate != 0.0
+        or props.x_lane_translate != 0.0
+        or props.y_lane_translate != 0.0
+        or props.center_weight != 0.0
+        or props.elevation != 0.0
+    )
+
+
 class StageProps(Record):
     lane: float
     width: float
     pivot_lane: float
     division: Transition[DivisionProps]
+    lane_color: Transition[NoteStyle]
     judge_line_color: Transition[JudgeLineColor]
     left_border_style: Transition[StageBorderStyle]
     right_border_style: Transition[StageBorderStyle]
@@ -233,23 +285,37 @@ class StageProps(Record):
     elevation: float
 
     def stage_transform(self, elevation_offset: float = 0.0) -> StageTransform:
-        return compute_stage_transform(
-            current_layout_transform(),
-            self.rotate,
-            self.x_lane_translate,
-            self.y_lane_translate,
-            self.lane,
-            self.center_weight,
-            self.elevation + elevation_offset,
+        return _stage_transform(self, elevation_offset)
+
+    def transform_params(self, elevation_offset: float = 0.0) -> StageTransformParams:
+        return StageTransformParams(
+            stage_rotate=self.rotate,
+            x_lane_translate=self.x_lane_translate,
+            y_lane_translate=self.y_lane_translate,
+            mask_lane=self.lane,
+            center_weight=self.center_weight,
+            elevation=self.elevation + elevation_offset,
         )
 
     def has_transform(self) -> bool:
-        return (
-            self.rotate != 0.0
-            or self.x_lane_translate != 0.0
-            or self.y_lane_translate != 0.0
-            or self.center_weight != 0.0
-            or self.elevation != 0.0
+        return _has_transform(self)
+
+    def shared(self) -> StageSharedProps:
+        return StageSharedProps(
+            lane=self.lane,
+            width=self.width,
+            pivot_lane=self.pivot_lane,
+            division_start=self.division.start,
+            y_offset=self.y_offset,
+            resolved_judge_line_style=resolve_judge_line_style(self.judge_line_style),
+            full_width=self.full_width,
+            note_alpha=self.note_alpha,
+            mask_notes=self.mask_notes,
+            rotate=self.rotate,
+            x_lane_translate=self.x_lane_translate,
+            y_lane_translate=self.y_lane_translate,
+            center_weight=self.center_weight,
+            elevation=self.elevation,
         )
 
     def draw(self, order: int):
@@ -277,8 +343,32 @@ class StageProps(Record):
             alpha=ui_alpha,
             full_width=self.full_width,
             division_line_alpha=self.division_line_alpha,
+            lane_color=self.lane_color,
             transform=transform.to_screen_transform(),
         )
+
+
+class StageSharedProps(Record):
+    lane: float
+    width: float
+    pivot_lane: float
+    division_start: DivisionProps
+    y_offset: float
+    resolved_judge_line_style: JudgeLineStyle
+    full_width: float
+    note_alpha: float
+    mask_notes: bool
+    rotate: float
+    x_lane_translate: float
+    y_lane_translate: float
+    center_weight: float
+    elevation: float
+
+    def stage_transform(self, elevation_offset: float = 0.0) -> StageTransform:
+        return _stage_transform(self, elevation_offset)
+
+    def has_transform(self) -> bool:
+        return _has_transform(self)
 
 
 class VisualMask(Record):
@@ -395,6 +485,7 @@ class StagePivotChangeLike(Protocol):
 
 class StageStyleChangeLike(Protocol):
     time: float
+    lane_color: NoteStyle
     judge_line_color: JudgeLineColor
     judge_line_style: JudgeLineStyle
     left_border_style: StageBorderStyle
@@ -691,6 +782,8 @@ def update_stage_style_props(
     style_a_ref, style_b_ref = query_event_list(first_style_change_ref, t, lambda e: e.time, strict=not right_limit)
     if style_a_ref.index > 0:
         style_a = get_event_as(style_a_ref, _stage_style_change_archetype())
+        result.lane_color.start = style_a.lane_color
+        result.lane_color.end = style_a.lane_color
         result.judge_line_color.start = style_a.judge_line_color
         result.judge_line_color.end = style_a.judge_line_color
         result.judge_line_style.start = style_a.judge_line_style
@@ -709,6 +802,8 @@ def update_stage_style_props(
             t_a = style_a.time
             t_b = style_b.time
             p = event_progress(style_a.ease, t, t_a, t_b, right_limit, exact)
+            result.lane_color.end = style_b.lane_color
+            result.lane_color.progress = p
             result.judge_line_color.end = style_b.judge_line_color
             result.judge_line_color.progress = p
             result.judge_line_style.end = style_b.judge_line_style
@@ -728,6 +823,8 @@ def update_stage_style_props(
             result.note_alpha = clamp(lerp(style_a.note_alpha, style_b.note_alpha, p), 0.0, 1.0)
     elif style_b_ref.index > 0:
         style_b = get_event_as(style_b_ref, _stage_style_change_archetype())
+        result.lane_color.start = style_b.lane_color
+        result.lane_color.end = style_b.lane_color
         result.judge_line_color.start = style_b.judge_line_color
         result.judge_line_color.end = style_b.judge_line_color
         result.judge_line_style.start = style_b.judge_line_style
@@ -1019,10 +1116,12 @@ def draw_dynamic_stage(
     judge_line_style: Transition[JudgeLineStyle] | JudgeLineStyle = JudgeLineStyle.DEFAULT,
     full_width: float = 0,
     division_line_alpha: float = 1,
+    lane_color: Transition[NoteStyle] | NoteStyle = NoteStyle.DEFAULT,
     *,
     transform: StageScreenTransform,
 ):
     division = normalize_transition(division)
+    lane_color = normalize_transition(lane_color)
     judge_line_color = normalize_transition(judge_line_color)
     judge_line_style = normalize_transition(judge_line_style)
     left_border_style = normalize_transition(left_border_style)
@@ -1031,12 +1130,9 @@ def draw_dynamic_stage(
     def place(q: QuadLike) -> QuadLike:
         return transform.transform_quad(q)
 
-    sprites_same = judge_line_color.start == judge_line_color.end
     sprites_a = get_judgment_sprites(judge_line_color.start)
     sprites_b = get_judgment_sprites(judge_line_color.end)
-    p_sprites = 0.0 if sprites_same else judge_line_color.progress
-    w_sprites_start = max(0.0, 1 - p_sprites)
-    w_sprites_end = max(0.0, p_sprites)
+    c = judge_line_color.progress
     w_div_start = max(0.0, 1 - division.progress)
     w_div_end = max(0.0, division.progress)
 
@@ -1071,7 +1167,8 @@ def draw_dynamic_stage(
     half_jl = lerp(width, FULL_WIDTH_HALF_EXTENT, fw)
     l_jl = lane - half_jl
     r_jl = lane + half_jl
-    z_bg0 = get_z_alt(layers.stage, order * 17, elevation=transform.elevation)
+    z_bg0_a = get_z_alt(layers.stage, order * 17, elevation=transform.elevation)
+    z_bg0_b = get_z_alt(layers.stage, order * 17 + 0.5, elevation=transform.elevation)
     z_bg1_a = get_z_alt(layers.stage, order * 17 + 1, elevation=transform.elevation)
     z_bg1_b = get_z_alt(layers.stage, order * 17 + 2, elevation=transform.elevation)
     z_lane0 = get_z_alt(layers.stage, order * 17 + 3, elevation=transform.elevation)
@@ -1085,7 +1182,9 @@ def draw_dynamic_stage(
     z_b2 = get_z_alt(layers.stage, order * 17 + 11, elevation=transform.elevation)
     z_b3 = get_z_alt(layers.stage, order * 17 + 12, elevation=transform.elevation)
     z_a4 = get_z_alt(layers.stage, order * 17 + 13, elevation=transform.elevation)
+    z_a4_edge = get_z_alt(layers.stage, order * 17 + 13.5, elevation=transform.elevation)
     z_b4 = get_z_alt(layers.stage, order * 17 + 14, elevation=transform.elevation)
+    z_b4_edge = get_z_alt(layers.stage, order * 17 + 14.5, elevation=transform.elevation)
     z_single_a = get_z_alt(layers.stage, order * 17 + 15, elevation=transform.elevation)
     z_single_b = get_z_alt(layers.stage, order * 17 + 16, elevation=transform.elevation)
 
@@ -1187,8 +1286,9 @@ def draw_dynamic_stage(
             pos = shifted_pivot + k
             div_layout = place(layout_judgment_divider(pos, judgment_divider_size))
             edge_weight = abs(pos - lane) / width if width > 0 else 0
-            sprites.judgment_center.draw(div_layout, z=z_lo.tuple, a=clamp(a, 0.0, 1.0))
-            sprites.judgment_edge.draw(div_layout, z=z_hi.tuple, a=clamp(a * edge_weight, 0.0, 1.0))
+            center_a, edge_a = crossfade_alphas(a, edge_weight)
+            sprites.judgment_center.draw(div_layout, z=z_lo.tuple, a=center_a)
+            sprites.judgment_edge.draw(div_layout, z=z_hi.tuple, a=edge_a)
 
     def layout_judgment_border(style: StageBorderStyle, edge: float, is_left: bool) -> Quad:
         result = +Quad
@@ -1235,46 +1335,51 @@ def draw_dynamic_stage(
             case _:
                 assert_never(style)
 
-    def draw_gradient(sprites: JudgmentSpriteSet, z: ZIndexes, a: float):
+    def draw_gradient(sprites: JudgmentSpriteSet, z_grad: ZIndexes, z_edge: ZIndexes, a: float):
         bottom_l = place(perspective_rect(l_jl, lane, 1 + nh, 1 + nh - nh / f, travel))
         bottom_r = place(perspective_rect(r_jl, lane, 1 + nh, 1 + nh - nh / f, travel))
         top_l = place(perspective_rect(l_jl, lane, 1 - nh, 1 - nh + nh / f, travel))
         top_r = place(perspective_rect(r_jl, lane, 1 - nh, 1 - nh + nh / f, travel))
-        grad_a = clamp(a * (1 - fw), 0.0, 1.0)
-        edge_a = clamp(a * fw, 0.0, 1.0)
+        grad_a, edge_a = crossfade_alphas(a, fw)
         if grad_a > 0:
-            sprites.judgment_gradient.draw(bottom_l, z=z.tuple, a=grad_a)
-            sprites.judgment_gradient.draw(bottom_r, z=z.tuple, a=grad_a)
-            sprites.judgment_gradient.draw(top_l, z=z.tuple, a=grad_a)
-            sprites.judgment_gradient.draw(top_r, z=z.tuple, a=grad_a)
+            sprites.judgment_gradient.draw(bottom_l, z=z_grad.tuple, a=grad_a)
+            sprites.judgment_gradient.draw(bottom_r, z=z_grad.tuple, a=grad_a)
+            sprites.judgment_gradient.draw(top_l, z=z_grad.tuple, a=grad_a)
+            sprites.judgment_gradient.draw(top_r, z=z_grad.tuple, a=grad_a)
         if edge_a > 0:
-            sprites.judgment_edge.draw(bottom_l, z=z.tuple, a=edge_a)
-            sprites.judgment_edge.draw(bottom_r, z=z.tuple, a=edge_a)
-            sprites.judgment_edge.draw(top_l, z=z.tuple, a=edge_a)
-            sprites.judgment_edge.draw(top_r, z=z.tuple, a=edge_a)
-
-    def draw_single_line(sprites: JudgmentSpriteSet, z: ZIndexes, a: float):
-        half_thick = nh / f / 2
-        layout = place(perspective_rect(l_jl, r_jl, 1 - half_thick, 1 + half_thick, travel))
-        sprites.judgment_single_line.draw(layout, z=z.tuple, a=clamp(a, 0.0, 1.0))
+            sprites.judgment_edge.draw(bottom_l, z=z_edge.tuple, a=edge_a)
+            sprites.judgment_edge.draw(bottom_r, z=z_edge.tuple, a=edge_a)
+            sprites.judgment_edge.draw(top_l, z=z_edge.tuple, a=edge_a)
+            sprites.judgment_edge.draw(top_r, z=z_edge.tuple, a=edge_a)
 
     la = lane_alpha * (1 - fw)
     if la > 0:
-        ActiveSkin.lane_background.draw(place(layout_stage_lane_by_edges(l, r)), z=z_bg0.tuple, a=clamp(la, 0.0, 1.0))
+        draw_crossfade(
+            get_lane_background_sprite(lane_color.start),
+            get_lane_background_sprite(lane_color.end),
+            place(layout_stage_lane_by_edges(l, r)),
+            z_bg0_a,
+            z_bg0_b,
+            la,
+            lane_color.progress,
+            LANE_BACKGROUND_ALPHA,
+        )
 
         p_left = left_border_style.progress
         if left_border_style.start == left_border_style.end:
             draw_border(left_border_style.start, True, left_border_layout, z_lane0, la)
         else:
-            draw_border(left_border_style.start, True, left_border_layout, z_lane0, border_blend_alpha(la, p_left))
-            draw_border(left_border_style.end, True, left_border_layout, z_lane1, la * max(0.0, p_left))
+            alpha_start, alpha_end = crossfade_alphas(la, p_left)
+            draw_border(left_border_style.start, True, left_border_layout, z_lane0, alpha_start)
+            draw_border(left_border_style.end, True, left_border_layout, z_lane1, alpha_end)
 
         p_right = right_border_style.progress
         if right_border_style.start == right_border_style.end:
             draw_border(right_border_style.start, False, right_border_layout, z_lane0, la)
         else:
-            draw_border(right_border_style.start, False, right_border_layout, z_lane0, border_blend_alpha(la, p_right))
-            draw_border(right_border_style.end, False, right_border_layout, z_lane1, la * max(0.0, p_right))
+            alpha_start, alpha_end = crossfade_alphas(la, p_right)
+            draw_border(right_border_style.start, False, right_border_layout, z_lane0, alpha_start)
+            draw_border(right_border_style.end, False, right_border_layout, z_lane1, alpha_end)
 
         la_div = la * division_line_alpha
         if la_div > 0:
@@ -1293,11 +1398,9 @@ def draw_dynamic_stage(
 
     if ja_bar > 0:
         bg_layout = place(perspective_rect(l_jl, r_jl, 1 - nh, 1 + nh, travel))
-        if sprites_same:
-            sprites_a.judgment_background.draw(bg_layout, z=z_bg1_a.tuple, a=clamp(ja_bar, 0.0, 1.0))
-        else:
-            sprites_a.judgment_background.draw(bg_layout, z=z_bg1_a.tuple, a=clamp(ja_bar * w_sprites_start, 0.0, 1.0))
-            sprites_b.judgment_background.draw(bg_layout, z=z_bg1_b.tuple, a=clamp(ja_bar * w_sprites_end, 0.0, 1.0))
+        draw_crossfade(
+            sprites_a.judgment_background, sprites_b.judgment_background, bg_layout, z_bg1_a, z_bg1_b, ja_bar, c
+        )
 
     p_left = left_border_style.progress
     p_right = right_border_style.progress
@@ -1305,45 +1408,61 @@ def draw_dynamic_stage(
     start_has_half_offset = division.start.parity == DivisionParity.ODD and division.start.size % 2 == 1
     end_has_half_offset = division.end.parity == DivisionParity.ODD and division.end.size % 2 == 1
     judgment_dividers_same = start_has_half_offset == end_has_half_offset
+    divider_sprites_same = (
+        sprites_a.judgment_center.id == sprites_b.judgment_center.id
+        and sprites_a.judgment_edge.id == sprites_b.judgment_edge.id
+    )
+    gradient_sprites_same = (
+        sprites_a.judgment_gradient.id == sprites_b.judgment_gradient.id
+        and sprites_a.judgment_edge.id == sprites_b.judgment_edge.id
+    )
+    border_sprites_same = (
+        sprites_a.judgment_edge_left.id == sprites_b.judgment_edge_left.id
+        and sprites_a.judgment_edge.id == sprites_b.judgment_edge.id
+    )
 
     if ja_dec > 0:
-        if judgment_dividers_same and sprites_same:
+        if judgment_dividers_same and divider_sprites_same:
             draw_judgment_dividers(sprites_a, start_has_half_offset, pivot_lane, z_a0, z_a1, ja_dec)
         elif judgment_dividers_same:
-            draw_judgment_dividers(sprites_a, start_has_half_offset, pivot_lane, z_a0, z_a1, ja_dec * w_sprites_start)
-            draw_judgment_dividers(sprites_b, start_has_half_offset, pivot_lane, z_b0, z_b1, ja_dec * w_sprites_end)
-        elif sprites_same:
+            alpha_a, alpha_b = crossfade_alphas(ja_dec, c)
+            draw_judgment_dividers(sprites_a, start_has_half_offset, pivot_lane, z_a0, z_a1, alpha_a)
+            draw_judgment_dividers(sprites_b, start_has_half_offset, pivot_lane, z_b0, z_b1, alpha_b)
+        elif divider_sprites_same:
             draw_judgment_dividers(sprites_a, start_has_half_offset, pivot_lane, z_a0, z_a1, ja_dec * w_div_start)
             draw_judgment_dividers(sprites_a, end_has_half_offset, pivot_lane, z_a2, z_a3, ja_dec * w_div_end)
         else:
-            alpha_aa = w_sprites_start * w_div_start
-            alpha_ab = w_sprites_start * w_div_end
-            alpha_ba = w_sprites_end * w_div_start
-            alpha_bb = w_sprites_end * w_div_end
+            alpha_aa, alpha_ba = crossfade_alphas(ja_dec * w_div_start, c)
+            alpha_ab, alpha_bb = crossfade_alphas(ja_dec * w_div_end, c)
             if alpha_aa > 0:
-                draw_judgment_dividers(sprites_a, start_has_half_offset, pivot_lane, z_a0, z_a1, ja_dec * alpha_aa)
+                draw_judgment_dividers(sprites_a, start_has_half_offset, pivot_lane, z_a0, z_a1, alpha_aa)
             if alpha_ab > 0:
-                draw_judgment_dividers(sprites_a, end_has_half_offset, pivot_lane, z_a2, z_a3, ja_dec * alpha_ab)
+                draw_judgment_dividers(sprites_a, end_has_half_offset, pivot_lane, z_a2, z_a3, alpha_ab)
             if alpha_ba > 0:
-                draw_judgment_dividers(sprites_b, start_has_half_offset, pivot_lane, z_b0, z_b1, ja_dec * alpha_ba)
+                draw_judgment_dividers(sprites_b, start_has_half_offset, pivot_lane, z_b0, z_b1, alpha_ba)
             if alpha_bb > 0:
-                draw_judgment_dividers(sprites_b, end_has_half_offset, pivot_lane, z_b2, z_b3, ja_dec * alpha_bb)
+                draw_judgment_dividers(sprites_b, end_has_half_offset, pivot_lane, z_b2, z_b3, alpha_bb)
 
     if ja_bar > 0:
-        if sprites_same:
-            draw_gradient(sprites_a, z_a4, ja_bar)
+        if gradient_sprites_same:
+            draw_gradient(sprites_a, z_a4, z_a4_edge, ja_bar)
         else:
-            draw_gradient(sprites_a, z_a4, ja_bar * w_sprites_start)
-            draw_gradient(sprites_b, z_b4, ja_bar * w_sprites_end)
+            alpha_a, alpha_b = crossfade_alphas(ja_bar, c)
+            draw_gradient(sprites_a, z_a4, z_a4_edge, alpha_a)
+            draw_gradient(sprites_b, z_b4, z_b4_edge, alpha_b)
 
     if ja_dec > 0:
-        if sprites_same and left_border_style.start == left_border_style.end:
+        if border_sprites_same:
+            border_alpha_a = ja_dec
+            border_alpha_b = 0.0
+        else:
+            border_alpha_a, border_alpha_b = crossfade_alphas(ja_dec, c)
+
+        if border_sprites_same and left_border_style.start == left_border_style.end:
             draw_judgment_border(sprites_a, left_border_style.start, True, left_judgment_layout, z_a0, ja_dec)
         else:
-            alpha_aa = border_blend_alpha(ja_dec * w_sprites_start, p_left)
-            alpha_ab = ja_dec * w_sprites_start * max(0.0, p_left)
-            alpha_ba = border_blend_alpha(ja_dec * w_sprites_end, p_left)
-            alpha_bb = ja_dec * w_sprites_end * max(0.0, p_left)
+            alpha_aa, alpha_ab = crossfade_alphas(border_alpha_a, p_left)
+            alpha_ba, alpha_bb = crossfade_alphas(border_alpha_b, p_left)
             if alpha_aa > 0:
                 draw_judgment_border(sprites_a, left_border_style.start, True, left_judgment_layout, z_a0, alpha_aa)
             if alpha_ab > 0:
@@ -1353,13 +1472,11 @@ def draw_dynamic_stage(
             if alpha_bb > 0:
                 draw_judgment_border(sprites_b, left_border_style.end, True, left_judgment_layout, z_b2, alpha_bb)
 
-        if sprites_same and right_border_style.start == right_border_style.end:
+        if border_sprites_same and right_border_style.start == right_border_style.end:
             draw_judgment_border(sprites_a, right_border_style.start, False, right_judgment_layout, z_a0, ja_dec)
         else:
-            alpha_aa = border_blend_alpha(ja_dec * w_sprites_start, p_right)
-            alpha_ab = ja_dec * w_sprites_start * max(0.0, p_right)
-            alpha_ba = border_blend_alpha(ja_dec * w_sprites_end, p_right)
-            alpha_bb = ja_dec * w_sprites_end * max(0.0, p_right)
+            alpha_aa, alpha_ab = crossfade_alphas(border_alpha_a, p_right)
+            alpha_ba, alpha_bb = crossfade_alphas(border_alpha_b, p_right)
             if alpha_aa > 0:
                 draw_judgment_border(sprites_a, right_border_style.start, False, right_judgment_layout, z_a0, alpha_aa)
             if alpha_ab > 0:
@@ -1370,11 +1487,17 @@ def draw_dynamic_stage(
                 draw_judgment_border(sprites_b, right_border_style.end, False, right_judgment_layout, z_b2, alpha_bb)
 
     if ja_single > 0:
-        if sprites_same:
-            draw_single_line(sprites_a, z_single_a, ja_single)
-        else:
-            draw_single_line(sprites_a, z_single_a, ja_single * w_sprites_start)
-            draw_single_line(sprites_b, z_single_b, ja_single * w_sprites_end)
+        half_thick = nh / f / 2
+        single_layout = place(perspective_rect(l_jl, r_jl, 1 - half_thick, 1 + half_thick, travel))
+        draw_crossfade(
+            sprites_a.judgment_single_line,
+            sprites_b.judgment_single_line,
+            single_layout,
+            z_single_a,
+            z_single_b,
+            ja_single,
+            c,
+        )
 
     draw_per_stage_cover(l, r, lane_alpha, alpha, order, transform)
 

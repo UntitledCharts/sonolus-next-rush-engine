@@ -201,7 +201,7 @@ def get_z(
     )
 
 
-def get_z_alt(layer: Layer | float, order: int = 0, *, elevation: float = 0.0) -> ZIndexes:
+def get_z_alt(layer: Layer | float, order: float = 0, *, elevation: float = 0.0) -> ZIndexes:
     layer = resolve_layer(layer)
     return ZIndexes(
         z1=layer.layer,

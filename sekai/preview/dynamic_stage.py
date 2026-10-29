@@ -19,6 +19,7 @@ from sekai.lib.baseevent import BaseEvent, init_event_list
 from sekai.lib.ease import EaseType
 from sekai.lib.layout import StageTransformAnchor, ZoomVerticalAlign, preempt_time
 from sekai.lib.level_config import LevelConfig
+from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
 from sekai.lib.stage import (
     DivisionParity,
@@ -171,6 +172,7 @@ class PreviewStageStyleChange(PreviewArchetype, BaseEvent):
 
     stage_ref: EntityRef[PreviewDynamicStage] = imported(name="stage")
     beat: StandardImport.BEAT
+    lane_color: NoteStyle = imported(name="laneColor", default=NoteStyle.DEFAULT)
     judge_line_color: JudgeLineColor = imported(name="judgeLineColor")
     judge_line_style: JudgeLineStyle = imported(name="judgeLineStyle")
     left_border_style: StageBorderStyle = imported(name="leftBorderStyle")

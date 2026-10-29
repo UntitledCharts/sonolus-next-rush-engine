@@ -4,7 +4,7 @@ from sonolus.script.runtime import is_skip
 from sonolus.script.sprite import Sprite
 
 from sekai.lib import archetype_names
-from sekai.lib.layout import StageScreenTransform
+from sekai.lib.layout import IDENTITY_STAGE_SCREEN_TRANSFORM, NoteStageParams, NoteStageProjection
 from sekai.lib.options import Options
 from sekai.lib.slot_effect import (
     SLOT_EFFECT_DURATION,
@@ -27,7 +27,8 @@ class WatchSlotGlowEffect(WatchArchetype):
     shift: float = entity_memory()
     bounds: Interval = entity_memory()
     y_offset: float = entity_memory()
-    transform: StageScreenTransform = entity_memory()
+    stage: NoteStageParams = entity_memory()
+    projection: NoteStageProjection = entity_memory()
     end_time: float = entity_memory()
     group_id: float = entity_memory()
     generation: float = entity_memory()
@@ -55,17 +56,31 @@ class WatchSlotGlowEffect(WatchArchetype):
     def update_parallel(self):
         if not is_slot_generation_visible(self.sprite, self.generation):
             return
-        draw_slot_glow_effects_in_range(
-            self.sprite,
-            self.start_time,
-            self.end_time,
-            self.left,
-            self.right,
-            shift=self.shift,
-            bounds=self.bounds,
-            y_offset=self.y_offset,
-            transform=self.transform,
-        )
+        if self.stage.has_transform():
+            self.projection.update(self.stage)
+            draw_slot_glow_effects_in_range(
+                self.sprite,
+                self.start_time,
+                self.end_time,
+                self.left,
+                self.right,
+                shift=self.shift,
+                bounds=self.bounds,
+                y_offset=self.y_offset,
+                transform=self.projection.transform,
+            )
+        else:
+            draw_slot_glow_effects_in_range(
+                self.sprite,
+                self.start_time,
+                self.end_time,
+                self.left,
+                self.right,
+                shift=self.shift,
+                bounds=self.bounds,
+                y_offset=self.y_offset,
+                transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
+            )
 
     def terminate(self):
         self.generation_set = False
@@ -81,7 +96,8 @@ class WatchSlotEffect(WatchArchetype):
     shift: float = entity_memory()
     bounds: Interval = entity_memory()
     y_offset: float = entity_memory()
-    transform: StageScreenTransform = entity_memory()
+    stage: NoteStageParams = entity_memory()
+    projection: NoteStageProjection = entity_memory()
     end_time: float = entity_memory()
     group_id: float = entity_memory()
     generation: float = entity_memory()
@@ -109,17 +125,31 @@ class WatchSlotEffect(WatchArchetype):
     def update_parallel(self):
         if not is_slot_generation_visible(self.sprite, self.generation):
             return
-        draw_slot_effects_in_range(
-            self.sprite,
-            self.start_time,
-            self.end_time,
-            self.left,
-            self.right,
-            self.shift,
-            bounds=self.bounds,
-            y_offset=self.y_offset,
-            transform=self.transform,
-        )
+        if self.stage.has_transform():
+            self.projection.update(self.stage)
+            draw_slot_effects_in_range(
+                self.sprite,
+                self.start_time,
+                self.end_time,
+                self.left,
+                self.right,
+                self.shift,
+                bounds=self.bounds,
+                y_offset=self.y_offset,
+                transform=self.projection.transform,
+            )
+        else:
+            draw_slot_effects_in_range(
+                self.sprite,
+                self.start_time,
+                self.end_time,
+                self.left,
+                self.right,
+                self.shift,
+                bounds=self.bounds,
+                y_offset=self.y_offset,
+                transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
+            )
 
     def terminate(self):
         self.generation_set = False

@@ -121,6 +121,25 @@ class BaseSkin:
     lane_background_preview: Sprite = sprite("Sekai Lane Background Preview")
     lane_divider_preview: Sprite = sprite("Sekai Lane Divider Preview")
     stage_border_preview: Sprite = sprite("Sekai Stage Border Preview")
+
+    lane_background_neutral: Sprite = sprite("Sekai Lane Background Neutral")
+    lane_background_red: Sprite = sprite("Sekai Lane Background Red")
+    lane_background_green: Sprite = sprite("Sekai Lane Background Green")
+    lane_background_blue: Sprite = sprite("Sekai Lane Background Blue")
+    lane_background_yellow: Sprite = sprite("Sekai Lane Background Yellow")
+    lane_background_purple: Sprite = sprite("Sekai Lane Background Purple")
+    lane_background_cyan: Sprite = sprite("Sekai Lane Background Cyan")
+    lane_background_black: Sprite = sprite("Sekai Lane Background Black")
+
+    lane_background_preview_neutral: Sprite = sprite("Sekai Lane Background Preview Neutral")
+    lane_background_preview_red: Sprite = sprite("Sekai Lane Background Preview Red")
+    lane_background_preview_green: Sprite = sprite("Sekai Lane Background Preview Green")
+    lane_background_preview_blue: Sprite = sprite("Sekai Lane Background Preview Blue")
+    lane_background_preview_yellow: Sprite = sprite("Sekai Lane Background Preview Yellow")
+    lane_background_preview_purple: Sprite = sprite("Sekai Lane Background Preview Purple")
+    lane_background_preview_cyan: Sprite = sprite("Sekai Lane Background Preview Cyan")
+    lane_background_preview_black: Sprite = sprite("Sekai Lane Background Preview Black")
+
     judgment_background: Sprite = sprite("Sekai Judgment Background")
 
     judgment_background_neutral: Sprite = sprite("Sekai Judgment Background Neutral")
@@ -1386,6 +1405,9 @@ class ActiveSkin:
     lane_divider_preview: Sprite
     stage_border_preview: Sprite
 
+    lane_backgrounds: Array[Sprite, Dim[9]]
+    lane_background_previews: Array[Sprite, Dim[9]]
+
     judgment_neutral: JudgmentSpriteSet
     judgment_red: JudgmentSpriteSet
     judgment_green: JudgmentSpriteSet
@@ -1487,6 +1509,29 @@ def init_skin():
     ActiveSkin.lane_background_preview = BaseSkin.lane_background_preview
     ActiveSkin.lane_divider_preview = BaseSkin.lane_divider_preview
     ActiveSkin.stage_border_preview = BaseSkin.stage_border_preview
+
+    ActiveSkin.lane_backgrounds = Array(
+        BaseSkin.lane_background,
+        first_available_sprite(BaseSkin.lane_background_neutral, BaseSkin.lane_background),
+        first_available_sprite(BaseSkin.lane_background_red, BaseSkin.lane_background),
+        first_available_sprite(BaseSkin.lane_background_green, BaseSkin.lane_background),
+        first_available_sprite(BaseSkin.lane_background_blue, BaseSkin.lane_background),
+        first_available_sprite(BaseSkin.lane_background_yellow, BaseSkin.lane_background),
+        first_available_sprite(BaseSkin.lane_background_purple, BaseSkin.lane_background),
+        first_available_sprite(BaseSkin.lane_background_cyan, BaseSkin.lane_background),
+        first_available_sprite(BaseSkin.lane_background_black, BaseSkin.lane_background),
+    )
+    ActiveSkin.lane_background_previews = Array(
+        BaseSkin.lane_background_preview,
+        first_available_sprite(BaseSkin.lane_background_preview_neutral, BaseSkin.lane_background_preview),
+        first_available_sprite(BaseSkin.lane_background_preview_red, BaseSkin.lane_background_preview),
+        first_available_sprite(BaseSkin.lane_background_preview_green, BaseSkin.lane_background_preview),
+        first_available_sprite(BaseSkin.lane_background_preview_blue, BaseSkin.lane_background_preview),
+        first_available_sprite(BaseSkin.lane_background_preview_yellow, BaseSkin.lane_background_preview),
+        first_available_sprite(BaseSkin.lane_background_preview_purple, BaseSkin.lane_background_preview),
+        first_available_sprite(BaseSkin.lane_background_preview_cyan, BaseSkin.lane_background_preview),
+        first_available_sprite(BaseSkin.lane_background_preview_black, BaseSkin.lane_background_preview),
+    )
 
     ActiveSkin.judgment_neutral = JudgmentSpriteSet(
         judgment_background=first_available_sprite(
@@ -2326,3 +2371,17 @@ def get_styled_damage_connector_sprites(style: int) -> ActiveConnectorSpriteSet:
     if index < 0 or index > 8 or style != index:
         index = 0
     return StyleSkin.connectors[2][index]
+
+
+def get_lane_background_sprite(style: NoteStyle) -> Sprite:
+    index = int(style)
+    if index < 0 or index > 8 or style != index:
+        index = 0
+    return ActiveSkin.lane_backgrounds[index]
+
+
+def get_lane_background_preview_sprite(style: NoteStyle) -> Sprite:
+    index = int(style)
+    if index < 0 or index > 8 or style != index:
+        index = 0
+    return ActiveSkin.lane_background_previews[index]

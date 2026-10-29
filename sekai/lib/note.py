@@ -59,8 +59,10 @@ from sekai.lib.layout import (
     IDENTITY_STAGE_SCREEN_TRANSFORM,
     FlickDirection,
     Hitbox,
+    NoteStageParams,
     StageScreenTransform,
     approach,
+    current_layout_transform,
     get_alpha,
     get_perspective_y,
     hidden_amount,
@@ -924,7 +926,7 @@ def play_note_hit_effects(
     single_line: bool = False,
     lane_particles: bool = True,
     *,
-    transform: StageScreenTransform,
+    stage: NoteStageParams,
     style: NoteStyle = NoteStyle.DEFAULT,
 ):
     # Damage with overridden sfx can play, so this goes before the damage check
@@ -933,6 +935,7 @@ def play_note_hit_effects(
         sfx.play(SFX_DISTANCE)
     if is_avoided_damage(kind, judgment):
         return
+    transform = stage.screen_transform(current_layout_transform())
     if Options.note_effect_enabled or Options.lane_effect_enabled:
         if is_tutorial():
             handle_note_particles(
@@ -980,7 +983,7 @@ def play_note_hit_effects(
             half_offset=half_offset,
             group_id=slot_effect_group_id,
             single_line=single_line,
-            transform=transform,
+            stage=stage,
             style=style,
         )
 
@@ -1408,7 +1411,7 @@ def schedule_note_slot_effects(
     group_id: float = 0.0,
     single_line: bool = False,
     *,
-    transform: StageScreenTransform,
+    stage: NoteStageParams,
     style: NoteStyle = NoteStyle.DEFAULT,
 ):
     if is_tutorial():
@@ -1433,7 +1436,7 @@ def schedule_note_slot_effects(
                 bounds=Interval(lane - size, lane + size),
                 y_offset=y_offset,
                 group_id=group_id,
-                transform=transform,
+                stage=stage,
             )
     slot_glow_sprite = sprite_set.slot_glow.get_sprite(judgment)
     if slot_glow_sprite.is_available and size > 0:
@@ -1450,7 +1453,7 @@ def schedule_note_slot_effects(
                 bounds=Interval(lane - size, lane + size),
                 y_offset=y_offset,
                 group_id=group_id,
-                transform=transform,
+                stage=stage,
             )
 
 

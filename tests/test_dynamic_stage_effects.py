@@ -19,11 +19,15 @@ from sekai.lib.level_config import EngineRevision
 from sekai.lib.note_style import NoteStyle
 from sekai.lib.stage import VisualMask, masked_note_extents_by_limits
 from sekai.play import connector as play_connector
+from sekai.play import dynamic_stage as play_stage
 from sekai.play import initialization as play_initialization
 from sekai.play import note as play_note
+from sekai.play import slot_effect as play_slot
 from sekai.watch import connector as watch_connector
+from sekai.watch import dynamic_stage as watch_stage
 from sekai.watch import initialization as watch_initialization
 from sekai.watch import note as watch_note
+from sekai.watch import slot_effect as watch_slot
 
 
 class SlideScoreLinkTests(unittest.TestCase):
@@ -136,6 +140,7 @@ class MaskedEffectTests(unittest.TestCase):
             visual_single_line=False,
             visual_lane_particles=True,
             visual_stage_transform=layout.identity_stage_transform,
+            stage_params=lambda: +layout.NoteStageParams,
         )
         fake.visual_extents = play_note.BaseNote.visual_extents.fget(fake)
         with (
@@ -161,6 +166,14 @@ class MaskedEffectTests(unittest.TestCase):
             elevation=3,
             width=1,
             mask_notes=True,
+        )
+        props.transform_params = lambda offset: layout.StageTransformParams(
+            stage_rotate=props.rotate,
+            x_lane_translate=props.x_lane_translate,
+            y_lane_translate=props.y_lane_translate,
+            mask_lane=props.lane,
+            center_weight=props.center_weight,
+            elevation=props.elevation + offset,
         )
         fake = SimpleNamespace(
             stage_ref=SimpleNamespace(index=1, get=lambda: None),
@@ -190,7 +203,15 @@ class MaskedEffectTests(unittest.TestCase):
         ):
             watch_note.WatchBaseNote.schedule_slot_effects_at(fake, 4)
         assert schedule.call_args.args[1:3] == (0, 1)
-        transform = schedule.call_args.kwargs["transform"]
+        stage = schedule.call_args.kwargs["stage"]
+        camera = layout.LayoutTransform(
+            t=0, w_scale=0.1, h_scale=-0.5, x_translate=0, rotate=0, stage_tilt=1, size_zoom=1
+        )
+        with (
+            patch.object(layout, "Layout", SimpleNamespace(field_h=1, approach_start=0)),
+            patch.object(layout, "Options", SimpleNamespace(alternative_approach_curve=False)),
+        ):
+            transform = stage.screen_transform(camera)
         assert isclose(transform.elevation, 2)
         assert isclose(transform.apply(Vec2(0, -0.5)).y, -0.3)
 
@@ -209,7 +230,7 @@ class MaskedEffectTests(unittest.TestCase):
                 1,
                 4,
                 layout.FlickDirection.UP_OMNI,
-                transform=layout.IDENTITY_STAGE_SCREEN_TRANSFORM,
+                stage=+layout.NoteStageParams,
             )
             calls = archetype.return_value.spawn.call_args_list
             assert len(calls) == 2
@@ -221,9 +242,76 @@ class MaskedEffectTests(unittest.TestCase):
                 0,
                 4,
                 layout.FlickDirection.UP_OMNI,
-                transform=layout.IDENTITY_STAGE_SCREEN_TRANSFORM,
+                stage=+layout.NoteStageParams,
             )
             archetype.assert_not_called()
+
+    def test_bundled_slots_follow_camera_changes_in_both_modes(self):
+        for module, cls, draw in (
+            (play_slot, play_slot.SlotEffect, "draw_slot_effects_in_range"),
+            (play_slot, play_slot.SlotGlowEffect, "draw_slot_glow_effects_in_range"),
+            (watch_slot, watch_slot.WatchSlotEffect, "draw_slot_effects_in_range"),
+            (watch_slot, watch_slot.WatchSlotGlowEffect, "draw_slot_glow_effects_in_range"),
+        ):
+            for elevation in (0, 2):
+                with self.subTest(effect=cls.__name__, elevation=elevation):
+                    stage = +layout.NoteStageParams
+                    stage.head.elevation = elevation
+                    fake = SimpleNamespace(
+                        sprite=SimpleNamespace(id=1),
+                        start_time=0,
+                        end_time=1,
+                        left=-1,
+                        right=1,
+                        shift=0,
+                        bounds=None,
+                        y_offset=0,
+                        stage=stage,
+                        projection=+layout.NoteStageProjection,
+                        generation=1,
+                    )
+                    with (
+                        patch.object(module, "time", return_value=0.1, create=True),
+                        patch.object(module, "is_slot_generation_visible", return_value=True),
+                        patch.object(module, draw) as render,
+                        patch.object(layout, "Layout", SimpleNamespace(field_h=1, approach_start=0)),
+                        patch.object(layout, "Options", SimpleNamespace(alternative_approach_curve=False)),
+                    ):
+                        for width in (0.1, 0.2):
+                            camera = layout.LayoutTransform(
+                                t=0,
+                                w_scale=width,
+                                h_scale=-0.5,
+                                x_translate=0,
+                                rotate=0,
+                                stage_tilt=1,
+                                size_zoom=1,
+                            )
+                            with patch.object(layout, "current_layout_transform", return_value=camera):
+                                cls.update_parallel(fake)
+                            transform = render.call_args.kwargs["transform"]
+                            assert isclose(transform.apply(Vec2(0, -0.5)).y, -0.5 + elevation * width)
+                            assert render.call_args.args[3:5] == (-1, 1)
+                        assert render.call_count == 2
+                        if elevation == 0:
+                            assert fake.projection.camera.w_scale == 0
+
+    def test_fever_boundaries_use_full_draw_properties_after_shared_props_split(self):
+        from sekai.lib.stage import StageProps, StageSharedProps
+
+        for module, cls in ((play_stage, play_stage.DynamicStage), (watch_stage, watch_stage.WatchDynamicStage)):
+            with self.subTest(mode=module.__name__):
+                props = +StageProps
+                props.lane = 2
+                props.width = 1
+                props.lane_alpha = 0.8
+                fake = SimpleNamespace(draw_props=props, props=+StageSharedProps)
+                fever = SimpleNamespace(min_l=1e8, max_r=-1e8)
+                with patch.object(module, "Fever", fever):
+                    cls.fever_boundary(fake)
+                assert (fever.min_l, fever.max_r) == (1, 3)
+                assert fever.alpha_l == fever.alpha_r == 0.8
+                assert fever.has_active
 
     def test_watch_hit_effects_use_current_masked_extents(self):
         for mask in (VisualMask(-1, 1, True, 1), VisualMask(10, 12, True, 1)):

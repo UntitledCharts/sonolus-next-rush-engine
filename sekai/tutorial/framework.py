@@ -34,7 +34,13 @@ from sekai.lib.connector import (
     update_linear_connector_particle,
 )
 from sekai.lib.ease import EaseType, ease
-from sekai.lib.layout import IDENTITY_STAGE_SCREEN_TRANSFORM, DynamicLayout, FlickDirection, transformed_vec_at
+from sekai.lib.layout import (
+    IDENTITY_STAGE_SCREEN_TRANSFORM,
+    DynamicLayout,
+    FlickDirection,
+    NoteStageParams,
+    transformed_vec_at,
+)
 from sekai.lib.note import (
     NoteKind,
     draw_note,
@@ -283,7 +289,7 @@ class QueuedTutorialNotePlayHitEffects(Record):
             size=self.note.size,
             direction=self.note.direction,
             judgment=Judgment.PERFECT,
-            transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
+            stage=+NoteStageParams,
         )
 
 
