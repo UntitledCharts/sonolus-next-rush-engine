@@ -59,6 +59,7 @@ from sekai.lib.note import (
     get_leniency,
     get_note_bucket,
     get_note_effect_kind,
+    get_note_sprite_set,
     get_note_window,
     handle_note_particles,
     has_note_particles,
@@ -74,6 +75,7 @@ from sekai.lib.note import (
 )
 from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
+from sekai.lib.skin import NoteSpriteSet
 from sekai.lib.stage import (
     DivisionParity,
     InputGeometry,
@@ -140,11 +142,10 @@ class WatchBaseNote(WatchArchetype):
     rel_lane: float = entity_data()
     target_time: float = entity_data()
     visual_start_time: float = entity_data()
-    visual_end_time: float = shared_memory()
+    visual_end_time: float = entity_data()
     spawn_eligibility_time: float = entity_data()
-    scheduled_spawn_time: float = shared_memory()
-    # Replay imports overwrite entity data, so keep coordinates in shared memory.
-    target_position: TargetPosition = shared_memory()
+    scheduled_spawn_time: float = entity_data()
+    target_position: TargetPosition = entity_data()
     not_render: float = entity_memory()
 
     trajectory_first: TrajectoryCache = entity_memory()
@@ -153,9 +154,10 @@ class WatchBaseNote(WatchArchetype):
     active_connector_info: ActiveConnectorInfo = shared_memory()
 
     hitbox: Hitbox = entity_memory()
-    attach_eased_frac: float = shared_memory()
+    attach_eased_frac: float = entity_data()
     # Keep score order separate from slide geometry and safe from replay imports.
     score_next_ref: EntityRef[WatchBaseNote] = shared_memory()
+    sprite_set: NoteSpriteSet = entity_memory()
 
     end_time: float = imported()
     played_hit_effects: bool = imported()
@@ -299,6 +301,7 @@ class WatchBaseNote(WatchArchetype):
             self.extend_stage_windows(start_time - 1.0, end_time + 1.0)
         if self.kind != NoteKind.ANCHOR:
             register_note_group_window(self, start_time, self.despawn_time())
+            self.sprite_set = get_note_sprite_set(self.kind, self.direction, self.style)
         # A hidden note can still be an endpoint of a visible connector.
         self.spawn_eligibility_time = min(natural_start_time, start_time)
         self.scheduled_spawn_time = start_time
@@ -430,7 +433,7 @@ class WatchBaseNote(WatchArchetype):
                 self.target_time,
                 transform=self.visual_stage_transform().to_screen_transform(),
                 note_alpha=note_alpha,
-                style=self.style,
+                sprite_set=self.sprite_set,
             )
         else:
             draw_note(
@@ -442,7 +445,7 @@ class WatchBaseNote(WatchArchetype):
                 self.target_time,
                 transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
                 note_alpha=note_alpha,
-                style=self.style,
+                sprite_set=self.sprite_set,
             )
 
     def draw_hitbox(self):

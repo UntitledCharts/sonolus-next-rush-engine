@@ -35,7 +35,7 @@ project = Project(
     engine=engine,
     levels=load_levels,
     # Engine-only CI builds do not use the development server's resources.
-    resources="resources" if os.environ.get("NEXT_RUSH_SKIP_SERVER_RESOURCES") == "1" else load_resources(),
+    resources="resources" if os.environ.get("NEXT_RUSH_SKIP_SERVER_RESOURCES") == "1" else load_resources,
     converters={
         "chcy-extended": convert_extended_level_data,
     },

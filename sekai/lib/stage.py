@@ -319,6 +319,8 @@ class StageProps(Record):
         )
 
     def draw(self, order: int):
+        if self.lane_alpha <= 0 and self.judge_line_alpha <= 0:
+            return
         ui_alpha = 1.0
         if Options.ui_intro and time() < -1.0:
             ui_alpha = unlerp_clamped(-2.0, -1.0, time())
@@ -554,6 +556,41 @@ def _stage_transform_change_archetype() -> type[StageTransformChangeLike]:
     return cast(type[StageTransformChangeLike], get_archetype_by_name(archetype_names.STAGE_TRANSFORM_CHANGE))
 
 
+class StageSamplingPlan(Record):
+    """Property tracks that need resampling after the initial sample."""
+
+    mask_dynamic: bool
+    pivot_dynamic: bool
+    style_dynamic: bool
+    transform_dynamic: bool
+    is_static: bool
+
+    @staticmethod
+    def prepare(stage: DynamicStageLike) -> StageSamplingPlan:
+        """Identify tracks with more than one event."""
+        result = +StageSamplingPlan
+        result.mask_dynamic = (
+            stage.first_mask_change_ref.index > 0
+            and get_event_as(stage.first_mask_change_ref, _stage_mask_change_archetype()).next_ref.index > 0
+        )
+        result.pivot_dynamic = (
+            stage.first_pivot_change_ref.index > 0
+            and get_event_as(stage.first_pivot_change_ref, _stage_pivot_change_archetype()).next_ref.index > 0
+        )
+        result.style_dynamic = (
+            stage.first_style_change_ref.index > 0
+            and get_event_as(stage.first_style_change_ref, _stage_style_change_archetype()).next_ref.index > 0
+        )
+        result.transform_dynamic = (
+            stage.first_transform_change_ref.index > 0
+            and get_event_as(stage.first_transform_change_ref, _stage_transform_change_archetype()).next_ref.index > 0
+        )
+        result.is_static = not (
+            result.mask_dynamic or result.pivot_dynamic or result.style_dynamic or result.transform_dynamic
+        )
+        return result
+
+
 def stage_y_offset_bounds(stage: DynamicStageLike) -> Interval:
     """Return stage y offset bounds, including easing overshoot.
 
@@ -753,6 +790,21 @@ def get_stage_props(
     return result
 
 
+def update_prepared_stage_props(result: StageProps, stage: DynamicStageLike, plan: StageSamplingPlan, t: float):
+    """Resample animated tracks in an initialized stage-owned record.
+
+    Absent and singleton tracks retain their initial intrinsic values.
+    """
+    if plan.mask_dynamic:
+        update_stage_mask_props(result, stage.first_mask_change_ref, t, right_limit=True)
+    if plan.pivot_dynamic:
+        update_stage_pivot_props(result, stage.first_pivot_change_ref, t, right_limit=True)
+    if plan.style_dynamic:
+        update_stage_style_props(result, stage.first_style_change_ref, t, right_limit=True)
+    if plan.transform_dynamic:
+        update_stage_transform_props(result, stage.first_transform_change_ref, t, right_limit=True)
+
+
 def update_stage_mask_props(
     result: StageProps, first_mask_change_ref: EntityRef, t: float, right_limit: bool = False, exact: bool = False
 ):
@@ -779,6 +831,11 @@ def update_stage_mask_props(
 def update_stage_style_props(
     result: StageProps, first_style_change_ref: EntityRef, t: float, right_limit: bool = False, exact: bool = False
 ):
+    result.lane_color.progress = 0.0
+    result.judge_line_color.progress = 0.0
+    result.judge_line_style.progress = 0.0
+    result.left_border_style.progress = 0.0
+    result.right_border_style.progress = 0.0
     style_a_ref, style_b_ref = query_event_list(first_style_change_ref, t, lambda e: e.time, strict=not right_limit)
     if style_a_ref.index > 0:
         style_a = get_event_as(style_a_ref, _stage_style_change_archetype())
@@ -885,6 +942,7 @@ def get_stage_input_props(stage: DynamicStageLike, t: float) -> StageProps:
 def update_stage_pivot_props(
     result: StageProps, first_pivot_change_ref: EntityRef, t: float, right_limit: bool = False, exact: bool = False
 ):
+    result.division.progress = 0.0
     pivot_a_ref, pivot_b_ref = query_event_list(first_pivot_change_ref, t, lambda e: e.time, strict=not right_limit)
     if pivot_a_ref.index > 0:
         pivot_a = get_event_as(pivot_a_ref, _stage_pivot_change_archetype())

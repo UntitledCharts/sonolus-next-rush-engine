@@ -427,9 +427,12 @@ def draw_note(
     transform: StageScreenTransform,
     note_alpha: float,
     style: NoteStyle = NoteStyle.DEFAULT,
+    *,
+    sprite_set: NoteSpriteSet | None = None,
 ):
     travel = approach(visual_progress)
-    sprite_set = get_note_sprite_set(kind, direction, style)
+    if sprite_set is None:
+        sprite_set = get_note_sprite_set(kind, direction, style)
     draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha)
     draw_note_arrow(sprite_set.arrow, kind, lane, size, travel, target_time, direction, transform, note_alpha)
     draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, note_alpha)
@@ -683,7 +686,7 @@ def draw_note_tick(
     note_alpha: float,
     etc: int = 0,
 ):
-    if not sprite.is_available:
+    if sprite.id < 0:
         return
     a = min(get_alpha(target_time) * note_alpha, 1.0)
     z = get_z(layers.note_tick, time=target_time, lane=lane, etc=etc, elevation=transform.elevation)

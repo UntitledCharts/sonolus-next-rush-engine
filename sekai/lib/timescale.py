@@ -738,7 +738,7 @@ def prepare_group(group: int | EntityRef, now: float) -> None:
     ref = _locate(entity, now, entity.current_event)
     entity.current_event, entity.current_run = ref, _run(ref)
     entity.last_updated, entity.time_valid = now, True
-    entity.coordinate, entity.current_speed = _coordinate(ref, now), event_speed(ref, now)
+    entity.current_speed = event_speed(ref, now)
     entity.event_start, entity.event_end = -inf, inf
     entity.v0, entity.v1, entity.ease, entity.style = 1, 1, EaseType.NONE, TransitionStyle.TIMESCALE
     entity.hide_notes = False
@@ -754,8 +754,12 @@ def prepare_group(group: int | EntityRef, now: float) -> None:
         future = _marker(entity.current_run).run_end
     elif future > 0:
         entity.event_end = _marker(future).event_start
-    if entity.style == TransitionStyle.SCROLL:
+    scroll = entity.style == TransitionStyle.SCROLL
+    if scroll:
         entity.current_speed = _scroll_speed(entity.current_speed)
+    else:
+        # Only TIMESCALE paths read this coordinate; SCROLL paths use widths.
+        entity.coordinate = _coordinate(ref, now)
     entity.current_constant = is_in_step_ease(entity.ease) or entity.v0 == entity.v1
     # Compute note distance from a cached distance at either run boundary:
     # D(now, hit) = offset + gain * D(boundary, hit).
@@ -765,10 +769,11 @@ def prepare_group(group: int | EntityRef, now: float) -> None:
         anchor = future if side == 0 else entity.current_run
         if anchor > 0:
             endpoint = _marker(anchor)
-            gain, offset = 1.0, endpoint.position.difference(entity.coordinate)
-            if entity.style == TransitionStyle.SCROLL:
+            if scroll:
                 gain = entity.current_speed / _scroll_speed(endpoint.timescale)
                 offset = entity.current_speed * _scroll_width(ref, now, anchor, endpoint.event_start)
+            else:
+                gain, offset = 1.0, endpoint.position.difference(entity.coordinate)
             if side == 0:
                 entity.future_gain, entity.future_offset = gain, offset
             else:

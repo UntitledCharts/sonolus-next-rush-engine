@@ -45,6 +45,7 @@ class TimescaleChange(PlayArchetype):
     jump: RunSummary = entity_data()
     note_visibility_start: float = entity_data()
     previous_note_visibility_end: float = entity_data()
+    # This preprocessing workspace avoids enlarging entity data for every entity.
     leaf_min: TimePosition = shared_memory()
     leaf_max: TimePosition = shared_memory()
     leaf_magnitude: float = shared_memory()

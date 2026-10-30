@@ -19,6 +19,7 @@ from sekai.lib.connector import (
     ActiveConnectorInfo,
     ActiveConnectorKind,
     ConnectorKind,
+    ConnectorRenderInfo,
     ConnectorVisualState,
     DamageConnectorKind,
     SlideConnectorKind,
@@ -30,6 +31,7 @@ from sekai.lib.connector import (
     get_connector_base_kind,
     get_connector_fractions,
     get_connector_interp_frac,
+    get_connector_render_info,
     should_show_connector_hitbox,
     spawn_connector_slot_particles,
     spawn_linear_connector_trail_particle,
@@ -90,6 +92,9 @@ class WatchConnector(WatchArchetype):
     # entity_data (not entity_memory) so they can be written cross-entity from preprocess.
     sfx_act_next: EntityRef[WatchConnector] = entity_data()
     sfx_deact_next: EntityRef[WatchConnector] = entity_data()
+    ease_over_elevation: bool = entity_data()
+    time_attachment_slice: bool = entity_data()
+    render_info: ConnectorRenderInfo = entity_data()
 
     head_trajectory_first: TrajectoryCache = entity_memory()
     head_trajectory_second: TrajectoryCache = entity_memory()
@@ -114,6 +119,8 @@ class WatchConnector(WatchArchetype):
             return
         if self.active_tail_ref.index > 0 and not self.active_tail.preprocess_done:
             return
+        self.ease_over_elevation = head.beat == tail.beat
+        self.time_attachment_slice = self.ease_over_elevation and (head.has_time_attachment or tail.has_time_attachment)
         self.shared_stage_transform = (
             not head.is_attached
             and not tail.is_attached
@@ -121,6 +128,7 @@ class WatchConnector(WatchArchetype):
             and head.elevation == tail.elevation
         )
         self.kind = self.segment_head.segment_kind
+        self.render_info = get_connector_render_info(self.kind, self.segment_head.segment_layer)
         self.ease_type = head.connector_ease
         self.visual_active_interval.start = min(head.target_time, tail.target_time)
         self.visual_active_interval.end = max(head.target_time, tail.target_time)
@@ -204,7 +212,7 @@ class WatchConnector(WatchArchetype):
             if self.active_head_ref.index > 0:
                 if is_replay():
                     visual_state = Streams.connector_visual_states[self.index].get_previous_inclusive(current_time)
-                elif get_connector_base_kind(self.kind) == ConnectorKind.DAMAGE:
+                elif self.render_info.base_kind == ConnectorKind.DAMAGE:
                     # Autoplay never touches damage connectors.
                     visual_state = ConnectorVisualState.WAITING
                 elif current_time < self.active_head.target_time:
@@ -222,7 +230,7 @@ class WatchConnector(WatchArchetype):
                 if time() >= active_tail_end:
                     return
             self.draw_fake_damage_head()
-            if get_connector_alpha_option(self.kind) <= 0:
+            if get_connector_alpha_option(self.kind, base_kind=self.render_info.base_kind) <= 0:
                 return
             head_note_alpha = head.visual_note_alpha
             tail_note_alpha = tail.visual_note_alpha
@@ -284,7 +292,7 @@ class WatchConnector(WatchArchetype):
                 head_ease_frac = head.head_ease_frac
 
             tail_ease_frac = tail.tail_ease_frac
-            if head.beat == tail.beat and (head.has_time_attachment or tail.has_time_attachment):
+            if self.time_attachment_slice:
                 # Same-beat slices of time attachments use their own elevation span.
                 head_ease_frac = 0.0
                 tail_ease_frac = 1.0
@@ -299,6 +307,7 @@ class WatchConnector(WatchArchetype):
 
             draw_connector(
                 kind=self.kind,
+                render_info=self.render_info,
                 visual_state=visual_state,
                 ease_type=self.ease_type,
                 head_lane=head_lane,
@@ -328,7 +337,7 @@ class WatchConnector(WatchArchetype):
                 tail_note_alpha=tail_note_alpha,
                 head_mask=head_mask,
                 tail_mask=tail_mask,
-                ease_over_elevation=head.beat == tail.beat,
+                ease_over_elevation=self.ease_over_elevation,
                 elevation_transform=elevation_transform,
                 head_alpha_frac=head_alpha_frac,
                 tail_alpha_frac=tail_alpha_frac,
@@ -336,7 +345,7 @@ class WatchConnector(WatchArchetype):
 
     def draw_fake_damage_head(self):
         if (
-            get_connector_base_kind(self.kind) != ConnectorKind.FAKE_DAMAGE
+            self.render_info.base_kind != ConnectorKind.FAKE_DAMAGE
             or self.active_head_ref.index > 0
             or Options.disable_fake_notes
             or not self.visual_active_interval.start <= time() < self.visual_active_interval.end
@@ -371,7 +380,9 @@ class WatchConnector(WatchArchetype):
     def draw_hitbox(self):
         if not Options.show_hitboxes:
             return
-        if self.active_head_ref.index <= 0 or not should_show_connector_hitbox(self.kind):
+        if self.active_head_ref.index <= 0 or not should_show_connector_hitbox(
+            self.kind, base_kind=self.render_info.base_kind
+        ):
             return
         if time() in self.visual_active_interval:
             bounds = note.compute_slide_input_bounds(

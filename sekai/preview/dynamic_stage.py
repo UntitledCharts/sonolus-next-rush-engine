@@ -9,7 +9,6 @@ from sonolus.script.archetype import (
     callback,
     entity_data,
     imported,
-    shared_memory,
 )
 from sonolus.script.interval import clamp
 from sonolus.script.timing import beat_to_bpm, beat_to_time
@@ -186,7 +185,7 @@ class PreviewStageStyleChange(PreviewArchetype, BaseEvent):
     ease: EaseType = imported()
     next_ref: EntityRef[PreviewStageStyleChange] = imported(name="next")
 
-    time: float = shared_memory()
+    time: float = entity_data()
 
     @callback(order=-3)
     def preprocess(self):

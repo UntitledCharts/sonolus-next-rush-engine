@@ -66,6 +66,7 @@ from sekai.lib.note import (
     get_note_bucket,
     get_note_effect_kind,
     get_note_haptic_feedback,
+    get_note_sprite_set,
     get_note_window,
     has_release_input,
     has_tap_input,
@@ -79,6 +80,7 @@ from sekai.lib.note import (
 )
 from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
+from sekai.lib.skin import NoteSpriteSet
 from sekai.lib.stage import (
     DivisionParity,
     InputGeometry,
@@ -148,14 +150,16 @@ class BaseNote(PlayArchetype):
     visual_start_time: float = entity_memory()
     visual_end_time: float = entity_memory()
     spawn_eligibility_time: float = entity_data()
-    scheduled_spawn_time: float = shared_memory()
+    scheduled_spawn_time: float = entity_data()
     target_position: TargetPosition = entity_data()
 
     trajectory_first: TrajectoryCache = entity_memory()
     trajectory_second: TrajectoryCache = entity_memory()
 
     perfect_window_end: float = entity_memory()
-    damage_tick_input_start_time: float = entity_data()
+    input_interval: Interval = entity_data()
+    unadjusted_input_interval: Interval = entity_data()
+    attach_eased_frac: float = entity_data()
 
     # The id of the tap consumed by this note, or the touch that released a release note.
     # Trace flicks participate in tap allocation without requiring that tap for their flick motion.
@@ -177,6 +181,7 @@ class BaseNote(PlayArchetype):
     touch_survived_to_target: bool = entity_memory()
 
     should_play_hit_effects: bool = entity_memory()
+    sprite_set: NoteSpriteSet = entity_memory()
 
     hitbox: Hitbox = shared_memory()
 
@@ -196,29 +201,19 @@ class BaseNote(PlayArchetype):
         return self.data_init_done == 3
 
     @property
-    def attach_eased_frac(self) -> float:
-        # Imported fields and entity data share 32 slots; derive this immutable value
-        # so per-note elevation fits alongside RUSH's score and input state.
-        if not self.is_attached:
-            return 0.0
-        return ease(self.connector_ease, self.head_ease_frac)
-
-    @property
     def judgment_window(self) -> SekaiWindow:
         return get_note_window(self.kind, self.active_head_ref.index > 0 or self.is_attached)
 
-    @property
-    def unadjusted_input_interval(self) -> Interval:
-        result = +Interval
+    def prepare_input_intervals(self):
+        window = self.judgment_window
+        self.perfect_window_end = window.perfect.end
+        self.unadjusted_input_interval = window.bad + self.target_time
         if self.kind == NoteKind.HIDE_DAMAGE_TICK:
-            result @= Interval(self.damage_tick_input_start_time, self.target_time)
-        else:
-            result @= self.judgment_window.bad + self.target_time
-        return result
-
-    @property
-    def input_interval(self) -> Interval:
-        return self.unadjusted_input_interval + input_offset()
+            window_start_beat = damage_tick_input_start_beat(self.beat)
+            if self.active_head_ref.index > 0:
+                window_start_beat = max(window_start_beat, self.active_head_ref.get().beat)
+            self.unadjusted_input_interval = Interval(beat_to_time(window_start_beat), self.target_time)
+        self.input_interval = self.unadjusted_input_interval + input_offset()
 
     def init_data(self):
         if self.data_init_done:
@@ -260,12 +255,7 @@ class BaseNote(PlayArchetype):
             return
         self.visual_end_time = self.target_time
 
-        self.perfect_window_end = self.judgment_window.perfect.end
-        if self.kind == NoteKind.HIDE_DAMAGE_TICK:
-            window_start_beat = damage_tick_input_start_beat(self.beat)
-            if self.active_head_ref.index > 0:
-                window_start_beat = max(window_start_beat, self.active_head_ref.get().beat)
-            self.damage_tick_input_start_time = beat_to_time(window_start_beat)
+        self.prepare_input_intervals()
 
         self.init_geometry()
         self.result.bucket = get_note_bucket(self.kind)
@@ -280,6 +270,7 @@ class BaseNote(PlayArchetype):
             attach_head.init_geometry()
             attach_tail.init_geometry()
             self.connector_ease = attach_head.connector_ease
+            self.attach_eased_frac = ease(self.connector_ease, self.head_ease_frac)
             lane, size = get_attach_params(
                 ease_type=attach_head.connector_ease,
                 head_lane=attach_head._basic_visual_lane_at(self.target_time),
@@ -325,6 +316,7 @@ class BaseNote(PlayArchetype):
             self.extend_stage_windows(start_time - 1.0, end_time + 1.0)
         if self.kind != NoteKind.ANCHOR:
             register_note_group_window(self, start_time, end_time)
+            self.sprite_set = get_note_sprite_set(self.kind, self.direction, self.style)
         # A hidden note can still be an endpoint of a visible connector.
         self.spawn_eligibility_time = min(natural_start_time, start_time)
         self.scheduled_spawn_time = start_time
@@ -514,7 +506,7 @@ class BaseNote(PlayArchetype):
                 self.target_time,
                 transform=self.visual_stage_transform().to_screen_transform(),
                 note_alpha=note_alpha,
-                style=self.style,
+                sprite_set=self.sprite_set,
             )
         else:
             draw_note(
@@ -526,7 +518,7 @@ class BaseNote(PlayArchetype):
                 self.target_time,
                 transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
                 note_alpha=note_alpha,
-                style=self.style,
+                sprite_set=self.sprite_set,
             )
 
     def draw_hitbox(self):

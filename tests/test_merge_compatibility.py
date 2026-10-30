@@ -5,6 +5,7 @@ from math import isclose
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from sonolus.script.interval import Interval
 from sonolus.script.quad import Rect
 from sonolus.script.vec import Vec2
 
@@ -50,18 +51,37 @@ class ElevationCompatibilityTests(unittest.TestCase):
         assert len(notes) == 1
         assert notes[0].elevation == 1.5
 
-    def test_attached_note_keeps_eased_fraction_without_cached_data(self):
+    def test_cached_input_windows_keep_rush_judgment_and_offset(self):
         fake = SimpleNamespace(
-            is_attached=True,
-            connector_ease=EaseType.IN_QUAD,
-            attach_head_ref=SimpleNamespace(get=lambda: SimpleNamespace(target_time=0)),
-            attach_tail_ref=SimpleNamespace(get=lambda: SimpleNamespace(target_time=4)),
+            kind=NoteKind.NORM_TAP,
             target_time=2,
-            head_ease_frac=0.5,
+            judgment_window=SimpleNamespace(bad=Interval(-0.12, 0.12), perfect=Interval(-0.04, 0.04)),
         )
-        assert play_note.BaseNote.attach_eased_frac.fget(fake) == 0.25
-        fake.is_attached = False
-        assert play_note.BaseNote.attach_eased_frac.fget(fake) == 0
+        with patch.object(play_note, "input_offset", return_value=0.025):
+            play_note.BaseNote.prepare_input_intervals(fake)
+        assert isclose(fake.unadjusted_input_interval.start, 1.88)
+        assert isclose(fake.input_interval.start, 1.905)
+        assert isclose(fake.input_interval.end, 2.145)
+        assert isclose(fake.perfect_window_end, 0.04)
+
+    def test_cached_damage_tick_window_respects_active_head(self):
+        fake = SimpleNamespace(
+            kind=NoteKind.HIDE_DAMAGE_TICK,
+            beat=4,
+            target_time=2,
+            judgment_window=SimpleNamespace(bad=Interval(-0.12, 0.12), perfect=Interval(-0.04, 0.04)),
+            active_head_ref=SimpleNamespace(index=1, get=lambda: SimpleNamespace(beat=3.5)),
+        )
+        with (
+            patch.object(play_note, "damage_tick_input_start_beat", return_value=3),
+            patch.object(play_note, "beat_to_time", side_effect=lambda beat: beat / 2),
+            patch.object(play_note, "input_offset", return_value=-0.025),
+        ):
+            play_note.BaseNote.prepare_input_intervals(fake)
+        assert isclose(fake.unadjusted_input_interval.start, 1.75)
+        assert isclose(fake.unadjusted_input_interval.end, 2)
+        assert isclose(fake.input_interval.start, 1.725)
+        assert isclose(fake.input_interval.end, 1.975)
 
     def test_same_beat_attachment_uses_elevation_fraction_in_both_modes(self):
         for cls in (play_note.BaseNote, watch_note.WatchBaseNote):
@@ -77,8 +97,6 @@ class ElevationCompatibilityTests(unittest.TestCase):
                 fake.head_ease_frac = cls.head_ease_frac.fget(fake)
                 assert fake.head_ease_frac == 0.5
                 assert cls.tail_ease_frac.fget(fake) == 0.5
-                if cls is play_note.BaseNote:
-                    assert cls.attach_eased_frac.fget(fake) == 0.25
 
     def test_revision_two_elevation_is_independent_of_stage_tilt(self):
         for tilt in (0.0, 0.5, 1.0):

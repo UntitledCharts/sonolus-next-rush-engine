@@ -6,6 +6,7 @@ from typing import Protocol, Self, assert_never, cast
 
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
 from sonolus.script.array import Array, Dim
+from sonolus.script.debug import is_static_false, is_static_true
 from sonolus.script.globals import level_data, level_memory
 from sonolus.script.interval import Interval, clamp, lerp, remap, unlerp
 from sonolus.script.quad import Quad, QuadLike, Rect
@@ -219,6 +220,15 @@ class StageScreenTransform(Record):
 
     def transform_billboard(self, q: QuadLike, anchor: Vec2) -> Quad:
         """Transform a decoration's anchor and rotate the decoration without changing its size."""
+        if (
+            is_static_true(self.a00 == 1)
+            and is_static_false(self.a01)
+            and is_static_false(self.a02)
+            and is_static_false(self.a10)
+            and is_static_true(self.a11 == 1)
+            and is_static_false(self.a12)
+        ):
+            return Quad(bl=+q.bl, br=+q.br, tl=+q.tl, tr=+q.tr)
         rotation = Vec2(self.a00 + self.a11, self.a10 - self.a01).normalize_or_zero()
         if rotation.magnitude == 0:
             rotation @= Vec2(1, 0)

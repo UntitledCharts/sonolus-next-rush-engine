@@ -29,7 +29,7 @@ from sekai.lib.ease import (
     safe_unlerp_clamped,
 )
 from sekai.lib.effect import Effects
-from sekai.lib.layer import ZIndexes, get_z, layers
+from sekai.lib.layer import Layer, ZIndexes, get_z, layers
 from sekai.lib.layout import (
     IDENTITY_STAGE_SCREEN_TRANSFORM,
     ApproachCache,
@@ -438,21 +438,27 @@ def get_connector_style(kind: ConnectorKind) -> NoteStyle:
     return NoteStyle.DEFAULT
 
 
-def is_fake_active_connector(kind: ConnectorKind) -> bool:
-    return get_connector_base_kind(kind) in {ConnectorKind.FAKE_ACTIVE_NORMAL, ConnectorKind.FAKE_ACTIVE_CRITICAL}
+def is_fake_active_connector(kind: ConnectorKind, *, base_kind: BaseConnectorKind | None = None) -> bool:
+    if base_kind is None:
+        base_kind = get_connector_base_kind(kind)
+    return base_kind in {ConnectorKind.FAKE_ACTIVE_NORMAL, ConnectorKind.FAKE_ACTIVE_CRITICAL}
 
 
 def is_fake_connector(kind: ConnectorKind) -> bool:
     return is_fake_active_connector(kind) or get_connector_base_kind(kind) == ConnectorKind.FAKE_DAMAGE
 
 
-def should_show_connector_hitbox(kind: ConnectorKind) -> bool:
+def should_show_connector_hitbox(kind: ConnectorKind, *, base_kind: BaseConnectorKind | None = None) -> bool:
     # Damage connectors handle input, but their ticks already show the input bounds.
-    return get_connector_base_kind(kind) in {ConnectorKind.ACTIVE_NORMAL, ConnectorKind.ACTIVE_CRITICAL}
+    if base_kind is None:
+        base_kind = get_connector_base_kind(kind)
+    return base_kind in {ConnectorKind.ACTIVE_NORMAL, ConnectorKind.ACTIVE_CRITICAL}
 
 
-def get_connector_input_leniency(kind: ConnectorKind) -> float:
-    if get_connector_base_kind(kind) == ConnectorKind.DAMAGE:
+def get_connector_input_leniency(kind: ConnectorKind, *, base_kind: BaseConnectorKind | None = None) -> float:
+    if base_kind is None:
+        base_kind = get_connector_base_kind(kind)
+    if base_kind == ConnectorKind.DAMAGE:
         return 0.0
     return CONNECTOR_LENIENCY
 
@@ -514,57 +520,48 @@ def get_damage_connector_active_sprite(kind: ConnectorKind = ConnectorKind.DAMAG
     return result
 
 
-def get_connector_z(
-    kind: ConnectorKind, target_time: float, lane: float, active: bool, layer: ConnectorLayer, *, elevation: float = 0.0
-) -> ZIndexes:
-    result = +ZIndexes
-    base_kind = get_connector_base_kind(kind)
+def get_connector_depth_layer(base_kind: BaseConnectorKind, layer: ConnectorLayer) -> Layer:
+    result = +Layer
+    active = base_kind in {
+        ConnectorKind.ACTIVE_NORMAL,
+        ConnectorKind.ACTIVE_CRITICAL,
+        ConnectorKind.FAKE_ACTIVE_NORMAL,
+        ConnectorKind.FAKE_ACTIVE_CRITICAL,
+    }
+    match layer:
+        case ConnectorLayer.TOP:
+            if active:
+                result @= layers.active_slide_connector_top
+            else:
+                result @= layers.guide_connector_top
+        case ConnectorLayer.BOTTOM:
+            if active:
+                result @= layers.active_slide_connector_bottom
+            else:
+                result @= layers.guide_connector_bottom
+        case ConnectorLayer.UNDER:
+            if active:
+                result @= layers.active_slide_connector_under
+            else:
+                result @= layers.guide_connector_under
+        case ConnectorLayer.OVER:
+            if active:
+                result @= layers.active_slide_connector_over
+            else:
+                result @= layers.guide_connector_over
+        case _:
+            assert_never(layer)
+    return result
+
+
+def get_connector_depth_order(base_kind: BaseConnectorKind, active: bool = False) -> int:
     match base_kind:
-        case (
-            ConnectorKind.ACTIVE_NORMAL
-            | ConnectorKind.FAKE_ACTIVE_NORMAL
-            | ConnectorKind.ACTIVE_CRITICAL
-            | ConnectorKind.FAKE_ACTIVE_CRITICAL
-        ):
-            match layer:
-                case ConnectorLayer.TOP:
-                    result @= get_z(
-                        layers.active_slide_connector_top,
-                        time=target_time,
-                        lane=lane,
-                        etc=get_active_connector_z_offset(cast(SlideConnectorKind, kind), active),
-                        elevation=elevation,
-                        invert_time=True,
-                    )
-                case ConnectorLayer.BOTTOM:
-                    result @= get_z(
-                        layers.active_slide_connector_bottom,
-                        time=target_time,
-                        lane=lane,
-                        etc=get_active_connector_z_offset(cast(SlideConnectorKind, kind), active),
-                        elevation=elevation,
-                        invert_time=True,
-                    )
-                case ConnectorLayer.UNDER:
-                    result @= get_z(
-                        layers.active_slide_connector_under,
-                        time=target_time,
-                        lane=lane,
-                        etc=get_active_connector_z_offset(cast(SlideConnectorKind, kind), active),
-                        elevation=elevation,
-                        invert_time=True,
-                    )
-                case ConnectorLayer.OVER:
-                    result @= get_z(
-                        layers.active_slide_connector_over,
-                        time=target_time,
-                        lane=lane,
-                        etc=get_active_connector_z_offset(cast(SlideConnectorKind, kind), active),
-                        elevation=elevation,
-                        invert_time=True,
-                    )
-                case _:
-                    assert_never(layer)
+        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
+            return 3 - active
+        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
+            return 1 - active
+        case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
+            return 9 - active
         case (
             ConnectorKind.GUIDE_NEUTRAL
             | ConnectorKind.GUIDE_RED
@@ -575,85 +572,62 @@ def get_connector_z(
             | ConnectorKind.GUIDE_CYAN
             | ConnectorKind.GUIDE_BLACK
         ):
-            result @= get_guide_connector_layer_z(
-                layer, target_time, lane, kind - ConnectorKind.GUIDE_NEUTRAL, elevation=elevation
-            )
-        case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
-            result @= get_guide_connector_layer_z(
-                layer,
-                target_time,
-                lane,
-                get_active_connector_z_offset(cast(SlideConnectorKind, kind), active),
-                elevation=elevation,
-            )
+            return base_kind - ConnectorKind.GUIDE_NEUTRAL
         case ConnectorKind.NONE:
-            pass
+            return 0
         case _:
             assert_never(base_kind)
+
+
+def get_connector_z(
+    kind: ConnectorKind, target_time: float, lane: float, active: bool, layer: ConnectorLayer, *, elevation: float = 0.0
+) -> ZIndexes:
+    result = +ZIndexes
+    base_kind = get_connector_base_kind(kind)
+    if base_kind != ConnectorKind.NONE:
+        result @= get_z(
+            get_connector_depth_layer(base_kind, layer),
+            time=target_time,
+            lane=lane,
+            etc=get_connector_depth_order(base_kind, active),
+            elevation=elevation,
+            invert_time=True,
+        )
     return result
 
 
 def get_guide_connector_layer_z(
     layer: ConnectorLayer, target_time: float, lane: float, etc: int, *, elevation: float = 0.0
 ) -> ZIndexes:
-    result = +ZIndexes
-    match layer:
-        case ConnectorLayer.TOP:
-            result @= get_z(
-                layers.guide_connector_top,
-                time=target_time,
-                lane=lane,
-                etc=etc,
-                elevation=elevation,
-                invert_time=True,
-            )
-        case ConnectorLayer.BOTTOM:
-            result @= get_z(
-                layers.guide_connector_bottom,
-                time=target_time,
-                lane=lane,
-                etc=etc,
-                elevation=elevation,
-                invert_time=True,
-            )
-        case ConnectorLayer.UNDER:
-            result @= get_z(
-                layers.guide_connector_under,
-                time=target_time,
-                lane=lane,
-                etc=etc,
-                elevation=elevation,
-                invert_time=True,
-            )
-        case ConnectorLayer.OVER:
-            result @= get_z(
-                layers.guide_connector_over,
-                time=target_time,
-                lane=lane,
-                etc=etc,
-                elevation=elevation,
-                invert_time=True,
-            )
-        case _:
-            assert_never(layer)
-    return result
+    return get_z(
+        get_connector_depth_layer(ConnectorKind.GUIDE_NEUTRAL, layer),
+        time=target_time,
+        lane=lane,
+        etc=etc,
+        elevation=elevation,
+        invert_time=True,
+    )
 
 
 def get_active_connector_z_offset(kind: ActiveConnectorKind | DamageConnectorKind, active: bool) -> int:
     base_kind = get_connector_base_kind(kind)
     match base_kind:
-        case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.FAKE_ACTIVE_NORMAL:
-            return 3 - active
-        case ConnectorKind.ACTIVE_CRITICAL | ConnectorKind.FAKE_ACTIVE_CRITICAL:
-            return 1 - active
-        case ConnectorKind.DAMAGE | ConnectorKind.FAKE_DAMAGE:
-            return 9 - active
+        case (
+            ConnectorKind.ACTIVE_NORMAL
+            | ConnectorKind.FAKE_ACTIVE_NORMAL
+            | ConnectorKind.ACTIVE_CRITICAL
+            | ConnectorKind.FAKE_ACTIVE_CRITICAL
+            | ConnectorKind.DAMAGE
+            | ConnectorKind.FAKE_DAMAGE
+        ):
+            return get_connector_depth_order(base_kind, active)
         case _:
             assert_never(base_kind)
 
 
-def get_connector_alpha_option(kind: ConnectorKind) -> float:
-    base_kind = get_connector_base_kind(kind)
+def get_connector_alpha_option(kind: ConnectorKind, *, base_kind: BaseConnectorKind | None = None) -> float:
+    if base_kind is None:
+        base_kind = get_connector_base_kind(kind)
     match base_kind:
         case (
             ConnectorKind.ACTIVE_NORMAL
@@ -681,8 +655,9 @@ def get_connector_alpha_option(kind: ConnectorKind) -> float:
             assert_never(base_kind)
 
 
-def get_connector_quality_option(kind: ConnectorKind) -> float:
-    base_kind = get_connector_base_kind(kind)
+def get_connector_quality_option(kind: ConnectorKind, *, base_kind: BaseConnectorKind | None = None) -> float:
+    if base_kind is None:
+        base_kind = get_connector_base_kind(kind)
     match base_kind:
         case (
             ConnectorKind.ACTIVE_NORMAL
@@ -708,6 +683,65 @@ def get_connector_quality_option(kind: ConnectorKind) -> float:
             return 0
         case _:
             assert_never(base_kind)
+
+
+class ConnectorRenderInfo(Record):
+    """Immutable sprite selection and integer depth inputs prepared after skin initialization."""
+
+    base_kind: BaseConnectorKind
+    normal_sprite: Sprite
+    active_sprite: Sprite
+    depth_layer: Layer
+    normal_depth_order: int
+
+
+def get_connector_render_info(kind: ConnectorKind, layer: ConnectorLayer) -> ConnectorRenderInfo:
+    normal_sprite = Sprite(-1)
+    active_sprite = Sprite(-1)
+    base_kind = get_connector_base_kind(kind)
+    match base_kind:
+        case (
+            ConnectorKind.ACTIVE_NORMAL
+            | ConnectorKind.ACTIVE_CRITICAL
+            | ConnectorKind.FAKE_ACTIVE_NORMAL
+            | ConnectorKind.FAKE_ACTIVE_CRITICAL
+        ):
+            sprites = get_active_connector_sprites(cast(ActiveConnectorKind, kind))
+            normal_sprite @= sprites.connection.normal
+            active_sprite @= sprites.connection.active
+        case (
+            ConnectorKind.GUIDE_NEUTRAL
+            | ConnectorKind.GUIDE_RED
+            | ConnectorKind.GUIDE_GREEN
+            | ConnectorKind.GUIDE_BLUE
+            | ConnectorKind.GUIDE_YELLOW
+            | ConnectorKind.GUIDE_PURPLE
+            | ConnectorKind.GUIDE_CYAN
+            | ConnectorKind.GUIDE_BLACK
+        ):
+            sprites = get_guide_connector_sprite(cast(GuideConnectorKind, kind))
+            normal_sprite @= sprites
+        case ConnectorKind.DAMAGE:
+            normal_sprite @= get_damage_connector_sprite(kind)
+            active_sprite @= get_damage_connector_active_sprite(kind)
+        case ConnectorKind.FAKE_DAMAGE:
+            normal_sprite @= get_damage_connector_sprite(kind)
+        case ConnectorKind.NONE:
+            pass
+        case _:
+            assert_never(base_kind)
+
+    result = ConnectorRenderInfo(
+        base_kind=base_kind,
+        normal_sprite=normal_sprite,
+        active_sprite=active_sprite,
+        depth_layer=Layer(0, 0),
+        normal_depth_order=0,
+    )
+    if base_kind != ConnectorKind.NONE:
+        result.depth_layer = get_connector_depth_layer(base_kind, layer)
+        result.normal_depth_order = get_connector_depth_order(base_kind)
+    return result
 
 
 def draw_connector(
@@ -743,6 +777,7 @@ def draw_connector(
     elevation_transform: ElevationTransform | None = None,
     head_alpha_frac: float = -1.0,
     tail_alpha_frac: float = -1.0,
+    render_info: ConnectorRenderInfo | None = None,
 ):
     elevation_dynamic = ease_over_elevation and not shared_transform
     match presentation:
@@ -777,40 +812,15 @@ def draw_connector(
     if head_note_alpha <= 0 and tail_note_alpha <= 0:
         return
 
-    normal_sprite = Sprite(-1)
-    active_sprite = Sprite(-1)
-    base_kind = get_connector_base_kind(kind)
-    match base_kind:
-        case (
-            ConnectorKind.ACTIVE_NORMAL
-            | ConnectorKind.ACTIVE_CRITICAL
-            | ConnectorKind.FAKE_ACTIVE_NORMAL
-            | ConnectorKind.FAKE_ACTIVE_CRITICAL
-        ):
-            sprites = get_active_connector_sprites(cast(ActiveConnectorKind, kind))
-            normal_sprite @= sprites.connection.normal
-            active_sprite @= sprites.connection.active
-        case (
-            ConnectorKind.GUIDE_NEUTRAL
-            | ConnectorKind.GUIDE_RED
-            | ConnectorKind.GUIDE_GREEN
-            | ConnectorKind.GUIDE_BLUE
-            | ConnectorKind.GUIDE_YELLOW
-            | ConnectorKind.GUIDE_PURPLE
-            | ConnectorKind.GUIDE_CYAN
-            | ConnectorKind.GUIDE_BLACK
-        ):
-            sprites = get_guide_connector_sprite(cast(GuideConnectorKind, kind))
-            normal_sprite @= sprites
-        case ConnectorKind.DAMAGE:
-            normal_sprite @= get_damage_connector_sprite(kind)
-            active_sprite @= get_damage_connector_active_sprite(kind)
-        case ConnectorKind.FAKE_DAMAGE:
-            normal_sprite @= get_damage_connector_sprite(kind)
-        case ConnectorKind.NONE:
+    if render_info is None:
+        if kind == ConnectorKind.NONE:
             return
-        case _:
-            assert_never(base_kind)
+        render_info = get_connector_render_info(kind, layer)
+    base_kind = render_info.base_kind
+    normal_sprite = render_info.normal_sprite
+    active_sprite = render_info.active_sprite
+    if base_kind == ConnectorKind.NONE:
+        return
 
     match base_kind:
         case ConnectorKind.ACTIVE_NORMAL | ConnectorKind.ACTIVE_CRITICAL:
@@ -866,10 +876,23 @@ def draw_connector(
     if time() >= tail_target_time and not bypass_tail_target_time_check:
         return
 
-    z_normal = get_connector_z(kind, segment_head_target_time, segment_head_lane, active=False, layer=layer)
+    z_normal = +ZIndexes
     z_active = +ZIndexes
+    z_normal @= get_z(
+        render_info.depth_layer,
+        time=segment_head_target_time,
+        lane=segment_head_lane,
+        etc=render_info.normal_depth_order,
+        invert_time=True,
+    )
     if visual_state == ConnectorVisualState.ACTIVE and active_sprite.is_available:
-        z_active @= get_connector_z(kind, segment_head_target_time, segment_head_lane, active=True, layer=layer)
+        z_active @= get_z(
+            render_info.depth_layer,
+            time=segment_head_target_time,
+            lane=segment_head_lane,
+            etc=render_info.normal_depth_order - 1,
+            invert_time=True,
+        )
     else:
         z_active @= z_normal
 
@@ -900,6 +923,7 @@ def draw_connector(
                 draw_connector_default(
                     segment_head_target_time=segment_head_target_time,
                     kind=kind,
+                    base_kind=render_info.base_kind,
                     visual_state=visual_state,
                     ease_type=piece_ease_type,
                     normal_sprite=normal_sprite,
@@ -949,6 +973,7 @@ def draw_connector(
                 z_active.z2 += elevation
             draw_connector_full_screen(
                 kind=kind,
+                base_kind=render_info.base_kind,
                 visual_state=visual_state,
                 normal_sprite=normal_sprite,
                 active_sprite=active_sprite,
@@ -1876,6 +1901,7 @@ def draw_connector_default(
     elevation_transform: ElevationTransform | None = None,
     elevation_start_frac: float = 0.0,
     elevation_end_frac: float = 1.0,
+    base_kind: BaseConnectorKind | None = None,
 ):
     start_visual_progress = clamp(head_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
     end_visual_progress = clamp(tail_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
@@ -1914,7 +1940,7 @@ def draw_connector_default(
         return
     start_alpha = lerp(head_alpha, tail_alpha, start_frac)
     end_alpha = lerp(head_alpha, tail_alpha, end_frac)
-    alpha_option = get_connector_alpha_option(kind)
+    alpha_option = get_connector_alpha_option(kind, base_kind=base_kind)
     if alpha_option <= 0 or max(start_alpha, end_alpha) <= 0:
         return
     if not elevation_dynamic and connector_is_off_screen(
@@ -1963,7 +1989,7 @@ def draw_connector_default(
             start_travel,
             end_travel,
         )
-    quality = get_connector_quality_option(kind)
+    quality = get_connector_quality_option(kind, base_kind=base_kind)
     circular_fracs = VarArray[float, Dim[128]].new()
     if ease_over_elevation and quality > 0:
         assert elevation_transform is not None
@@ -2279,10 +2305,11 @@ def draw_connector_full_screen(
     head_alpha: float,
     tail_target_time: float,
     tail_alpha: float,
+    base_kind: BaseConnectorKind | None = None,
 ):
     judge_frac = safe_unlerp_clamped(head_target_time, tail_target_time, time())
     judge_alpha = lerp(head_alpha, tail_alpha, judge_frac)
-    base_a = clamp(get_alpha(time()) * judge_alpha * get_connector_alpha_option(kind), 0, 1)
+    base_a = clamp(get_alpha(time()) * judge_alpha * get_connector_alpha_option(kind, base_kind=base_kind), 0, 1)
     if base_a > 0:
         draw_connector_quad(screen(), visual_state, normal_sprite, active_sprite, z_normal, z_active, base_a)
 
