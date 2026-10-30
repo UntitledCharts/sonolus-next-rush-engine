@@ -14,6 +14,7 @@ from sekai.lib.custom_elements import (
     draw_judgment_text,
 )
 from sekai.lib.options import Options
+from sekai.lib.particle_manager import clear_particles
 from sekai.lib.skin import ActiveSkin
 from sekai.watch import note
 from sekai.watch.events import Fever
@@ -30,7 +31,7 @@ def spawn_custom(
 
 
 class StateManager(WatchArchetype):
-    """Resets score/life/fever level-memory state on skips."""
+    """Reset particles and score/life/fever state on skips."""
 
     name = archetype_names.STATE_MANAGER
 
@@ -44,6 +45,7 @@ class StateManager(WatchArchetype):
     def update_sequential(self):
         if not is_skip():
             return
+        clear_particles()
         if time() < ScoreIndicator.first:
             if Options.custom_score == 2:
                 ScoreIndicator.percentage = 100

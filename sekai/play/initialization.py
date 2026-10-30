@@ -1,6 +1,15 @@
 from typing import cast
 
-from sonolus.script.archetype import EntityRef, PlayArchetype, callback, entity_data, entity_info_at, exported, imported
+from sonolus.script.archetype import (
+    EntityRef,
+    PlayArchetype,
+    callback,
+    entity_data,
+    entity_info_at,
+    exported,
+    imported,
+    shared_memory,
+)
 from sonolus.script.containers import sort_linked_entities
 from sonolus.script.runtime import level_score
 
@@ -35,6 +44,7 @@ from sekai.lib.level_config import (
 from sekai.lib.note import init_life, init_score
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.particle import ActiveParticles, init_particles
+from sekai.lib.particle_manager import ParticleStorage
 from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.ui import init_ui
 from sekai.play import custom_elements, note
@@ -47,6 +57,7 @@ from sekai.play.static_stage import StaticStage
 
 
 class Initialization(PlayArchetype):
+    particle_storage: ParticleStorage = shared_memory()
     name = archetype_names.INITIALIZATION
 
     revision: EngineRevision = imported(name="revision", default=EngineRevision.SONOLUS_1_1_0)

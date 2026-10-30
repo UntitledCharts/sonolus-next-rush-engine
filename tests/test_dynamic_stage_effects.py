@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from sonolus.script.archetype import EntityRef
 from sonolus.script.bucket import Judgment
+from sonolus.script.debug import simulation_context
 from sonolus.script.particle import Particle
 from sonolus.script.vec import Vec2
 
@@ -110,16 +111,16 @@ class MaskedEffectTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def test_unrelated_particle_groups_do_not_share_a_recycling_chunk(self):
-        particle = cast(Particle, SimpleNamespace(id=4))
-        handler = SimpleNamespace(chunk_serial=0)
-        with (
-            patch.object(particle_manager, "ParticleHandler", handler),
-            patch.object(particle_manager, "purge_particle_chunk") as purge,
-        ):
-            first = particle_manager.begin_particle_chunk(particle, 1, particle_manager.ParticleManageKind.MULTI)
-            second = particle_manager.begin_particle_chunk(particle, 7, particle_manager.ParticleManageKind.MULTI)
+        with simulation_context():
+            storage = dict.fromkeys((1, 7), +particle_manager.ParticleStorage)
+            with (
+                patch.object(particle_manager, "particle_storage", side_effect=storage.__getitem__),
+            ):
+                first = particle_manager.begin_particle_chunk(Particle(4), 1, particle_manager.ParticleManageKind.MULTI)
+                second = particle_manager.begin_particle_chunk(
+                    Particle(4), 7, particle_manager.ParticleManageKind.MULTI
+                )
         assert first != second
-        assert purge.call_args_list[0].args != purge.call_args_list[1].args
 
     def test_play_hit_effects_receive_the_visible_note_width(self):
         fake = SimpleNamespace(
@@ -352,8 +353,14 @@ class MaskedEffectTests(unittest.TestCase):
     def test_watch_hit_emitter_runs_once_and_suppresses_skipped_effects(self):
         for skipped in (False, True):
             with self.subTest(skipped=skipped):
-                note = SimpleNamespace(play_hit_effects=lambda: None)
-                fake: Any = SimpleNamespace(played=True, note_ref=SimpleNamespace(get=lambda note=note: note))
+                note = SimpleNamespace(play_hit_effects=lambda *args: None)
+                fake: Any = SimpleNamespace(
+                    played=True,
+                    component=0,
+                    page_index=0,
+                    page=SimpleNamespace(entries=[]),
+                    note_ref=SimpleNamespace(get=lambda note=note: note),
+                )
                 watch_note.WatchHitEffect.initialize(fake)
                 with (
                     patch.object(watch_note, "is_skip", return_value=skipped),
