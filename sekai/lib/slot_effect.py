@@ -1,9 +1,9 @@
 from math import ceil, floor
 
-from sonolus.script.array import Dim
-from sonolus.script.containers import ArrayMap, Pair
+from sonolus.script.array import Array, Dim
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import Interval, lerp, unlerp_clamped
+from sonolus.script.record import Record
 from sonolus.script.runtime import time
 from sonolus.script.sprite import Sprite
 
@@ -21,6 +21,7 @@ from sekai.lib.layout import (
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, Version
 from sekai.lib.particle import ActiveParticles
+from sekai.lib.skin import BaseSkin
 
 SLOT_GLOW_EFFECT_DURATION = 0.25
 SLOT_EFFECT_DURATION = 0.5
@@ -28,33 +29,52 @@ SLOT_EFFECT_DURATION = 0.5
 SLOT_EFFECT_LIMIT = 6.0
 
 
+# Slot IDs are engine bindings, independent of the external skin's texture layout.
+# Keep the sparse binding-to-state map in ROM, not in LevelMemory.
+_SLOT_SPRITE_IDS = tuple(
+    i for i, name in enumerate(BaseSkin._sprites_) if name.startswith("Sekai Slot") and "Slider Hold" not in name
+)
+_SLOT_SPRITE_INDEX = {sprite_id: index for index, sprite_id in enumerate(_SLOT_SPRITE_IDS)}
+SLOT_KIND_COUNT = len(_SLOT_SPRITE_IDS)
+_SLOT_STATE_INDICES = Array(*(_SLOT_SPRITE_INDEX.get(i, -1) for i in range(len(BaseSkin._sprites_))))
+
+
+class SlotGeneration(Record):
+    generation: float
+    group_id: float
+    epoch: int
+
+
 @level_memory
 class SlotEffectHandler:
-    slots: ArrayMap[float, Pair[float, float], Dim[256]]
+    epoch: int
+    slots: Array[SlotGeneration, Dim[SLOT_KIND_COUNT]]
 
 
 def clear_slot_effects():
-    SlotEffectHandler.slots.clear()
+    # Invalidating all entries takes one write, including repeated Watch skip callbacks.
+    SlotEffectHandler.epoch += 1
 
 
 def next_slot_generation(sprite: Sprite, group_id: float) -> float:
-    sprite_id = sprite.id
-    if sprite_id in SlotEffectHandler.slots:
-        entry = SlotEffectHandler.slots[sprite_id]
-        if entry.second == group_id:
-            return entry.first
-        generation = entry.first + 1
-    else:
-        generation = 0.0
-    SlotEffectHandler.slots[sprite_id] = Pair(generation, group_id)
-    return generation
+    index = _SLOT_STATE_INDICES[sprite.id]
+    assert index >= 0, "Unregistered slot effect sprite"
+    entry = SlotEffectHandler.slots[index]
+    epoch = SlotEffectHandler.epoch + 1
+    if entry.epoch != epoch:
+        entry.generation = 0
+        entry.epoch = epoch
+    elif entry.group_id != group_id:
+        entry.generation += 1
+    entry.group_id = group_id
+    return entry.generation
 
 
 def is_slot_generation_visible(sprite: Sprite, generation: float) -> bool:
-    sprite_id = sprite.id
-    if sprite_id not in SlotEffectHandler.slots:
-        return True
-    return SlotEffectHandler.slots[sprite_id].first - generation < SLOT_EFFECT_LIMIT
+    index = _SLOT_STATE_INDICES[sprite.id]
+    assert index >= 0, "Unregistered slot effect sprite"
+    entry = SlotEffectHandler.slots[index]
+    return entry.epoch != SlotEffectHandler.epoch + 1 or entry.generation - generation < SLOT_EFFECT_LIMIT
 
 
 def slot_glow_progress_height(progress: float) -> float:
