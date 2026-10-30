@@ -54,6 +54,7 @@ class StateManager(WatchArchetype):
             ScoreIndicator.score = 0
             ScoreIndicator.ap = False
             Fever.fever_chance_current_combo = 0
+            Fever.latest_note_time = -1e8
         if is_replay() and time() < LifeManager.first:
             LifeManager.life = LifeManager.initial_life
 
@@ -99,6 +100,7 @@ class ComboJudge(WatchArchetype):
             return
         current_note = note.WatchBaseNote.at(self.note_index)
         Fever.fever_chance_current_combo = current_note.fever_hits
+        Fever.latest_note_time = current_note.target_time
 
         if Options.custom_score > 0 or Options.custom_score_bar:
             ScoreIndicator.score = current_note.score

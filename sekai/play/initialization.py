@@ -25,6 +25,7 @@ from sekai.lib.connector import (
     schedule_connector_sfx,
 )
 from sekai.lib.custom_elements import init_fixed_ui_layout
+from sekai.lib.fever import FeverWindows, advance_fever_window, prepare_fever_windows
 from sekai.lib.initialization import LastNote, calculate_note_weight, count_entities, sort_entities_by_time
 from sekai.lib.layout import (
     StaticStageData,
@@ -51,7 +52,7 @@ from sekai.play import custom_elements, note
 from sekai.play.common import init_play_common
 from sekai.play.connector import Connector, ConnectorSfxManager
 from sekai.play.dynamic_stage import CameraChange
-from sekai.play.events import Fever, Skill
+from sekai.play.events import FeverChance, FeverStart, Skill
 from sekai.play.input_manager import InputManager
 from sekai.play.static_stage import StaticStage
 
@@ -122,6 +123,7 @@ class Initialization(PlayArchetype):
 
 
 def sorted_linked_list(entity_count: int):
+    prepare_fever_windows(FeverChance, FeverStart)
     note_head, note_length, skill_head, skill_length = initial_list(entity_count)
 
     sorted_skill_head = +EntityRef[Skill]
@@ -269,6 +271,7 @@ def schedule_auto_connector_sfx_events(list_head: int):
 def setting_count(head: int, skill: int) -> None:
     ptr = head
     skill_ptr = skill
+    fever_ptr = FeverWindows.chance_head
     count = 0
     current_note_weight = 0.0
 
@@ -302,13 +305,10 @@ def setting_count(head: int, skill: int) -> None:
         )
         custom_elements.ScoreIndicator.total_weight.add(current_note_weight)
 
-        if Fever.fever_chance_time <= note.BaseNote.at(ptr).target_time < Fever.fever_start_time:
-            Fever.fever_first_count = (
-                min(note.BaseNote.at(ptr).count, Fever.fever_first_count)
-                if Fever.fever_first_count != 0
-                else note.BaseNote.at(ptr).count
-            )
-            Fever.fever_last_count = max(note.BaseNote.at(ptr).count, Fever.fever_last_count)
+        fever_ptr = advance_fever_window(FeverChance, fever_ptr, note.BaseNote.at(ptr).target_time)
+        if fever_ptr > 0 and FeverChance.at(fever_ptr).start_time <= note.BaseNote.at(ptr).target_time:
+            note.BaseNote.at(ptr).fever_index = fever_ptr
+            FeverChance.at(fever_ptr).counter += 1
 
         LastNote.last_time = max(LastNote.last_time, note.BaseNote.at(ptr).calc_time)
         ptr = note.BaseNote.at(ptr).score_next_ref.index

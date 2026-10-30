@@ -20,7 +20,7 @@ Represents a skill activation event.
 
 Represents the start of the fever chance period.
 
-**Note:** A level can contain exactly one `FeverChance` and exactly one `FeverStart` event. They must always appear as a pair, and `FeverChance` must occur at an earlier `#BEAT` than `FeverStart`.
+**Note:** A level can contain multiple `FeverChance` / `FeverStart` pairs. In chronological order they must alternate: `FeverChance` must occur strictly before its paired `FeverStart`, and the next `FeverChance` must not occur before that `FeverStart`. Overlapping or unpaired events are invalid. Each pair has independent fever progress.
 
 ### Fields
 
@@ -31,7 +31,7 @@ Represents the start of the fever chance period.
 
 Represents the start of the active fever period.
 
-**Note:** A level can contain exactly one `FeverStart` event, which must be paired with and occur strictly after the `FeverChance` event.
+**Note:** Each `FeverStart` must be paired with and occur strictly after a `FeverChance`. Multiple non-overlapping pairs are supported; existing single-pair level data requires no changes.
 
 ### Fields
 

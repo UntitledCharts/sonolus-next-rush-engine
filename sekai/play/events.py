@@ -18,7 +18,6 @@ from sonolus.script.timing import beat_to_time
 from sekai.lib import archetype_names
 from sekai.lib.effect import Effects
 from sekai.lib.events import (
-    Fever,
     draw_fever_gauge,
     draw_fever_side_bar,
     draw_fever_side_cover,
@@ -27,6 +26,7 @@ from sekai.lib.events import (
     spawn_fever_chance_particle,
     spawn_fever_start_particle,
 )
+from sekai.lib.fever import FeverWindows, fever_percentage
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.skin import ActiveSkin
@@ -112,9 +112,13 @@ class Skill(PlayArchetype):
 class FeverChance(PlayArchetype):
     beat: StandardImport.BEAT
     force: bool = imported(name="force")
-    start_time: float = entity_memory()
+    start_time: float = entity_data()
+    end_time: float = entity_data()
+    next_ref: EntityRef[FeverChance] = entity_data()
     checker: bool = entity_memory()
-    counter: int = entity_memory()
+    counter: int = entity_data()
+    hits: int = shared_memory()
+    cant_super: bool = shared_memory()
     percentage: float = entity_memory()
     name = archetype_names.FEVER_CHANCE
     z: float = entity_memory()
@@ -125,9 +129,8 @@ class FeverChance(PlayArchetype):
     @callback(order=-4)
     def preprocess(self):
         self.start_time = beat_to_time(self.beat)
-        Fever.fever_chance_time = (
-            min(self.start_time, Fever.fever_chance_time) if Fever.fever_chance_time != 0 else self.start_time
-        )
+        self.next_ref.index = FeverWindows.chance_head
+        FeverWindows.chance_head = self.index
 
     def show_ui(self) -> bool:
         return is_multiplayer() or Options.forced_fever_chance or self.force
@@ -142,42 +145,32 @@ class FeverChance(PlayArchetype):
         current_time = time()
         elapsed = current_time - self.start_time
 
-        if current_time >= Fever.fever_start_time:
+        self.percentage = fever_percentage(self.hits, self.counter, self.cant_super, self.percentage)
+        if current_time >= self.end_time:
             spawn_fever_start_particle(self.percentage)
             self.despawn = True
             return
-        if current_time >= Fever.fever_chance_time and not self.checker:
+        if not self.checker:
             spawn_fever_chance_particle()
             self.checker = True
-        self.percentage = clamp(
-            Fever.fever_chance_current_combo / self.counter,
-            0,
-            0.9 if not Fever.fever_chance_cant_super_fever or self.percentage >= 0.9 else 0.89,
-        )
-
         if Options.fever_effect == 0:
             draw_fever_side_cover(elapsed)
         draw_fever_side_bar(elapsed)
         draw_fever_gauge(self.percentage)
 
-    @callback(order=3)
-    def update_sequential(self):
-        if self.checker:
-            return
-        self.counter = Fever.fever_last_count - Fever.fever_first_count
-
 
 class FeverStart(PlayArchetype):
     beat: StandardImport.BEAT
-    start_time: float = entity_memory()
+    start_time: float = entity_data()
+    next_ref: EntityRef[FeverStart] = entity_data()
+    chance_index: int = entity_data()
     name = archetype_names.FEVER_START
 
     @callback(order=-4)
     def preprocess(self):
         self.start_time = beat_to_time(self.beat)
-        Fever.fever_start_time = (
-            min(self.start_time, Fever.fever_start_time) if Fever.fever_start_time != 0 else self.start_time
-        )
+        self.next_ref.index = FeverWindows.start_head
+        FeverWindows.start_head = self.index
 
     def spawn_order(self):
         return 1e8

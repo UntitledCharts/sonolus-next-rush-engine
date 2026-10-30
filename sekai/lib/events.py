@@ -54,12 +54,8 @@ from sekai.lib.skin import ActiveSkin
 
 @level_memory
 class Fever:
-    fever_chance_time: float
-    fever_start_time: float
     fever_chance_current_combo: int
-    fever_chance_cant_super_fever: bool
-    fever_last_count: int
-    fever_first_count: int
+    latest_note_time: float
     min_l: float
     max_r: float
     has_active: bool

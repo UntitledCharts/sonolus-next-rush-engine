@@ -11,7 +11,6 @@ from sonolus.script.archetype import (
     shared_memory,
 )
 from sonolus.script.globals import level_memory
-from sonolus.script.interval import clamp
 from sonolus.script.runtime import add_life_scheduled, is_replay, is_skip, time
 from sonolus.script.timing import beat_to_time
 
@@ -28,6 +27,7 @@ from sekai.lib.events import (
     spawn_fever_chance_particle,
     spawn_fever_start_particle,
 )
+from sekai.lib.fever import FeverWindows, fever_percentage
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.skin import ActiveSkin
@@ -112,24 +112,27 @@ class Skill(WatchArchetype):
 class FeverChance(WatchArchetype):
     beat: StandardImport.BEAT
     force: bool = imported(name="force")
-    start_time: float = entity_memory()
+    start_time: float = entity_data()
+    end_time: float = entity_data()
+    next_ref: EntityRef[FeverChance] = entity_data()
     checker: int = entity_memory()
-    counter: int = entity_memory()
+    counter: int = entity_data()
+    hits: int = entity_data()
+    cant_super: bool = entity_data()
     percentage: float = entity_memory()
     name = archetype_names.FEVER_CHANCE
 
     @callback(order=-4)
     def preprocess(self):
         self.start_time = beat_to_time(self.beat)
-        Fever.fever_chance_time = (
-            min(self.start_time, Fever.fever_chance_time) if Fever.fever_chance_time != 0 else self.start_time
-        )
+        self.next_ref.index = FeverWindows.chance_head
+        FeverWindows.chance_head = self.index
 
     def spawn_time(self):
         return self.start_time
 
     def despawn_time(self):
-        return Fever.fever_start_time + 1
+        return self.end_time + 1
 
     def update_parallel(self):
         if not Options.forced_fever_chance and not self.force:
@@ -137,33 +140,27 @@ class FeverChance(WatchArchetype):
         current_time = time()
         if is_skip():
             self.checker = 0
-            if current_time <= self.start_time:
-                self.percentage = 0
+            self.percentage = 0
         if self.checker >= 2:
             return
-        if current_time >= Fever.fever_start_time:
+        hits = 0
+        if Fever.latest_note_time >= self.end_time:
+            hits = self.hits
+        elif Fever.latest_note_time >= self.start_time:
+            hits = Fever.fever_chance_current_combo
+        self.percentage = fever_percentage(hits, self.counter, self.cant_super, self.percentage)
+        if current_time >= self.end_time:
             spawn_fever_start_particle(self.percentage)
             self.checker = 2
             return
-        if current_time >= Fever.fever_chance_time and not self.checker:
+        if not self.checker:
             spawn_fever_chance_particle()
             self.checker = 1
-        self.percentage = clamp(
-            Fever.fever_chance_current_combo / self.counter,
-            0,
-            0.9 if not Fever.fever_chance_cant_super_fever or self.percentage >= 0.9 else 0.89,
-        )
         elapsed = current_time - self.start_time
         if Options.fever_effect == 0:
             draw_fever_side_cover(elapsed)
         draw_fever_side_bar(elapsed)
         draw_fever_gauge(self.percentage)
-
-    @callback(order=3)
-    def update_sequential(self):
-        if self.checker:
-            return
-        self.counter = Fever.fever_last_count - Fever.fever_first_count
 
     def terminate(self):
         self.percentage = 0
@@ -172,15 +169,16 @@ class FeverChance(WatchArchetype):
 
 class FeverStart(WatchArchetype):
     beat: StandardImport.BEAT
-    start_time: float = entity_memory()
+    start_time: float = entity_data()
+    next_ref: EntityRef[FeverStart] = entity_data()
+    chance_index: int = entity_data()
     name = archetype_names.FEVER_START
 
     @callback(order=-4)
     def preprocess(self):
         self.start_time = beat_to_time(self.beat)
-        Fever.fever_start_time = (
-            min(self.start_time, Fever.fever_start_time) if Fever.fever_start_time != 0 else self.start_time
-        )
+        self.next_ref.index = FeverWindows.start_head
+        FeverWindows.start_head = self.index
 
     def spawn_time(self):
         return 1e8
