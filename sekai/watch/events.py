@@ -11,7 +11,6 @@ from sonolus.script.archetype import (
     shared_memory,
 )
 from sonolus.script.globals import level_memory
-from sonolus.script.interval import clamp
 from sonolus.script.runtime import is_replay, is_skip, time
 from sonolus.script.timing import beat_to_time
 
