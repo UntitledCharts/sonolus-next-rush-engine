@@ -37,6 +37,7 @@ from sekai.lib.stage import (
     JudgeLineColor,
     JudgeLineStyle,
     StageBorderStyle,
+    StageEventCursors,
     StageProps,
     StageSamplingPlan,
     StageSharedProps,
@@ -142,6 +143,9 @@ class DynamicStage(PlayArchetype):
     note_visibility_end: float = entity_data()
     sampling_plan: StageSamplingPlan = entity_data()
 
+    use_event_cursors: bool = entity_data()
+    event_cursors: StageEventCursors = entity_memory()
+    visual_transform: StageTransform = shared_memory()
     draw_props: StageProps = entity_memory()
     props: StageSharedProps = shared_memory()
 
@@ -164,6 +168,12 @@ class DynamicStage(PlayArchetype):
         self.end_time = get_end_time(self)
         self.draw_start_time = get_draw_start_time(self)
         self.draw_end_time = get_draw_end_time(self)
+        self.use_event_cursors = (
+            (self.first_mask_change_ref.index > 0 and self.first_mask_change_ref.get().skip_levels >= 3)
+            or (self.first_pivot_change_ref.index > 0 and self.first_pivot_change_ref.get().skip_levels >= 3)
+            or (self.first_style_change_ref.index > 0 and self.first_style_change_ref.get().skip_levels >= 3)
+            or (self.first_transform_change_ref.index > 0 and self.first_transform_change_ref.get().skip_levels >= 3)
+        )
         self.sampling_plan @= StageSamplingPlan.prepare(self)
         # A singleton event applies before its time, so constant tracks are correct at 0.
         # Animated tracks are resampled before consumers run each frame.
@@ -179,8 +189,13 @@ class DynamicStage(PlayArchetype):
     @callback(order=-2)
     def update_sequential(self):
         if not self.sampling_plan.is_static:
-            update_prepared_stage_props(self.draw_props, self, self.sampling_plan, time())
+            if self.use_event_cursors:
+                update_prepared_stage_props(self.draw_props, self, self.sampling_plan, time(), self.event_cursors)
+            else:
+                update_prepared_stage_props(self.draw_props, self, self.sampling_plan, time())
             self.props @= self.draw_props.shared()
+        if self.draw_props.has_transform():
+            self.visual_transform @= self.draw_props.stage_transform()
         if time() >= self.end_time:
             self.despawn = True
             return
@@ -192,7 +207,7 @@ class DynamicStage(PlayArchetype):
             r = self.draw_props.lane + self.draw_props.width
             stage_transform = +StageTransform
             if self.draw_props.has_transform():
-                stage_transform @= self.draw_props.stage_transform()
+                stage_transform @= self.visual_transform
             else:
                 stage_transform @= identity_stage_transform()
             transform = stage_transform.to_screen_transform()
@@ -238,7 +253,7 @@ class DynamicStage(PlayArchetype):
         has_transform = p.has_transform()
         transform = +StageTransform
         if has_transform:
-            transform @= p.stage_transform()
+            transform @= self.visual_transform
         else:
             transform @= identity_stage_transform()
         screen_transform = transform.to_screen_transform()
@@ -294,7 +309,7 @@ class DynamicStage(PlayArchetype):
                 r = self.draw_props.lane + self.draw_props.width
                 stage_transform = +StageTransform
                 if self.draw_props.has_transform():
-                    stage_transform @= self.draw_props.stage_transform()
+                    stage_transform @= self.visual_transform
                 else:
                     stage_transform @= identity_stage_transform()
                 draw_judgment_effect(

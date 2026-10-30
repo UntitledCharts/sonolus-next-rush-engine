@@ -532,7 +532,7 @@ class WatchBaseNote(WatchArchetype):
             component=component,
             page_index=page_index,
             page=page,
-            lane_particles=self._stage_lane_particles_at(time(), right_limit=True),
+            lane_particles=self.visual_lane_particles,
             transform=self.visual_stage_transform().to_screen_transform(),
             style=self.style,
         )
@@ -685,7 +685,11 @@ class WatchBaseNote(WatchArchetype):
     def _basic_visual_stage_transform(self) -> StageTransform:
         result = +StageTransform
         if self.stage_ref.index > 0:
-            result @= self.stage_ref.get().props.stage_transform(self.elevation)
+            stage = self.stage_ref.get()
+            if self.elevation == 0.0 and stage.props.has_transform():
+                result @= stage.visual_transform
+            else:
+                result @= stage.props.stage_transform(self.elevation)
         elif self.elevation != 0.0:
             result @= compute_stage_transform(current_layout_transform(), 0.0, 0.0, 0.0, 0.0, elevation=self.elevation)
         else:
@@ -848,7 +852,10 @@ class WatchBaseNote(WatchArchetype):
 
     @property
     def visual_extents(self) -> tuple[float, float]:
-        return self.visual_extents_at(time(), right_limit=True)
+        # Stages refresh their right-limit props before Watch rendering and hit effects.
+        render_lane = self.visual_lane
+        mask = self.visual_mask
+        return masked_note_extents_by_limits(render_lane, self.size, mask.left, mask.right, mask.enabled)
 
     @property
     def _basic_visual_y_offset(self) -> float:
@@ -883,6 +890,12 @@ class WatchBaseNote(WatchArchetype):
             return division.parity == DivisionParity.ODD and division.size % 2 == 1
         else:
             return False
+
+    @property
+    def visual_lane_particles(self) -> bool:
+        if self.stage_ref.index > 0:
+            return self.stage_ref.get().props.full_width <= 0.0
+        return True
 
     @property
     def progress(self) -> float:
