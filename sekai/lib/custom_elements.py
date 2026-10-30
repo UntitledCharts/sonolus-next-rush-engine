@@ -2,15 +2,14 @@ from enum import IntEnum
 from math import floor, sin
 
 from sonolus.script.array import Array, Dim
-from sonolus.script.bucket import Judgment
+from sonolus.script.containers import VarArray
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp, unlerp, unlerp_clamped
 from sonolus.script.record import Record
 from sonolus.script.runtime import aspect_ratio, is_replay, is_watch, runtime_ui, screen, time
-from sonolus.script.sprite import ZIndex
+from sonolus.script.sprite import Sprite, ZIndex
 from sonolus.script.vec import Vec2
 
-from sekai.lib.buckets import SekaiWindow
 from sekai.lib.layer import (
     LAYER_DAMAGE,
     LAYER_JUDGMENT,
@@ -41,6 +40,15 @@ class FixedUiLayout:
     combo_label: Quad
     judgment_accuracy: Quad
     damage_flash: Array[Quad, Dim[4]]
+    combo_h: float
+    combo_w: float
+    combo_h2: float
+    combo_w2: float
+    combo_gap: float
+    combo_gap2: float
+    combo_s2_start: float
+    judgment_h: float
+    judgment_w: float
 
 
 def init_fixed_ui_layout():
@@ -57,6 +65,45 @@ def init_fixed_ui_layout():
     FixedUiLayout.judgment_accuracy = layout_combo_label(Vec2(x=0, y=0.723), w=accuracy_w / 2, h=accuracy_h / 2)
 
     FixedUiLayout.damage_flash = layout_dead_effect_quads()
+
+    fallback_scale = COMBO_NUMBER_FALLBACK_SCALE if ActiveSkin.combo_number.is_fallback else 1.0
+    base_h = 0.23 * ui.combo_config.scale * fallback_scale
+    base_h2 = 0.25 * ui.combo_config.scale * fallback_scale
+    h, w = transform_fixed_size(base_h, base_h * 7.183)
+    h2, w2 = transform_fixed_size(base_h2, base_h2 * 7.183)
+    FixedUiLayout.combo_h = h
+    FixedUiLayout.combo_w = w
+    FixedUiLayout.combo_h2 = h2
+    FixedUiLayout.combo_w2 = w2
+    gap_coeff = 0.5 / fallback_scale - 1
+    FixedUiLayout.combo_gap = w * gap_coeff
+    FixedUiLayout.combo_gap2 = w2 * gap_coeff
+    FixedUiLayout.combo_s2_start = base_h / base_h2
+
+    judgment_h = 0.09 * ui.combo_config.scale
+    h, w = transform_fixed_size(judgment_h, judgment_h * (310 / 80) * 7.183)
+    FixedUiLayout.judgment_h = h
+    FixedUiLayout.judgment_w = w
+
+
+class ComboNumberCache(Record):
+    # Sixteen digits cover combo counts through 2**53.
+    # Least significant digit first, so extraction takes one division per digit.
+    digits: VarArray[int, Dim[16]]
+    start_x: float
+    start_x2: float
+
+    def set_combo(self, combo: int):
+        self.digits.clear()
+        remaining = combo
+        while remaining > 0:
+            self.digits.append(remaining % 10)
+            remaining //= 10
+        digit_count = len(self.digits)
+        total_width = digit_count * FixedUiLayout.combo_w + (digit_count - 1) * FixedUiLayout.combo_gap
+        total_width2 = digit_count * FixedUiLayout.combo_w2 + (digit_count - 1) * FixedUiLayout.combo_gap2
+        self.start_x = 5.337 - total_width / 2
+        self.start_x2 = 5.337 - total_width2 / 2
 
 
 @level_memory
@@ -133,7 +180,7 @@ def draw_combo_label(ap: bool, combo: int):
         ActiveSkin.combo_label.get_sprite(ComboType.GLOW).draw(quad=layout, z=get_z_alt(LAYER_JUDGMENT).tuple, a=a)
 
 
-def draw_combo_number(draw_time: float, ap: bool, combo: int):
+def draw_combo_number(draw_time: float, ap: bool, cache: ComboNumberCache):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.combo_number.available:
@@ -142,30 +189,16 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int):
         return
     if not Options.custom_combo:
         return
-    if combo == 0:
+    digit_count = len(cache.digits)
+    if digit_count == 0:
         return
 
     ui = runtime_ui()
 
-    if combo == 0:
-        digit_count = 1
-    else:
-        digit_count = 0
-        temp_n = combo
-        while temp_n > 0:
-            temp_n = temp_n // 10
-            digit_count += 1
-
     screen_center = Vec2(x=5.337, y=0.585)
 
-    fallback_scale = COMBO_NUMBER_FALLBACK_SCALE if ActiveSkin.combo_number.is_fallback else 1.0
-    base_h = 0.23 * ui.combo_config.scale * fallback_scale
-    base_h2 = 0.25 * ui.combo_config.scale * fallback_scale
-    base_w = base_h * 7.183
-    base_w2 = base_h2 * 7.183
-
     s = 0.6 + 0.4 * unlerp_clamped(draw_time, draw_time + 0.112, time())
-    s2_start = base_h / base_h2
+    s2_start = FixedUiLayout.combo_s2_start
     s2 = s2_start + (1 - s2_start) * unlerp_clamped(draw_time + 0.112, draw_time + 0.192, time())
 
     a = ui.combo_config.alpha
@@ -176,21 +209,10 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int):
     )
     a3 = ui.combo_config.alpha * (sin(time() * AP_EFFECT_SPEED) + 1) * 0.5
 
-    h, w = transform_fixed_size(base_h, base_w)
-    h2, w2 = transform_fixed_size(base_h2, base_w2)
-
-    gap_coeff = 0.5 / fallback_scale - 1
-    digit_gap = w * gap_coeff
-    digit_gap2 = w2 * gap_coeff
-    total_width = digit_count * w + (digit_count - 1) * digit_gap
-    total_width2 = digit_count * w2 + (digit_count - 1) * digit_gap2
-    start_x = screen_center.x - total_width / 2
-    start_x2 = screen_center.x - total_width2 / 2
-
     drawing_combo = ComboNumberLayout(
         core=CoreConfig(
             ap=ap,
-            combo_number=combo,
+            combo_number=0,
             digit_count=digit_count,
             is_score=False,
         ),
@@ -205,22 +227,25 @@ def draw_combo_number(draw_time: float, ap: bool, combo: int):
             a3=a3,
         ),
         layout1=LayoutConfig(
-            width=w,
-            gap=digit_gap,
+            width=FixedUiLayout.combo_w,
+            gap=FixedUiLayout.combo_gap,
             scale=s,
-            height=h,
-            start_x=start_x,
+            height=FixedUiLayout.combo_h,
+            start_x=cache.start_x,
         ),
         layout2=LayoutConfig(
-            width=w2,
-            gap=digit_gap2,
+            width=FixedUiLayout.combo_w2,
+            gap=FixedUiLayout.combo_gap2,
             scale=s2,
-            height=h2,
-            start_x=start_x2,
+            height=FixedUiLayout.combo_h2,
+            start_x=cache.start_x2,
         ),
     )
     drawing_combo.draw_number(
-        z=get_z_alt(LAYER_JUDGMENT).tuple, z1=get_z_alt(LAYER_JUDGMENT, 1).tuple, z2=get_z_alt(LAYER_JUDGMENT, 2).tuple
+        z=get_z_alt(LAYER_JUDGMENT).tuple,
+        z1=get_z_alt(LAYER_JUDGMENT, 1).tuple,
+        z2=get_z_alt(LAYER_JUDGMENT, 2).tuple,
+        digits=cache.digits,
     )
 
 
@@ -347,7 +372,7 @@ class ComboNumberLayout(Record):
             )
         )
 
-    def draw_number(self, z, z1, z2):
+    def draw_number(self, z, z1, z2, digits: VarArray[int, Dim[16]] | None = None):
         s_inv = 1 - self.layout1.scale
         s2_inv = 1 - self.layout2.scale
 
@@ -421,7 +446,10 @@ class ComboNumberLayout(Record):
                 unscaled_t2 = 0
                 unscaled_b2 = 0
             else:
-                digit = floor(self.core.combo_number / 10 ** (self.core.digit_count - 1 - i)) % 10
+                if digits is None:
+                    digit = floor(self.core.combo_number / 10 ** (self.core.digit_count - 1 - i)) % 10
+                else:
+                    digit = digits[self.core.digit_count - 1 - i]
 
                 final_draw_w1 = self.layout1.width
                 final_draw_w2 = self.layout2.width
@@ -473,7 +501,7 @@ class ComboNumberLayout(Record):
                 )
 
 
-def draw_judgment_text(draw_time: float, judgment: Judgment, windows: SekaiWindow, accuracy: float):
+def draw_judgment_text(draw_time: float, sprite: Sprite):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.judgment.available:
@@ -487,18 +515,14 @@ def draw_judgment_text(draw_time: float, judgment: Judgment, windows: SekaiWindo
 
     screen_center = Vec2(x=0, y=0.792)
 
-    base_h = 0.09 * ui.combo_config.scale
-    base_w = base_h * (310 / 80) * 7.183
-    h, w = transform_fixed_size(base_h, base_w)
+    h, w = FixedUiLayout.judgment_h, FixedUiLayout.judgment_w
     a = ui.judgment_config.alpha * unlerp_clamped(draw_time, draw_time + 0.064, time())
     s = unlerp_clamped(draw_time, draw_time + 0.064, time())
     layout = layout_combo_label(screen_center, w=w * s / 2, h=h * s / 2)
-    ActiveSkin.judgment.get_sprite(judgment_type=judgment, windows=windows, accuracy=accuracy).draw(
-        quad=layout, z=get_z_alt(LAYER_JUDGMENT).tuple, a=a
-    )
+    sprite.draw(quad=layout, z=get_z_alt(LAYER_JUDGMENT).tuple, a=a)
 
 
-def draw_judgment_accuracy(judgment: Judgment, accuracy: float, windows: SekaiWindow, wrong_way: bool):
+def draw_judgment_accuracy(sprite: Sprite):
     if Options.hide_ui >= 2:
         return
     if not ActiveSkin.accuracy_warning.available:
@@ -514,12 +538,7 @@ def draw_judgment_accuracy(judgment: Judgment, accuracy: float, windows: SekaiWi
 
     a = ui.judgment_config.alpha
     layout = FixedUiLayout.judgment_accuracy
-    ActiveSkin.accuracy_warning.get_sprite(
-        judgment=judgment,
-        windows=windows.perfect,
-        accuracy=accuracy,
-        wrong_way=wrong_way,
-    ).draw(quad=layout, z=LAYER_JUDGMENT, a=a)
+    sprite.draw(quad=layout, z=LAYER_JUDGMENT, a=a)
 
 
 def draw_damage_flash(draw_time: float):
