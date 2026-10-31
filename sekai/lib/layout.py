@@ -448,6 +448,134 @@ def blend_stage_transform_over_elevation(
     )
 
 
+class ElevationProjectionPreparation(Record):
+    """Camera terms shared by stage and height projections within one draw."""
+
+    w_scale: float
+    h_scale: float
+    tilt: float
+    tilt_factor: float
+    cs: float
+    sn: float
+    amount_limit: float
+    shift_factor: float
+    travel: float
+    width: float
+    center_judge_y: float
+    pivot: Vec2
+
+    def prepare(self, camera: LayoutTransform):
+        self.w_scale = camera.w_scale
+        self.h_scale = camera.h_scale
+        self.tilt = camera.stage_tilt
+        self.tilt_factor = 1.0 if LevelConfig.revision >= EngineRevision.APPARENT_ELEVATION else self.tilt
+        self.cs = cos(camera.rotate)
+        self.sn = sin(camera.rotate)
+        if self.tilt > 0:
+            self.amount_limit = -camera.h_scale / self.tilt
+        self.shift_factor = (1 - self.tilt) * STAGE_WIDTH_MID - self.tilt * camera.t / camera.h_scale
+        self.travel = approach_at_tilt(1.0, camera.stage_tilt)
+        self.width = width_factor_at_tilt(self.travel, camera.stage_tilt)
+        base_t = Layout.field_h * FIELD_T_FACTOR
+        base_h = Layout.field_h * FIELD_B_FACTOR - base_t
+        self.center_judge_y = camera.h_scale * (self.travel + base_t / base_h)
+        self.pivot @= stage_rotation_pivot(camera, self.travel)
+
+    def at(self, elevation: float) -> StageScreenTransform:
+        amount = elevation * self.w_scale * self.tilt_factor
+        if self.tilt > 0:
+            amount = min(amount, self.amount_limit)
+        scale_delta = amount * self.tilt / self.h_scale
+        shift = amount * self.shift_factor
+        return StageScreenTransform(
+            a00=1 + scale_delta * self.sn * self.sn,
+            a01=scale_delta * self.sn * self.cs,
+            a02=shift * self.sn,
+            a10=scale_delta * self.sn * self.cs,
+            a11=1 + scale_delta * self.cs * self.cs,
+            a12=shift * self.cs,
+            elevation=amount / self.w_scale / self.tilt_factor if self.tilt_factor > 0 else 0.0,
+        )
+
+
+class StageTransformPreparation(Record):
+    """Stage terms before height-dependent projection."""
+
+    sr: float
+    cs: float
+    sn: float
+    judge_center: Vec2
+    offset: Vec2
+
+    def prepare(self, camera: LayoutTransform, params: StageTransformParams, shared: ElevationProjectionPreparation):
+        self.sr = params.stage_rotate
+        self.cs = cos(params.stage_rotate)
+        self.sn = sin(params.stage_rotate)
+        self.judge_center @= Vec2(
+            params.mask_lane * shared.width * camera.w_scale + camera.x_translate,
+            shared.travel * camera.h_scale + camera.t,
+        ).rotate(-camera.rotate)
+        self.offset @= Vec2(
+            params.x_lane_translate * camera.w_scale,
+            params.y_lane_translate * camera.w_scale - params.center_weight * shared.center_judge_y,
+        ).rotate(-camera.rotate)
+
+    def at(self, projection: StageScreenTransform, unprojected_pivot: Vec2) -> StageTransform:
+        judge_center = projection.apply(self.judge_center)
+        pivot = projection.apply(unprojected_pivot)
+        dx = judge_center.x - pivot.x
+        dy = judge_center.y - pivot.y
+        tx = self.offset.x + (1 - self.cs) * dx - self.sn * dy
+        ty = self.offset.y + (1 - self.cs) * dy + self.sn * dx
+        return StageTransform(sr=self.sr, px=pivot.x, py=pivot.y, tx=tx, ty=ty, projection=projection)
+
+
+class NoteElevationPreparation(Record):
+    """Endpoint stages and attachment height rules for one draw."""
+
+    head: StageTransformPreparation
+    tail: StageTransformPreparation
+    attached: bool
+    time_parent: bool
+    frac: float
+    effective_elevation: float
+    head_elevation: float
+    tail_elevation: float
+
+    def at(self, projection: ElevationProjectionPreparation, elevation: float) -> StageTransform:
+        head_elevation = elevation
+        tail_elevation = elevation
+        if self.attached and self.time_parent:
+            delta = elevation - self.effective_elevation
+            head_elevation = self.head_elevation + delta
+            tail_elevation = self.tail_elevation + delta
+        result = self.head.at(projection.at(head_elevation), projection.pivot)
+        if self.attached:
+            result @= blend_stage_transform(
+                result,
+                self.tail.at(projection.at(tail_elevation), projection.pivot),
+                self.frac,
+            )
+        return result
+
+
+class ElevationTransformPreparation(Record):
+    """Lazily prepared state shared by connector sampling and emission."""
+
+    ready: bool
+    projection: ElevationProjectionPreparation
+    head: NoteElevationPreparation
+    tail: NoteElevationPreparation
+
+    def at(self, interp_frac: float, elevation_frac: float) -> StageTransform:
+        elevation = lerp(self.head.effective_elevation, self.tail.effective_elevation, elevation_frac)
+        return blend_stage_transform(
+            self.head.at(self.projection, elevation),
+            self.tail.at(self.projection, elevation),
+            interp_frac,
+        )
+
+
 class NoteStageParams(Record):
     head: StageTransformParams
     tail: StageTransformParams

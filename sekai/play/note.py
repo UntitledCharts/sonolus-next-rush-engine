@@ -37,9 +37,12 @@ from sekai.lib.ease import EaseType, ease
 from sekai.lib.layout import (
     IDENTITY_STAGE_SCREEN_TRANSFORM,
     DynamicLayout,
+    ElevationProjectionPreparation,
     FlickDirection,
     Hitbox,
     Layout,
+    LayoutTransform,
+    NoteElevationPreparation,
     NoteStageParams,
     StageTransform,
     StageTransformParams,
@@ -1283,6 +1286,28 @@ class BaseNote(PlayArchetype):
             frac = self.head_ease_frac if head.beat == tail.beat else self.attach_eased_frac
             return lerp(head._basic_transform_params(t).elevation, tail._basic_transform_params(t).elevation, frac)
         return self._basic_transform_params(t).elevation
+
+    def prepare_elevation_transform(
+        self, camera: LayoutTransform, shared: ElevationProjectionPreparation, result: NoteElevationPreparation
+    ):
+        result.attached = self.is_attached
+        if self.is_attached:
+            head = self.attach_head_ref.get()
+            tail = self.attach_tail_ref.get()
+            head_params = head._basic_transform_params()
+            tail_params = tail._basic_transform_params()
+            result.head.prepare(camera, head_params, shared)
+            result.tail.prepare(camera, tail_params, shared)
+            result.time_parent = head.beat != tail.beat
+            result.frac = self.attach_eased_frac
+            result.head_elevation = head_params.elevation
+            result.tail_elevation = tail_params.elevation
+            elevation_frac = self.attach_eased_frac if result.time_parent else self.head_ease_frac
+            result.effective_elevation = lerp(head_params.elevation, tail_params.elevation, elevation_frac)
+        else:
+            params = self._basic_transform_params()
+            result.head.prepare(camera, params, shared)
+            result.effective_elevation = params.elevation
 
     def stage_transform_at_elevation(self, elevation: float, t: float | None = None) -> StageTransform:
         camera = current_layout_transform() if t is None else camera_layout_transform_at_time(t)

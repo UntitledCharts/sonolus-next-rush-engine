@@ -9,6 +9,7 @@ from sonolus.script.interval import Interval, lerp
 from sonolus.script.particle import ParticleHandle
 from sonolus.script.runtime import input_offset, offset_adjusted_time, time
 from sonolus.script.timing import beat_to_time
+from sonolus.script.values import alloc
 
 from sekai.debug import DISABLE_NOTES
 from sekai.lib import archetype_names
@@ -53,7 +54,12 @@ from sekai.lib.connector import (
 )
 from sekai.lib.ease import EaseType, is_in_step_ease, safe_unlerp_clamped
 from sekai.lib.initialization import schedule_connector_sfx_after_notes
-from sekai.lib.layout import StageTransform, blend_stage_transform
+from sekai.lib.layout import (
+    ElevationTransformPreparation,
+    StageTransform,
+    blend_stage_transform,
+    current_layout_transform,
+)
 from sekai.lib.note import NoteKind, draw_connector_hitbox_overlay, draw_slide_note_head
 from sekai.lib.options import Options
 from sekai.lib.stage import VisualMask, masked_note_extents_by_limits
@@ -399,13 +405,21 @@ class Connector(PlayArchetype):
                 head_ease_frac = 0.0
                 tail_ease_frac = 1.0
 
+            elevation_preparation = alloc(ElevationTransformPreparation)
+            elevation_preparation.ready = False
+
             def elevation_transform(interp_frac: float, elevation_frac: float) -> StageTransform:
-                elevation = lerp(head.effective_elevation(), tail.effective_elevation(), elevation_frac)
-                return blend_stage_transform(
-                    head.stage_transform_at_elevation(elevation),
-                    tail.stage_transform_at_elevation(elevation),
-                    interp_frac,
-                )
+                if not elevation_preparation.ready:
+                    camera = current_layout_transform()
+                    elevation_preparation.projection.prepare(camera)
+                    head.prepare_elevation_transform(
+                        camera, elevation_preparation.projection, elevation_preparation.head
+                    )
+                    tail.prepare_elevation_transform(
+                        camera, elevation_preparation.projection, elevation_preparation.tail
+                    )
+                    elevation_preparation.ready = True
+                return elevation_preparation.at(interp_frac, elevation_frac)
 
             draw_connector(
                 kind=self.kind,
