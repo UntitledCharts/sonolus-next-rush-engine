@@ -28,7 +28,6 @@ from sekai.lib.connector import (
     draw_connector,
     draw_connector_slot_glow_effect,
     get_connector_alpha_frac,
-    get_connector_alpha_option,
     get_connector_base_kind,
     get_connector_fractions,
     get_connector_interp_frac,
@@ -134,7 +133,9 @@ class WatchConnector(WatchArchetype):
             and head.elevation == tail.elevation
         )
         self.kind = self.segment_head.segment_kind
-        self.render_info = get_connector_render_info(self.kind, self.segment_head.segment_layer)
+        self.render_info = get_connector_render_info(
+            self.kind, self.segment_head.segment_layer, self.segment_head.target_time, self.segment_head.lane
+        )
         self.ease_type = head.connector_ease
         self.visual_active_interval.start = min(head.target_time, tail.target_time)
         self.visual_active_interval.end = max(head.target_time, tail.target_time)
@@ -236,7 +237,7 @@ class WatchConnector(WatchArchetype):
                 if time() >= active_tail_end:
                     return
             self.draw_fake_damage_head()
-            if get_connector_alpha_option(self.kind, base_kind=self.render_info.base_kind) <= 0:
+            if self.render_info.alpha <= 0:
                 return
             head_note_alpha = head.visual_note_alpha
             tail_note_alpha = tail.visual_note_alpha

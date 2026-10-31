@@ -688,16 +688,20 @@ def get_connector_quality_option(kind: ConnectorKind, *, base_kind: BaseConnecto
 
 
 class ConnectorRenderInfo(Record):
-    """Immutable sprite selection and integer depth inputs prepared after skin initialization."""
+    """Immutable drawing choices prepared after skin initialization."""
 
     base_kind: BaseConnectorKind
     normal_sprite: Sprite
     active_sprite: Sprite
-    depth_layer: Layer
-    normal_depth_order: int
+    z_normal: ZIndexes
+    active_z4: float
+    alpha: float
+    quality: float
 
 
-def get_connector_render_info(kind: ConnectorKind, layer: ConnectorLayer) -> ConnectorRenderInfo:
+def get_connector_render_info(
+    kind: ConnectorKind, layer: ConnectorLayer, target_time: float = 0.0, lane: float = 0.0
+) -> ConnectorRenderInfo:
     normal_sprite = Sprite(-1)
     active_sprite = Sprite(-1)
     base_kind = get_connector_base_kind(kind)
@@ -737,12 +741,18 @@ def get_connector_render_info(kind: ConnectorKind, layer: ConnectorLayer) -> Con
         base_kind=base_kind,
         normal_sprite=normal_sprite,
         active_sprite=active_sprite,
-        depth_layer=Layer(0, 0),
-        normal_depth_order=0,
+        z_normal=ZIndexes(0, 0, target_time, 0),
+        active_z4=0,
+        alpha=get_connector_alpha_option(kind, base_kind=base_kind),
+        quality=get_connector_quality_option(kind, base_kind=base_kind),
     )
     if base_kind != ConnectorKind.NONE:
-        result.depth_layer = get_connector_depth_layer(base_kind, layer)
-        result.normal_depth_order = get_connector_depth_order(base_kind)
+        depth_layer = get_connector_depth_layer(base_kind, layer)
+        normal_depth_order = get_connector_depth_order(base_kind)
+        result.z_normal = get_z(depth_layer, lane=lane, etc=normal_depth_order)
+        result.z_normal.z3 = target_time
+        # Active depth differs only in z4; do not store a second full ZIndexes.
+        result.active_z4 = get_z(depth_layer, lane=lane, etc=normal_depth_order - 1).z4
     return result
 
 
@@ -808,20 +818,23 @@ def draw_connector(
         case _:
             assert_never(presentation)
 
-    if Options.disable_fake_notes and is_fake_connector(kind):
-        return
-
     if head_note_alpha <= 0 and tail_note_alpha <= 0:
         return
 
     if render_info is None:
         if kind == ConnectorKind.NONE:
             return
-        render_info = get_connector_render_info(kind, layer)
+        render_info = get_connector_render_info(kind, layer, segment_head_target_time, segment_head_lane)
     base_kind = render_info.base_kind
     normal_sprite = render_info.normal_sprite
     active_sprite = render_info.active_sprite
     if base_kind == ConnectorKind.NONE:
+        return
+    if Options.disable_fake_notes and base_kind in {
+        ConnectorKind.FAKE_ACTIVE_NORMAL,
+        ConnectorKind.FAKE_ACTIVE_CRITICAL,
+        ConnectorKind.FAKE_DAMAGE,
+    }:
         return
 
     match base_kind:
@@ -878,25 +891,12 @@ def draw_connector(
     if time() >= tail_target_time and not bypass_tail_target_time_check:
         return
 
-    z_normal = +ZIndexes
+    z_normal = +render_info.z_normal
+    z_normal.z3 -= time()
     z_active = +ZIndexes
-    z_normal @= get_z(
-        render_info.depth_layer,
-        time=segment_head_target_time,
-        lane=segment_head_lane,
-        etc=render_info.normal_depth_order,
-        invert_time=True,
-    )
+    z_active @= z_normal
     if visual_state == ConnectorVisualState.ACTIVE and active_sprite.is_available:
-        z_active @= get_z(
-            render_info.depth_layer,
-            time=segment_head_target_time,
-            lane=segment_head_lane,
-            etc=render_info.normal_depth_order - 1,
-            invert_time=True,
-        )
-    else:
-        z_active @= z_normal
+        z_active.z4 = render_info.active_z4
 
     match presentation:
         case SegmentPresentation.DEFAULT:
@@ -966,6 +966,8 @@ def draw_connector(
                     elevation_transform=elevation_transform,
                     elevation_start_frac=0.0 if first_piece else split_frac,
                     elevation_end_frac=1.0 if last_piece else split_frac,
+                    alpha_option=render_info.alpha,
+                    quality=render_info.quality,
                 )
         case SegmentPresentation.FULL_SCREEN:
             if head_transform is not None and tail_transform is not None:
@@ -985,6 +987,7 @@ def draw_connector(
                 head_alpha=head_alpha,
                 tail_target_time=tail_target_time,
                 tail_alpha=tail_alpha,
+                alpha_option=render_info.alpha,
             )
         case _:
             assert_never(presentation)
@@ -2084,6 +2087,8 @@ def draw_connector_default(
     elevation_start_frac: float = 0.0,
     elevation_end_frac: float = 1.0,
     base_kind: BaseConnectorKind | None = None,
+    alpha_option: float | None = None,
+    quality: float | None = None,
 ):
     start_visual_progress = clamp(head_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
     end_visual_progress = clamp(tail_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
@@ -2122,7 +2127,8 @@ def draw_connector_default(
         return
     start_alpha = lerp(head_alpha, tail_alpha, start_frac)
     end_alpha = lerp(head_alpha, tail_alpha, end_frac)
-    alpha_option = get_connector_alpha_option(kind, base_kind=base_kind)
+    if alpha_option is None:
+        alpha_option = get_connector_alpha_option(kind, base_kind=base_kind)
     if alpha_option <= 0 or max(start_alpha, end_alpha) <= 0:
         return
     if not elevation_dynamic and connector_is_off_screen(
@@ -2158,7 +2164,8 @@ def draw_connector_default(
     constant_transform = has_transform and transforms_equal
     heterogeneous_endpoints = (has_transform and not constant_transform) or (mask_enabled and not same_mask_stage)
     geometry_detail = 20.0
-    quality = get_connector_quality_option(kind, base_kind=base_kind)
+    if quality is None:
+        quality = get_connector_quality_option(kind, base_kind=base_kind)
     circular_fracs = alloc(VarArray[float, Dim[128]])
     circular_fracs.clear()
     if ease_over_elevation and quality > 0:
@@ -2495,10 +2502,13 @@ def draw_connector_full_screen(
     tail_target_time: float,
     tail_alpha: float,
     base_kind: BaseConnectorKind | None = None,
+    alpha_option: float | None = None,
 ):
     judge_frac = safe_unlerp_clamped(head_target_time, tail_target_time, time())
     judge_alpha = lerp(head_alpha, tail_alpha, judge_frac)
-    base_a = clamp(get_alpha(time()) * judge_alpha * get_connector_alpha_option(kind, base_kind=base_kind), 0, 1)
+    if alpha_option is None:
+        alpha_option = get_connector_alpha_option(kind, base_kind=base_kind)
+    base_a = clamp(get_alpha(time()) * judge_alpha * alpha_option, 0, 1)
     if base_a > 0:
         draw_connector_quad(screen(), visual_state, normal_sprite, active_sprite, z_normal, z_active, base_a)
 
