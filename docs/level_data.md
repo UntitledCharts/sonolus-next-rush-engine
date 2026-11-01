@@ -173,7 +173,14 @@ A transform applied to a stage.
 
 * **stage (ref[Stage])**: A reference to the **Stage** entity this event belongs to.
 * **#BEAT (float)**
-* **rotate (float)**: Rotation of the stage in degrees about its default judge-line center (the stage's pivot `yOffset` does not move the rotation center). Positive values match the camera `rotate` direction. Defaults to 0.
+* **rotate (float)**: Rotation of the stage in degrees about its `rotationCenter`. Positive values match the camera `rotate` direction. Defaults to 0.
+* **rotationCenter (StageRotationCenter)**: The point the stage rotates about. Defaults to MASK_CENTER. Takes on one of the following values:
+  * MASK_CENTER = 0
+  * STAGE_CENTER = 1
+  * SCREEN_CENTER = 2
+  * VANISHING_POINT = 3
+* **rotationCenterXOffset (float)**: Horizontal offset of the rotation center, in the same units as `xLaneTranslate`. Defaults to 0.
+* **rotationCenterYOffset (float)**: Vertical offset of the rotation center, in the same units as `yLaneTranslate`. Defaults to 0.
 * **xLaneTranslate (float)**: Horizontal translation of the stage, in lane-width units. The direction respects the camera rotation and the amount respects the camera zoom. Defaults to 0.
 * **yLaneTranslate (float)**: Vertical translation of the stage, in the same lane-width units as `xLaneTranslate` (positive moves the stage up the screen, in the camera's rotated frame). Defaults to 0.
 * **elevation (float)**: Elevation of the stage before its rotation and translation, in lane widths. Defaults to 0.

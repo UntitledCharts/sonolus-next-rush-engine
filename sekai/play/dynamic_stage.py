@@ -20,6 +20,7 @@ from sekai.lib import archetype_names
 from sekai.lib.baseevent import BaseEvent, init_event_list
 from sekai.lib.ease import EaseType
 from sekai.lib.layout import (
+    StageRotationCenter,
     StageTransform,
     StageTransformAnchor,
     ZoomVerticalAlign,
@@ -100,6 +101,9 @@ class StageTransformChange(PlayArchetype, BaseEvent):
     y_lane_translate: float = imported(name="yLaneTranslate")
     elevation: float = imported()
     anchor: StageTransformAnchor = imported(name="anchor")
+    rotation_center: StageRotationCenter = imported(name="rotationCenter")
+    rotation_center_x_offset: float = imported(name="rotationCenterXOffset")
+    rotation_center_y_offset: float = imported(name="rotationCenterYOffset")
     ease: EaseType = imported()
     next_ref: EntityRef[StageTransformChange] = imported(name="next")
 
@@ -114,6 +118,7 @@ class StageTransformChange(PlayArchetype, BaseEvent):
         if Options.mirror:
             self.rotate *= -1
             self.x_lane_translate *= -1
+            self.rotation_center_x_offset *= -1
 
     def spawn_order(self) -> float:
         return 1e8

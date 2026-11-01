@@ -16,7 +16,7 @@ from sonolus.script.timing import beat_to_bpm, beat_to_time
 from sekai.lib import archetype_names
 from sekai.lib.baseevent import BaseEvent, init_event_list
 from sekai.lib.ease import EaseType
-from sekai.lib.layout import StageTransformAnchor, ZoomVerticalAlign, preempt_time
+from sekai.lib.layout import StageRotationCenter, StageTransformAnchor, ZoomVerticalAlign, preempt_time
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
@@ -73,6 +73,9 @@ class PreviewStageTransformChange(PreviewArchetype, BaseEvent):
     y_lane_translate: float = imported(name="yLaneTranslate")
     elevation: float = imported()
     anchor: StageTransformAnchor = imported(name="anchor")
+    rotation_center: StageRotationCenter = imported(name="rotationCenter")
+    rotation_center_x_offset: float = imported(name="rotationCenterXOffset")
+    rotation_center_y_offset: float = imported(name="rotationCenterYOffset")
     ease: EaseType = imported()
     next_ref: EntityRef[PreviewStageTransformChange] = imported(name="next")
 
@@ -86,6 +89,7 @@ class PreviewStageTransformChange(PreviewArchetype, BaseEvent):
         if Options.mirror:
             self.rotate *= -1
             self.x_lane_translate *= -1
+            self.rotation_center_x_offset *= -1
 
 
 class PreviewDynamicStage(PreviewArchetype):
