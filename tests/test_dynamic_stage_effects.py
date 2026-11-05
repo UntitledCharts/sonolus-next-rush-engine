@@ -175,6 +175,11 @@ class MaskedEffectTests(unittest.TestCase):
             mask_lane=props.lane,
             center_weight=props.center_weight,
             elevation=props.elevation + offset,
+            rotation_center=layout.StageRotationCenter.MASK_CENTER,
+            next_rotation_center=layout.StageRotationCenter.MASK_CENTER,
+            rotation_center_progress=0,
+            rotation_center_x_offset=0,
+            rotation_center_y_offset=0,
         )
         fake = SimpleNamespace(
             stage_ref=SimpleNamespace(index=1, get=lambda: None),

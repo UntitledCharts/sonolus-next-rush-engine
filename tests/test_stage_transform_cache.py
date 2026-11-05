@@ -95,6 +95,11 @@ class StageTransformCacheTests(unittest.TestCase):
                                     props.y_lane_translate = -index * 0.2
                                     props.center_weight = index * 0.5
                                     props.elevation = elevation
+                                    props.rotation_center.start = list(layout.StageRotationCenter)[index]
+                                    props.rotation_center.end = list(layout.StageRotationCenter)[-index - 1]
+                                    props.rotation_center.progress = 0.35
+                                    props.rotation_center_x_offset = 0.2 * index
+                                    props.rotation_center_y_offset = -0.1 * index
                                     stage: Any = SimpleNamespace(
                                         props=+stage_lib.StageSharedProps,
                                         draw_props=+stage_lib.StageProps,
