@@ -640,6 +640,11 @@ class WatchBaseNote(WatchArchetype):
             result.mask_lane = props.lane
             result.center_weight = props.center_weight
             result.elevation += props.elevation
+            result.rotation_center = props.rotation_center.start
+            result.next_rotation_center = props.rotation_center.end
+            result.rotation_center_progress = props.rotation_center.progress
+            result.rotation_center_x_offset = props.rotation_center_x_offset
+            result.rotation_center_y_offset = props.rotation_center_y_offset
         return result
 
     def effective_elevation(self, t: float | None = None) -> float:
@@ -777,6 +782,11 @@ class WatchBaseNote(WatchArchetype):
                 props.lane,
                 props.center_weight,
                 props.elevation + self.elevation,
+                props.rotation_center.start,
+                props.rotation_center.end,
+                props.rotation_center.progress,
+                props.rotation_center_x_offset,
+                props.rotation_center_y_offset,
             )
         elif self.elevation != 0.0:
             result @= compute_stage_transform(

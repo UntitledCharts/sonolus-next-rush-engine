@@ -107,6 +107,13 @@ class StageTransformAnchor(IntEnum):
     CENTER = 1
 
 
+class StageRotationCenter(IntEnum):
+    MASK_CENTER = 0
+    STAGE_CENTER = 1
+    SCREEN_CENTER = 2
+    VANISHING_POINT = 3
+
+
 @level_data
 class UIMargin:
     life_bar_x: float
@@ -321,6 +328,96 @@ def stage_rotation_pivot(camera: LayoutTransform, judge_depth: float) -> Vec2:
     ).rotate(-camera.rotate)
 
 
+def known_rotation_center(center: StageRotationCenter) -> StageRotationCenter:
+    """Read an unknown rotation center as the mask center."""
+    result = StageRotationCenter.MASK_CENTER
+    if StageRotationCenter.STAGE_CENTER <= center <= StageRotationCenter.VANISHING_POINT and center == floor(center):
+        result = center
+    return result
+
+
+def rotation_center_fixed_point(
+    camera: LayoutTransform, travel: float, center_lift: float, anchor_weight: float, center: StageRotationCenter
+) -> Vec2:
+    """Return a rotation center on lane 0's axis that ignores elevation."""
+    y = travel * camera.h_scale + camera.t
+    if center == StageRotationCenter.SCREEN_CENTER:
+        # Where the CENTER anchor puts the judge line, with the anchor's own shift undone.
+        y -= (1 - anchor_weight) * center_lift
+    elif center == StageRotationCenter.VANISHING_POINT:
+        # Where the lanes converge, held below the minimum tilt for extending the stage.
+        vanish_tilt = max(camera.stage_tilt, STAGE_TILT_VANISH_MIN)
+        y = -(1 - vanish_tilt) * STAGE_WIDTH_MID / vanish_tilt * camera.h_scale + camera.t
+    return Vec2(camera.x_translate, y).rotate(-camera.rotate)
+
+
+class RotationCenterTerms(Record):
+    """A rotation center as `mask_weight * projection(mask) + fixed`."""
+
+    mask_weight: float
+    mask: Vec2
+    fixed: Vec2
+
+    def at(self, projection: StageScreenTransform) -> Vec2:
+        result = +Vec2
+        if self.mask_weight == 1.0:
+            result @= projection.apply(self.mask) + self.fixed
+        elif self.mask_weight == 0.0:
+            result @= self.fixed
+        else:
+            result @= projection.apply(self.mask) * self.mask_weight + self.fixed
+        return result
+
+
+def rotation_center_terms(
+    camera: LayoutTransform,
+    travel: float,
+    width: float,
+    mask_lane: float,
+    start: StageRotationCenter,
+    end: StageRotationCenter,
+    progress: float,
+    x_offset: float,
+    y_offset: float,
+    center_lift: float,
+    anchor_weight: float,
+) -> RotationCenterTerms:
+    """Blend the rotation centers of two transform events by the transform progress."""
+    start = known_rotation_center(start)
+    end = known_rotation_center(end)
+    start_mask = start == StageRotationCenter.MASK_CENTER
+    end_mask = end == StageRotationCenter.MASK_CENTER
+    mask_weight = 0.0
+    fixed = +Vec2
+    if start == end:
+        if start_mask:
+            mask_weight = 1.0
+        else:
+            fixed @= rotation_center_fixed_point(camera, travel, center_lift, anchor_weight, start)
+    elif start_mask:
+        mask_weight = 1.0 - progress
+        fixed @= rotation_center_fixed_point(camera, travel, center_lift, anchor_weight, end) * progress
+    elif end_mask:
+        mask_weight = progress
+        fixed @= rotation_center_fixed_point(camera, travel, center_lift, anchor_weight, start) * (1.0 - progress)
+    else:
+        fixed @= lerp(
+            rotation_center_fixed_point(camera, travel, center_lift, anchor_weight, start),
+            rotation_center_fixed_point(camera, travel, center_lift, anchor_weight, end),
+            progress,
+        )
+    if x_offset != 0.0 or y_offset != 0.0:
+        fixed @= fixed + Vec2(x_offset * camera.w_scale, y_offset * camera.w_scale).rotate(-camera.rotate)
+    return RotationCenterTerms(
+        mask_weight=mask_weight,
+        mask=Vec2(
+            mask_lane * width * camera.w_scale + camera.x_translate,
+            travel * camera.h_scale + camera.t,
+        ).rotate(-camera.rotate),
+        fixed=fixed,
+    )
+
+
 def compute_stage_transform(
     camera: LayoutTransform,
     stage_rotate: float,
@@ -329,18 +426,31 @@ def compute_stage_transform(
     mask_lane: float,
     center_weight: float = 0.0,
     elevation: float = 0.0,
+    rotation_center: StageRotationCenter = StageRotationCenter.MASK_CENTER,
+    next_rotation_center: StageRotationCenter = StageRotationCenter.MASK_CENTER,
+    rotation_center_progress: float = 0.0,
+    rotation_center_x_offset: float = 0.0,
+    rotation_center_y_offset: float = 0.0,
 ) -> StageTransform:
     travel = approach_at_tilt(1.0, camera.stage_tilt)
     width = width_factor_at_tilt(travel, camera.stage_tilt)
-    judge_center = Vec2(
-        mask_lane * width * camera.w_scale + camera.x_translate,
-        travel * camera.h_scale + camera.t,
-    ).rotate(-camera.rotate)
     projection = elevation_projection(camera, elevation)
-    judge_center @= projection.apply(judge_center)
     base_t = Layout.field_h * FIELD_T_FACTOR
     base_h = Layout.field_h * FIELD_B_FACTOR - base_t
     center_judge_y = camera.h_scale * (travel + base_t / base_h)
+    center = rotation_center_terms(
+        camera,
+        travel,
+        width,
+        mask_lane,
+        rotation_center,
+        next_rotation_center,
+        rotation_center_progress,
+        rotation_center_x_offset,
+        rotation_center_y_offset,
+        center_judge_y,
+        center_weight,
+    ).at(projection)
     offset = Vec2(
         x_lane_translate * camera.w_scale,
         y_lane_translate * camera.w_scale - center_weight * center_judge_y,
@@ -348,8 +458,8 @@ def compute_stage_transform(
     pivot = projection.apply(stage_rotation_pivot(camera, travel))
     cs = cos(stage_rotate)
     sn = sin(stage_rotate)
-    dx = judge_center.x - pivot.x
-    dy = judge_center.y - pivot.y
+    dx = center.x - pivot.x
+    dy = center.y - pivot.y
     tx = offset.x + (1 - cs) * dx - sn * dy
     ty = offset.y + (1 - cs) * dy + sn * dx
     return StageTransform(sr=stage_rotate, px=pivot.x, py=pivot.y, tx=tx, ty=ty, projection=projection)
@@ -395,6 +505,11 @@ class StageTransformParams(Record):
     mask_lane: float
     center_weight: float
     elevation: float
+    rotation_center: StageRotationCenter
+    next_rotation_center: StageRotationCenter
+    rotation_center_progress: float
+    rotation_center_x_offset: float
+    rotation_center_y_offset: float
 
     def has_transform(self) -> bool:
         return (
@@ -417,6 +532,11 @@ def compute_stage_transform_at_elevation(
         params.mask_lane,
         params.center_weight,
         elevation,
+        params.rotation_center,
+        params.next_rotation_center,
+        params.rotation_center_progress,
+        params.rotation_center_x_offset,
+        params.rotation_center_y_offset,
     )
 
 
@@ -504,27 +624,36 @@ class StageTransformPreparation(Record):
     sr: float
     cs: float
     sn: float
-    judge_center: Vec2
+    rotation_center: RotationCenterTerms
     offset: Vec2
 
     def prepare(self, camera: LayoutTransform, params: StageTransformParams, shared: ElevationProjectionPreparation):
         self.sr = params.stage_rotate
         self.cs = cos(params.stage_rotate)
         self.sn = sin(params.stage_rotate)
-        self.judge_center @= Vec2(
-            params.mask_lane * shared.width * camera.w_scale + camera.x_translate,
-            shared.travel * camera.h_scale + camera.t,
-        ).rotate(-camera.rotate)
+        self.rotation_center @= rotation_center_terms(
+            camera,
+            shared.travel,
+            shared.width,
+            params.mask_lane,
+            params.rotation_center,
+            params.next_rotation_center,
+            params.rotation_center_progress,
+            params.rotation_center_x_offset,
+            params.rotation_center_y_offset,
+            shared.center_judge_y,
+            params.center_weight,
+        )
         self.offset @= Vec2(
             params.x_lane_translate * camera.w_scale,
             params.y_lane_translate * camera.w_scale - params.center_weight * shared.center_judge_y,
         ).rotate(-camera.rotate)
 
     def at(self, projection: StageScreenTransform, unprojected_pivot: Vec2) -> StageTransform:
-        judge_center = projection.apply(self.judge_center)
+        center = self.rotation_center.at(projection)
         pivot = projection.apply(unprojected_pivot)
-        dx = judge_center.x - pivot.x
-        dy = judge_center.y - pivot.y
+        dx = center.x - pivot.x
+        dy = center.y - pivot.y
         tx = self.offset.x + (1 - self.cs) * dx - self.sn * dy
         ty = self.offset.y + (1 - self.cs) * dy + self.sn * dx
         return StageTransform(sr=self.sr, px=pivot.x, py=pivot.y, tx=tx, ty=ty, projection=projection)

@@ -44,6 +44,7 @@ from sekai.lib.layout import (
     Layout,
     LayoutTransform,
     ScoreGaugeType,
+    StageRotationCenter,
     StageScreenTransform,
     StageTransform,
     StageTransformAnchor,
@@ -248,6 +249,11 @@ def _stage_transform(props: StageProps | StageSharedProps, elevation_offset: flo
         props.lane,
         props.center_weight,
         props.elevation + elevation_offset,
+        props.rotation_center.start,
+        props.rotation_center.end,
+        props.rotation_center.progress,
+        props.rotation_center_x_offset,
+        props.rotation_center_y_offset,
     )
 
 
@@ -283,6 +289,9 @@ class StageProps(Record):
     y_lane_translate: float
     center_weight: float
     elevation: float
+    rotation_center: Transition[StageRotationCenter]
+    rotation_center_x_offset: float
+    rotation_center_y_offset: float
 
     def stage_transform(self, elevation_offset: float = 0.0) -> StageTransform:
         return _stage_transform(self, elevation_offset)
@@ -295,6 +304,11 @@ class StageProps(Record):
             mask_lane=self.lane,
             center_weight=self.center_weight,
             elevation=self.elevation + elevation_offset,
+            rotation_center=self.rotation_center.start,
+            next_rotation_center=self.rotation_center.end,
+            rotation_center_progress=self.rotation_center.progress,
+            rotation_center_x_offset=self.rotation_center_x_offset,
+            rotation_center_y_offset=self.rotation_center_y_offset,
         )
 
     def has_transform(self) -> bool:
@@ -316,6 +330,9 @@ class StageProps(Record):
             y_lane_translate=self.y_lane_translate,
             center_weight=self.center_weight,
             elevation=self.elevation,
+            rotation_center=self.rotation_center,
+            rotation_center_x_offset=self.rotation_center_x_offset,
+            rotation_center_y_offset=self.rotation_center_y_offset,
         )
 
     def draw(self, order: int):
@@ -365,6 +382,9 @@ class StageSharedProps(Record):
     y_lane_translate: float
     center_weight: float
     elevation: float
+    rotation_center: Transition[StageRotationCenter]
+    rotation_center_x_offset: float
+    rotation_center_y_offset: float
 
     def stage_transform(self, elevation_offset: float = 0.0) -> StageTransform:
         return _stage_transform(self, elevation_offset)
@@ -430,6 +450,11 @@ class InputGeometryContext(Record):
             props.lane,
             props.center_weight,
             props.elevation,
+            props.rotation_center.start,
+            props.rotation_center.end,
+            props.rotation_center.progress,
+            props.rotation_center_x_offset,
+            props.rotation_center_y_offset,
         )
         self.stages.append(StageInputGeometry(stage_index=stage.index, geometry=result))
         return result
@@ -517,6 +542,9 @@ class StageTransformChangeLike(Protocol):
     y_lane_translate: float
     anchor: StageTransformAnchor
     elevation: float
+    rotation_center: StageRotationCenter
+    rotation_center_x_offset: float
+    rotation_center_y_offset: float
     ease: EaseType
     next_ref: EntityRef
     prev_ref: EntityRef
@@ -960,6 +988,11 @@ def update_stage_transform_props(
         result.y_lane_translate = transform_a.y_lane_translate
         result.elevation = transform_a.elevation
         result.center_weight = center_anchor_weight(transform_a.anchor)
+        result.rotation_center.start = transform_a.rotation_center
+        result.rotation_center.end = transform_a.rotation_center
+        result.rotation_center.progress = 0.0
+        result.rotation_center_x_offset = transform_a.rotation_center_x_offset
+        result.rotation_center_y_offset = transform_a.rotation_center_y_offset
         if transform_b_ref.index > 0:
             transform_b = get_event_as(transform_b_ref, _stage_transform_change_archetype())
             t_a = transform_a.time
@@ -972,6 +1005,14 @@ def update_stage_transform_props(
             result.center_weight = lerp(
                 center_anchor_weight(transform_a.anchor), center_anchor_weight(transform_b.anchor), p
             )
+            result.rotation_center.end = transform_b.rotation_center
+            result.rotation_center.progress = p
+            result.rotation_center_x_offset = lerp(
+                transform_a.rotation_center_x_offset, transform_b.rotation_center_x_offset, p
+            )
+            result.rotation_center_y_offset = lerp(
+                transform_a.rotation_center_y_offset, transform_b.rotation_center_y_offset, p
+            )
     elif transform_b_ref.index > 0:
         transform_b = get_event_as(transform_b_ref, _stage_transform_change_archetype())
         result.rotate = transform_b.rotate
@@ -979,6 +1020,11 @@ def update_stage_transform_props(
         result.y_lane_translate = transform_b.y_lane_translate
         result.elevation = transform_b.elevation
         result.center_weight = center_anchor_weight(transform_b.anchor)
+        result.rotation_center.start = transform_b.rotation_center
+        result.rotation_center.end = transform_b.rotation_center
+        result.rotation_center.progress = 0.0
+        result.rotation_center_x_offset = transform_b.rotation_center_x_offset
+        result.rotation_center_y_offset = transform_b.rotation_center_y_offset
 
 
 def get_stage_input_props(stage: DynamicStageLike, t: float) -> StageProps:

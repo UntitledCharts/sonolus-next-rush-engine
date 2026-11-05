@@ -14,7 +14,7 @@ from sonolus.script.timing import TimescaleEase
 
 from sekai.lib.connector import ConnectorKind, ConnectorLayer, SegmentPresentation, get_connector_base_kind
 from sekai.lib.ease import EaseType, ease_overshoot
-from sekai.lib.layout import FlickDirection, StageTransformAnchor, ZoomVerticalAlign
+from sekai.lib.layout import FlickDirection, StageRotationCenter, StageTransformAnchor, ZoomVerticalAlign
 from sekai.lib.level_config import EngineRevision
 from sekai.lib.note import NoteKind
 from sekai.lib.note_style import NoteStyle
@@ -157,6 +157,9 @@ class LevelStageTransformChange:
     anchor: StageTransformAnchor = StageTransformAnchor.DEFAULT
     ease: EaseType = EaseType.LINEAR
     elevation: float = 0.0
+    rotation_center: StageRotationCenter = StageRotationCenter.MASK_CENTER
+    rotation_center_x_offset: float = 0.0
+    rotation_center_y_offset: float = 0.0
 
 
 @dataclass
@@ -689,6 +692,9 @@ def _build_stage(level_stage: LevelStage) -> tuple[DynamicStage, list[PlayArchet
             y_lane_translate=tr.y_lane_translate,
             elevation=tr.elevation,
             anchor=tr.anchor,
+            rotation_center=tr.rotation_center,
+            rotation_center_x_offset=tr.rotation_center_x_offset,
+            rotation_center_y_offset=tr.rotation_center_y_offset,
             ease=tr.ease,
         )
         for tr in sorted(level_stage.transform_changes, key=lambda c: c.beat)

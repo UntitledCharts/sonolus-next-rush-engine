@@ -45,7 +45,7 @@ A camera change event. The presence of at least one **CameraChange** entity enab
 
 * **#BEAT (float)**
 * **lane (float)**: Horizontal camera position in stage lanes. Positive values pan the camera to the right (drawn objects shift left). Defaults to 0.
-* **size (float)**: Visible width of the field, in lanes (half-width). A `size` of 6 covers the full default stage; smaller values zoom in (e.g. `size=3` is 2x zoom). Defaults to 6.
+* **size (float)**: Visible width of the field, in lanes (half-width). A `size` of 6 covers the full default stage; smaller values zoom in (e.g. `size=3` is 2x zoom).
 * **zoom (float)**: Uniform zoom on top of the perspective field. `1` is no zoom, `2` is 2x zoomed in, values below `1` zoom out.
 * **zoomTargetLane (float)**: The lane that the zoom focuses on, **relative to `lane`**. `0` means the zoom expands around the camera's current center (the lane currently sitting at the judge line); positive values shift the focus right (in the lane direction), negative values shift it left. Defaults to 0.
 * **zoomTargetY (float)**: The vertical point mapped onto the anchor, expressed like a pivot `yOffset` (`0` at the judge line, positive moves up the stage along the approach curve). Defaults to 0.
@@ -173,7 +173,14 @@ A transform applied to a stage.
 
 * **stage (ref[Stage])**: A reference to the **Stage** entity this event belongs to.
 * **#BEAT (float)**
-* **rotate (float)**: Rotation of the stage in degrees about its default judge-line center (the stage's pivot `yOffset` does not move the rotation center). Positive values match the camera `rotate` direction. Defaults to 0.
+* **rotate (float)**: Rotation of the stage in degrees about its `rotationCenter`. Positive values match the camera `rotate` direction. Defaults to 0.
+* **rotationCenter (StageRotationCenter)**: The point the stage rotates about. Defaults to MASK_CENTER. Takes on one of the following values:
+  * MASK_CENTER = 0
+  * STAGE_CENTER = 1
+  * SCREEN_CENTER = 2
+  * VANISHING_POINT = 3
+* **rotationCenterXOffset (float)**: Horizontal offset of the rotation center, in the same units as `xLaneTranslate`. Defaults to 0.
+* **rotationCenterYOffset (float)**: Vertical offset of the rotation center, in the same units as `yLaneTranslate`. Defaults to 0.
 * **xLaneTranslate (float)**: Horizontal translation of the stage, in lane-width units. The direction respects the camera rotation and the amount respects the camera zoom. Defaults to 0.
 * **yLaneTranslate (float)**: Vertical translation of the stage, in the same lane-width units as `xLaneTranslate` (positive moves the stage up the screen, in the camera's rotated frame). Defaults to 0.
 * **elevation (float)**: Elevation of the stage before its rotation and translation, in lane widths. Defaults to 0.
