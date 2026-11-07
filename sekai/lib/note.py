@@ -1119,8 +1119,7 @@ def handle_note_particles(
         linear_particle = particles.get_linear(judgment)
         if component in (-1, 0) and linear_particle.is_available:
             pool_id = note_particle_pool(pool_family, 0)
-            # Existing particle packs author the airborne Aura around the note center.
-            # The skin's per-lane slot and glow sprites provide its width on the stage.
+            # Gen resources use the note center; per-lane Aura is handled separately.
             emit_particle(
                 linear_particle,
                 billboard(layout_linear_effect(lane, shear=0, y_offset=y_offset)),

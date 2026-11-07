@@ -24,10 +24,10 @@ LANE_COUNT = 254
 FLASH_POOL_START = 13 * 3
 LANE_POOL_START = FLASH_POOL_START + 2
 PARTICLE_POOL_COUNT = LANE_POOL_START + 4
-# Three render components per family: linear, circular/tick, and slot linear.
+# Gen uses centered linear/circular components; Aura uses per-lane slot linear.
 _POOL_LIMITS = Array(
     *(
-        12 if family in (8, 9) else 5 if family in (10, 11) else 6 if component == 1 else 12
+        12 if family in (8, 9) else 5 if family in (10, 11) else 6 if component in (0, 1) else 12
         for family in range(13)
         for component in range(3)
     ),

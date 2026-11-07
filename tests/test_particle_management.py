@@ -192,7 +192,7 @@ class CompiledParticleManagementTests(unittest.TestCase):
 
     def test_compiled_aura_recycles_individual_lanes_across_pages(self):
         runner = self.runner()
-        self.emit(runner, manager.note_particle_pool(0, 0), 16)
+        self.emit(runner, manager.note_particle_pool(0, 4), 16)
         assert runner.spawned == 16
         assert runner.destroyed == [1, 2, 3, 4]
 
@@ -200,7 +200,7 @@ class CompiledParticleManagementTests(unittest.TestCase):
         costs = []
         for count in (1, 8):
             runner = self.runner()
-            pool = manager.note_particle_pool(0, 0)
+            pool = manager.note_particle_pool(0, 4)
             self.emit(runner, pool, count)
             memory = runner.keepers[0][1]
             self.invoke(
@@ -233,23 +233,23 @@ class CompiledParticleManagementTests(unittest.TestCase):
         self.refresh(runner)
         assert sorted(runner.destroyed) == list(range(1, 15))
 
-    def test_real_flick_emissions_keep_center_aura_and_legacy_slot_particles(self):
+    def test_real_flick_emissions_keep_center_gen_and_per_lane_aura(self):
         runner = self.runner()
         for owner in range(7):
             self.schedule(runner, owner, size=6)
         self.start_queued(runner)
         assert Counter(kind for _, kind in runner.effects) == {2: 7, 3: 7, 4: 7, 5: 84, 7: 84}
         remaining = Counter(kind for handle, kind in runner.effects if handle not in runner.destroyed)
-        assert remaining == {2: 7, 3: 6, 4: 5, 5: 12, 7: 12}
+        assert remaining == {2: 6, 3: 6, 4: 5, 5: 12, 7: 12}
 
-    def test_real_twenty_four_lane_stage_keeps_one_center_aura(self):
+    def test_real_twenty_four_lane_stage_keeps_one_center_gen(self):
         runner = self.runner()
         self.schedule(runner, 1, size=12)
         self.start_queued(runner)
         assert Counter(kind for _, kind in runner.effects) == {2: 1, 3: 1, 4: 1, 5: 24, 7: 24}
         assert not runner.destroyed
 
-    def test_rebuilt_pack_uses_skin_slots_instead_of_duplicate_particles(self):
+    def test_missing_slot_particles_use_no_additional_particle_pages(self):
         runner = self.runner()
         runner.unavailable_particles.add(5)
         self.schedule(runner, 1, size=12)
@@ -257,7 +257,7 @@ class CompiledParticleManagementTests(unittest.TestCase):
         assert Counter(kind for _, kind in runner.effects) == {2: 1, 3: 1, 4: 1, 7: 24}
         assert not runner.destroyed
 
-    def test_aura_and_gen_have_one_page_for_wide_good_notes(self):
+    def test_centered_gen_components_have_one_page_for_wide_good_notes(self):
         from sonolus.script.debug import simulation_context
 
         from sekai.lib.note import iter_note_particle_pages
