@@ -28,7 +28,7 @@ from sonolus.script.vec import Vec2
 
 from sekai.lib.buckets import SLIDE_END_LOCKOUT_DURATION
 from sekai.lib.layout import DynamicLayout, Hitbox, HitboxTarget, segment_closeness_score
-from sekai.lib.note import NoteKind, is_head
+from sekai.lib.note import NoteKind, get_note_window, is_head
 from sekai.play import input_manager as manager
 from sekai.play.input_index import TapPriorityQuery, sort_input_notes
 
@@ -77,9 +77,13 @@ def reference_allocate(active, touches):
         for i, touch in enumerate(touches[: manager.INPUT_SLOTS]):
             if assigned[i]:
                 continue
+            candidates = []
             for j, ref in enumerate(active):
                 target = ref.get()
-                if target.captured_touch_id or touch.time not in target.unadjusted_input_interval:
+                if (
+                    target.captured_touch_id
+                    or not target.unadjusted_input_interval.start < touch.time < target.unadjusted_input_interval.end
+                ):
                     continue
                 if not target.hitbox.bounds.contains_point(touch.position):
                     continue
@@ -87,17 +91,28 @@ def reference_allocate(active, touches):
                     not other.get().is_trace_flick
                     and other.get().beat == target.beat
                     and not other.get().captured_touch_id
-                    and touch.time in other.get().unadjusted_input_interval
+                    and other.get().unadjusted_input_interval.start
+                    < touch.time
+                    < other.get().unadjusted_input_interval.end
                     and other.get().hitbox.bounds.contains_point(touch.position)
                     for other in active
                 ):
                     continue
-                score = (
-                    segment_closeness_score(touch.position, target.hitbox.target)
-                    + (1 - target.target_time) / manager.INPUT_SCORE_TIME_SCALE
-                )
-                if preferred[i] == -1 or score > scores[i]:
-                    scores[i], preferred[i] = score, j
+                segment = target.hitbox.target
+                axis = (segment.r - segment.l).normalize_or_zero()
+                center = (segment.l + segment.r) / 2
+                score = -(((touch.position - center).dot(axis)) ** 2)
+                high = touch.time - target.target_time in get_note_window(target.kind, False).great
+                candidates.append((target.target_time, score, j, high))
+            while len(candidates) > 1:
+                first, last = candidates[0], candidates[-1]
+                if first[0] == last[0]:
+                    discard_first = first[1] <= last[1]
+                else:
+                    discard_first = last[3] and not first[3]
+                candidates.pop(0 if discard_first else -1)
+            if candidates:
+                _, scores[i], preferred[i], _ = candidates[0]
         winners = [
             i
             for i in range(manager.INPUT_SLOTS)
@@ -195,7 +210,7 @@ class InputIndexTests(unittest.TestCase):
                         cast(Touch, touch), beat
                     )
 
-    def test_full_allocator_matches_previous_choices_and_lockouts(self):
+    def test_full_allocator_matches_judgment_priority_and_lockouts(self):
         rng = random.Random(277)
         with simulation_context():
             for case in range(32):
@@ -348,7 +363,12 @@ class InputIndexTests(unittest.TestCase):
                     row = {}
                     for ni in ordered:
                         target = registry[ni]
-                        if target.captured_touch_id or touch.time not in target.unadjusted_input_interval:
+                        if (
+                            target.captured_touch_id
+                            or not target.unadjusted_input_interval.start
+                            < touch.time
+                            < target.unadjusted_input_interval.end
+                        ):
                             continue
                         if not target.hitbox.bounds.contains_point(touch.position):
                             continue
@@ -462,7 +482,7 @@ class IdleInputTests(unittest.TestCase):
                         assign()
                     setattr(touch, flag, True)
                     assign()
-                assert registry[2].captured_touch_id == 1
+                assert registry[32 if assign is manager.preassign_taps else 2].captured_touch_id == 1
                 assert sum(target.captured_touch_id != 0 for target in registry.values()) == 1
                 assert [ref.index for ref in active] == sorted(registry, key=lambda i: registry[i].target_time)
 
@@ -605,6 +625,34 @@ class CompiledInputIndexTests(unittest.TestCase):
             (2, 128, 2, 64, 2, 0, False, 2, 5),
             (2, 128, 2, 127, 2, 0, True, 2, 130),
         ):
+            if probe_index == 2:
+                with simulation_context():
+                    specs = [
+                        {
+                            "beat": 1 if same_beat else (i * 31) % count if count == 128 else i,
+                            "target_time": 1 if shape >= 2 else 1 + (count - i if shape == 1 else i) / 512,
+                            "trace": i < traces,
+                            "captured": 0,
+                            "x": 0,
+                            "width": 1,
+                            "kind": NoteKind.NORM_TRACE_FLICK if i < traces else NoteKind.NORM_TAP,
+                            "interval": (0, 2),
+                        }
+                        for i in range(count)
+                    ]
+                    active, registry = make_notes(specs)
+                    inputs = [
+                        SimpleNamespace(
+                            id=i + 1,
+                            started=events == 0 or (events == 3 and i == 16),
+                            time=1,
+                            start_time=0.9,
+                            position=Vec2(0, 0),
+                        )
+                        for i in range(touches)
+                    ]
+                    reference_allocate(active, inputs)
+                    expected = sum(index * n.captured_touch_id for index, n in registry.items())
             archetype = payload["archetypes"][probe_index]
             runner = Interpreter()
             runner.blocks = {block: [0.0] * 32768 for block in PlayBlock}

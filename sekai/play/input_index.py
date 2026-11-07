@@ -88,7 +88,7 @@ class TapPriorityQuery(Record):
                 target = ref.get()
                 if target.is_trace_flick or target.captured_touch_id != 0:
                     continue
-                if touch.time not in target.unadjusted_input_interval:
+                if not target.unadjusted_input_interval.start < touch.time < target.unadjusted_input_interval.end:
                     continue
                 if target.hitbox.bounds.contains_point(touch.position):
                     if len(self.beats) > 0 and target.beat < self.beats.get_unchecked(len(self.beats) - 1):
@@ -126,9 +126,18 @@ INPUT_CANDIDATE_TOUCHES = 16
 class InputCandidate(Record):
     score: float
     note_index: int
+    priority: int
+    target_time: float
 
     def worse_than(self, other: InputCandidate) -> bool:
-        return self.score < other.score or (self.score == other.score and self.note_index > other.note_index)
+        if self.priority != other.priority:
+            return self.priority < other.priority
+        if self.target_time != other.target_time:
+            return self.target_time > other.target_time
+        return self.score < other.score or (
+            self.score == other.score
+            and (self.note_index < other.note_index if self.priority >= 2 else self.note_index > other.note_index)
+        )
 
 
 class InputCandidates(Record):
@@ -154,10 +163,10 @@ class InputCandidates(Record):
             child = hole * 2 + 1
         self.entries[base + hole] = value
 
-    def offer(self, touch_index: int, note_index: int, score: float):
+    def offer(self, touch_index: int, note_index: int, score: float, priority: int = 0, target_time: float = 0):
         base = touch_index * INPUT_CANDIDATE_TOUCHES
         count = self.counts[touch_index]
-        value = InputCandidate(score, note_index)
+        value = InputCandidate(score, note_index, priority, target_time)
         if count < self.limit:
             hole = count
             while hole > 0:

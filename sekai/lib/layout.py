@@ -2616,6 +2616,8 @@ def compute_hitbox(
     y_offset: float = 0.0,
     *,
     stage_transform: StageScreenTransform,
+    sekai_bounds: bool = False,
+    ignore_height: bool = False,
 ) -> Hitbox:
     tilt = transform.stage_tilt
     travel = approach_at_tilt(1 - y_offset, tilt)
@@ -2637,14 +2639,33 @@ def compute_hitbox(
     # Use the static-stage dimensions for both extents. Dynamic camera and stage transforms
     # move the resulting hitbox without changing the area in which the player can touch.
     up = horizontal.orthogonal()
-    upper_extent = 3.0 * Layout.w_scale
+    upper_extent = (3.5 / 1.19) * Layout.w_scale
     static_judgment_y = Layout.t + Layout.h_scale
     lower_extent = max(static_judgment_y - screen().b, 0.0)
     margin = horizontal * (leniency * lane_w)
-    bound_bl = target_l - margin - up * lower_extent
-    bound_br = target_r + margin - up * lower_extent
-    bound_tl = target_l - margin + up * upper_extent
-    bound_tr = target_r + margin + up * upper_extent
+    bound_l = target_l - margin
+    bound_r = target_r + margin
+    if sekai_bounds and leniency > 0 and lane - size >= -6 and lane + size <= 6 and y_offset == 0:
+        left = lane - size - leniency
+        right = lane + size + leniency
+        outer = 5.5 + 1.8 / 1.19
+        # Outside the first/last lane center, Sekai clamps the lane coordinate before note eligibility.
+        if left <= -5.5 <= right:
+            left = -outer
+        if left <= 5.5 <= right:
+            right = outer
+        bound_l @= stage_transform.apply(Vec2(max(-outer, left) * lane_w + transform.x_translate, note_y).rotate(rot))
+        bound_r @= stage_transform.apply(Vec2(min(outer, right) * lane_w + transform.x_translate, note_y).rotate(rot))
+    if ignore_height:
+        viewport = screen()
+        for corner in (viewport.bl, viewport.br, viewport.tl, viewport.tr):
+            distance = (corner - bound_l).dot(up)
+            upper_extent = max(upper_extent, distance)
+            lower_extent = max(lower_extent, -distance)
+    bound_bl = bound_l - up * lower_extent
+    bound_br = bound_r - up * lower_extent
+    bound_tl = bound_l + up * upper_extent
+    bound_tr = bound_r + up * upper_extent
     return Hitbox(
         target=HitboxTarget(l=target_l, r=target_r),
         bounds=Quad(bl=bound_bl, br=bound_br, tl=bound_tl, tr=bound_tr),
@@ -2663,6 +2684,8 @@ def compute_hitbox_at_time(
     y_offset: float = 0.0,
     *,
     stage_transform: StageScreenTransform,
+    sekai_bounds: bool = False,
+    ignore_height: bool = False,
 ) -> Hitbox:
     return compute_hitbox(
         camera_layout_transform_at_time(target_time),
@@ -2671,6 +2694,8 @@ def compute_hitbox_at_time(
         leniency,
         y_offset,
         stage_transform=stage_transform,
+        sekai_bounds=sekai_bounds,
+        ignore_height=ignore_height,
     )
 
 

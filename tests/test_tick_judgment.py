@@ -1,4 +1,4 @@
-"""Connected ticks follow OpenSekai; independent ticks keep the extended timing window."""
+"""Connected ticks follow Sekai; independent ticks keep the extended timing window."""
 
 import unittest
 from contextlib import ExitStack
@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from sonolus.script.archetype import EntityRef
+from sonolus.script.array import Dim
 from sonolus.script.bucket import Judgment
+from sonolus.script.containers import VarArray
 from sonolus.script.debug import simulation_context
 from sonolus.script.quad import Rect
 from sonolus.script.vec import Vec2
@@ -24,6 +26,8 @@ class TickHarness:
     is_trace = play.BaseNote.is_trace
     is_trace_flick = play.BaseNote.is_trace_flick
     is_slide_end_flick = play.BaseNote.is_slide_end_flick
+    is_friction_flick = play.BaseNote.is_friction_flick
+    uses_frame_miss = play.BaseNote.uses_frame_miss
     prepare_input_intervals = play.BaseNote.prepare_input_intervals
     update_sequential = play.BaseNote.update_sequential
     touch = play.BaseNote.touch
@@ -38,6 +42,16 @@ class TickHarness:
     fail_late = play.BaseNote.fail_late
     judge = play.BaseNote.judge
     post_judge = play.BaseNote.post_judge
+    handle_trace_input = play.BaseNote.handle_trace_input
+    handle_flick_input = play.BaseNote.handle_flick_input
+    handle_trace_flick_input = play.BaseNote.handle_trace_flick_input
+    flick_touch_index = play.BaseNote.flick_touch_index
+    register_flick_touch = play.BaseNote.register_flick_touch
+    record_flick_motion = play.BaseNote.record_flick_motion
+    finish_flick = play.BaseNote.finish_flick
+    judge_wrong_way = play.BaseNote.judge_wrong_way
+    check_direction_matches = play.BaseNote.check_direction_matches
+    check_touch_is_eligible_for_trace = play.BaseNote.check_touch_is_eligible_for_trace
 
     def __init__(self, *, kind=NoteKind.NORM_TICK, connected=True, attached=False):
         self.kind = kind
@@ -53,6 +67,11 @@ class TickHarness:
         self.pending_post_judge = False
         self.managing_despawn = False
         self.tick_pending = False
+        self.late_miss_pending = False
+        self.flick_touch_ids = +VarArray[int, Dim[8]]
+        self.flick_touch_states = 0
+        self.last_flick_input_frame = 0
+        self.best_touch_id = -1
         self.slide_end_input = False
         self.should_play_hit_effects = False
         self.best_touch_time = play.DEFAULT_BEST_TOUCH_TIME
@@ -97,6 +116,7 @@ class TickJudgmentTests(unittest.TestCase):
         )
 
     def frame(self, note, now, *, positions=(), ended=False):
+        play.input_manager.InputState.frame += 1
         self.clock.return_value = now + self.offset.return_value
         self.adjusted.return_value = now
         self.touches.return_value = [
@@ -207,33 +227,35 @@ class TickJudgmentTests(unittest.TestCase):
         assert self.frame(note, 1.01) == Judgment.PERFECT
 
     def test_tail_bad_input_is_distinguished_from_an_unplayed_miss(self):
-        # OpenSekai's child.Result > Pass includes BAD, even though Sonolus reports BAD as MISS.
+        # Sekai's child.Result > Pass includes BAD, even though Sonolus reports BAD as MISS.
         end = TickHarness(kind=NoteKind.NORM_TAIL_TAP)
         end.judge(1.12)
         assert end.result.judgment == Judgment.MISS
         assert end.pending_despawn
         assert end.slide_end_input
         missed = TickHarness(kind=NoteKind.NORM_TAIL_TAP)
-        assert self.frame(missed, 1.2) == Judgment.MISS
+        assert self.frame(missed, 1.2) is None
+        assert self.frame(missed, 1.22) == Judgment.MISS
         assert not missed.slide_end_input
 
     def test_tail_flick_input_state_does_not_require_flick_movement(self):
         self.clock.return_value = 0.99
         self.touches.return_value = [SimpleNamespace(id=1)]
         end = SimpleNamespace(
-            input_interval=SimpleNamespace(end=1.1),
-            should_do_delayed_trigger=lambda: False,
-            check_touch_is_eligible_for_trace=lambda touch: True,
-            check_touch_is_eligible_for_trace_flick=lambda touch: False,
+            flick_touch_index=lambda touch: 0,
+            record_flick_motion=lambda touch, index: False,
             is_slide_end_flick=True,
             slide_end_input=False,
+            target_time=1,
         )
+        self.touches.return_value[0].time = 0.99
         play.BaseNote.handle_trace_flick_input(end)
         assert end.slide_end_input
 
     def test_expired_tail_flick_input_is_not_a_successful_termination(self):
         end = TickHarness(kind=NoteKind.NORM_TAIL_FLICK)
         end.slide_end_input = True
+        assert self.frame(end, 1.15) is None
         assert self.frame(end, 1.2) == Judgment.MISS
         assert not end.slide_end_input
 

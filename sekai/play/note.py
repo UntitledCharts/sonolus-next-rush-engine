@@ -70,12 +70,14 @@ from sekai.lib.note import (
     get_note_bucket,
     get_note_effect_kind,
     get_note_haptic_feedback,
+    get_note_input_window,
     get_note_sprite_set,
     get_note_window,
     has_release_input,
     has_tap_input,
     hitbox_draw_alpha,
     hitbox_draw_start,
+    hitbox_ignores_height,
     is_head,
     map_note_kind,
     mirror_flick_direction,
@@ -119,6 +121,8 @@ from sekai.play.dynamic_stage import DynamicStage
 from sekai.play.events import SkillActive
 
 DEFAULT_BEST_TOUCH_TIME = -1e8
+JUDGMENT_LAST_TIME = 8.5 / 60
+JUST_PERFECT_HALF = 1 / 120
 
 
 class BaseNote(PlayArchetype):
@@ -179,6 +183,11 @@ class BaseNote(PlayArchetype):
     # Includes accepted BAD input (reported as MISS by Sonolus) and a tail flick in progress.
     slide_end_input: bool = shared_memory()
     tick_pending: bool = entity_memory()
+    late_miss_pending: bool = entity_memory()
+    flick_touch_ids: VarArray[int, Dim[8]] = entity_memory()
+    # Two bits per registered touch: 0 = no motion, 1 = wrong direction, 2 = correct direction.
+    flick_touch_states: int = entity_memory()
+    last_flick_input_frame: int = entity_memory()
 
     active_connector_info: ActiveConnectorInfo = shared_memory()
 
@@ -225,6 +234,8 @@ class BaseNote(PlayArchetype):
         window = self.judgment_window
         self.perfect_window_end = window.perfect.end
         self.unadjusted_input_interval = window.bad + self.target_time
+        if self.kind in (NoteKind.NORM_TAIL_TRACE_FLICK, NoteKind.CRIT_TAIL_TRACE_FLICK):
+            self.unadjusted_input_interval = get_note_input_window(self.kind, True).bad + self.target_time
         if self.kind == NoteKind.HIDE_DAMAGE_TICK:
             window_start_beat = damage_tick_input_start_beat(self.beat)
             if self.active_head_ref.index > 0:
@@ -327,6 +338,8 @@ class BaseNote(PlayArchetype):
                 self.target_time,
                 self.y_offset_at(self.target_time),
                 stage_transform=self.stage_transform_at(self.target_time).to_screen_transform(),
+                sekai_bounds=self.stage_ref.index <= 0,
+                ignore_height=hitbox_ignores_height(self.kind, self.direction),
             )
 
         if start_time < inf:
@@ -376,7 +389,7 @@ class BaseNote(PlayArchetype):
             self.post_judge()
             return
         if self.is_scored and self.is_connector_tick:
-            # OpenSekai's Last state accepts input for one update, then misses before the next input pass.
+            # Sekai's Last state accepts input for one update, then misses before the next input pass.
             if self.tick_pending:
                 self.fail_late(0.125)
             elif offset_adjusted_time() >= self.target_time:
@@ -384,18 +397,33 @@ class BaseNote(PlayArchetype):
             return
         if self.is_tail and time() > self.input_interval.end:
             self.slide_end_input = False
-        is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
-        if is_just_reached and self.best_touch_matches_direction:
-            if self.is_trace or self.is_trace_flick:
-                self.complete()
+        if self.is_scored and self.uses_frame_miss:
+            if self.late_miss_pending:
+                self.fail_late()
                 return
-            elif self.is_slide_end_flick:
-                has_ongoing_touch = any(
-                    t.id == self.best_touch_id and not t.ended for t in input_manager.processed_touches()
-                )
-                if not has_ongoing_touch:
-                    self.complete()
-                    return
+            after = (
+                0.125
+                if self.kind
+                in (NoteKind.NORM_HEAD_TAP, NoteKind.CRIT_HEAD_TAP, NoteKind.NORM_HEAD_TRACE, NoteKind.CRIT_HEAD_TRACE)
+                else JUDGMENT_LAST_TIME
+            )
+            if time() > self.target_time + input_offset() + after:
+                self.late_miss_pending = True
+                return
+        if (
+            (self.is_trace_flick or self.is_slide_end_flick)
+            and offset_adjusted_time() >= self.target_time
+            and (
+                (self.is_friction_flick and self.best_touch_matches_direction)
+                or self.last_flick_input_frame + 1 < input_manager.InputState.frame
+            )
+            and self.finish_flick(offset_adjusted_time())
+        ):
+            return
+        is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
+        if is_just_reached and self.best_touch_matches_direction and self.is_trace:
+            self.complete()
+            return
 
         if self.kind == NoteKind.HIDE_DAMAGE_TICK and self.is_scored and time() in self.input_interval:
             self.hitbox.bounds @= self.damage_tick_input_bounds(offset_adjusted_time())
@@ -423,6 +451,8 @@ class BaseNote(PlayArchetype):
         if self.despawn:
             return
         if self.pending_despawn:
+            return
+        if self.late_miss_pending:
             return
         if time() < self.input_interval.start:
             return
@@ -499,7 +529,8 @@ class BaseNote(PlayArchetype):
             if self.despawn or self.tick_pending:
                 return
         if self.is_scored and time() > self.input_interval.end:
-            self.handle_late_miss()
+            if not self.uses_frame_miss:
+                self.handle_late_miss()
             return
         self.draw_hitbox()
         if time() < self.visual_start_time:
@@ -701,7 +732,24 @@ class BaseNote(PlayArchetype):
             NoteKind.CRIT_HEAD_TRACE_FLICK,
         )
 
+    @property
+    def is_friction_flick(self) -> bool:
+        return self.is_trace_flick or self.kind in (NoteKind.NORM_TAIL_TRACE_FLICK, NoteKind.CRIT_TAIL_TRACE_FLICK)
+
+    @property
+    def uses_frame_miss(self) -> bool:
+        return self.kind not in (
+            NoteKind.NORM_TICK,
+            NoteKind.CRIT_TICK,
+            NoteKind.HIDE_TICK,
+            NoteKind.DAMAGE,
+            NoteKind.HIDE_DAMAGE_TICK,
+            NoteKind.ANCHOR,
+        )
+
     def should_do_delayed_trigger(self) -> bool:
+        if self.is_trace_flick or self.is_slide_end_flick:
+            return False
         # Don't trigger if the previous frame was before the target time.
         # This gives the regular touch handling a chance to trigger on time the first time we pass the target time.
         if offset_adjusted_time() - delta_time() <= self.target_time and time() < self.input_interval.end:
@@ -809,34 +857,68 @@ class BaseNote(PlayArchetype):
         touch = next(tap for tap in input_manager.processed_touches() if tap.id == self.captured_touch_id)
         self.judge(touch.time)
 
+    def flick_touch_index(self, touch: Touch) -> int:
+        for i in range(len(self.flick_touch_ids)):
+            if self.flick_touch_ids[i] == touch.id:
+                return i
+        return -1
+
+    def register_flick_touch(self, touch: Touch) -> int:
+        index = self.flick_touch_index(touch)
+        if index >= 0:
+            return index
+        if self.flick_touch_ids.is_full():
+            return -1
+        self.flick_touch_ids.append(touch.id)
+        return len(self.flick_touch_ids) - 1
+
+    def record_flick_motion(self, touch: Touch, index: int) -> bool:
+        if touch.speed <= Layout.flick_speed_threshold:
+            return False
+        correct = self.check_direction_matches(touch.angle)
+        shift = 4**index
+        previous = self.flick_touch_states // shift % 4
+        self.flick_touch_states += ((2 if correct else 1) - previous) * shift
+        if correct:
+            self.best_touch_matches_direction = True
+        return True
+
+    def finish_flick(self, actual_time: float) -> bool:
+        has_motion = False
+        correct = False
+        for i in range(len(self.flick_touch_ids)):
+            state = self.flick_touch_states // (4**i) % 4
+            has_motion = has_motion or state > 0
+            correct = correct or state == 2
+        if not has_motion:
+            return False
+        if correct:
+            self.judge(actual_time)
+        else:
+            self.judge_wrong_way(actual_time)
+        return True
+
     def handle_flick_input(self):
-        if time() > self.input_interval.end:
-            return
         if self.captured_touch_id == 0:
             return
-
-        # Another touch is allowed to flick the note as long as it started after the start of the input interval,
-        # so we don't care which touch matched the tap id, just that the tap id is set.
-
-        wrong_way_touch_time = -1.0
-
         for touch in input_manager.processed_touches():
-            if self.check_touch_is_eligible_for_trace(touch) and touch.started:
-                input_manager.disallow_empty(touch)
-            if not self.check_touch_touch_is_eligible_for_flick(touch):
+            index = self.flick_touch_index(touch)
+            if touch.started:
+                if (
+                    self.unadjusted_input_interval.start < touch.time < self.unadjusted_input_interval.end
+                    and self.hitbox.bounds.contains_point(touch.position)
+                ):
+                    self.register_flick_touch(touch)
+                    input_manager.disallow_empty(touch)
                 continue
-            if not self.check_direction_matches(touch.angle):
-                if wrong_way_touch_time < 0:
-                    wrong_way_touch_time = touch.time
+            if index < 0:
                 continue
-            self.judge(touch.time)
-            return
-        if wrong_way_touch_time >= 0:
-            self.judge_wrong_way(wrong_way_touch_time)
-            return
+            if self.record_flick_motion(touch, index):
+                self.finish_flick(touch.time)
+                return
 
     def handle_trace_input(self):
-        if time() > self.input_interval.end:
+        if not self.input_interval.start < time() < self.input_interval.end:
             return
         if self.should_do_delayed_trigger():
             return
@@ -865,53 +947,29 @@ class BaseNote(PlayArchetype):
             self.best_touch_matches_direction = True
 
     def handle_trace_flick_input(self):
-        if time() > self.input_interval.end:
-            return
-        if self.should_do_delayed_trigger():
-            return
-        has_touch = False
-        has_correct_direction_touch = False
-        current_touch_id = -1
         for touch in input_manager.processed_touches():
-            if not self.check_touch_is_eligible_for_trace(touch):
-                continue
+            index = self.flick_touch_index(touch)
+            if index < 0:
+                if not (
+                    self.unadjusted_input_interval.start < touch.time < self.unadjusted_input_interval.end
+                    and self.hitbox.bounds.contains_point(touch.position)
+                ):
+                    continue
+                index = self.register_flick_touch(touch)
+                if index < 0:
+                    continue
             input_manager.disallow_empty(touch)
             if self.is_slide_end_flick:
                 self.slide_end_input = True
-            if not self.check_touch_is_eligible_for_trace_flick(touch):
-                continue
-            has_touch = True
-            if self.check_direction_matches(touch.angle):
-                if not has_correct_direction_touch:
-                    has_correct_direction_touch = True
-                    current_touch_id = touch.id
-            elif not has_correct_direction_touch:
-                current_touch_id = touch.id
-        if not has_touch:
-            return
-        if offset_adjusted_time() >= self.target_time:
-            if current_touch_id > 0:
-                NoteMemory.flick_resolved_times[current_touch_id % 32] = self.target_time
-            if has_correct_direction_touch:
-                if offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time():
-                    self.complete()
-                else:
-                    self.judge(offset_adjusted_time())
+            self.last_flick_input_frame = input_manager.InputState.frame
+            moved = self.record_flick_motion(touch, index)
+            if (
+                moved
+                and self.check_direction_matches(touch.angle)
+                and touch.time >= self.target_time + JUST_PERFECT_HALF
+            ):
+                self.finish_flick(touch.time)
                 return
-            elif offset_adjusted_time() > self.target_time + self.judgment_window.perfect.end:
-                self.judge_wrong_way(offset_adjusted_time())
-                return
-        # The touch is either before the target time or has the wrong direction within the perfect window.
-        current_abs_error = abs(self.best_touch_time - self.target_time)
-        if not self.best_touch_matches_direction:
-            current_abs_error = max(current_abs_error, self.perfect_window_end)
-        incoming_abs_error = abs(offset_adjusted_time() - self.target_time)
-        if not has_correct_direction_touch:
-            incoming_abs_error = max(incoming_abs_error, self.perfect_window_end)
-        if incoming_abs_error < current_abs_error:
-            self.best_touch_time = offset_adjusted_time()
-            self.best_touch_matches_direction = has_correct_direction_touch
-            self.best_touch_id = current_touch_id
 
     def handle_tick_input(self):
         if self.is_connector_tick:
@@ -974,18 +1032,6 @@ class BaseNote(PlayArchetype):
         else:
             self.complete_damage()
 
-    def judge_slide_end_good_late(self):
-        self.result.judgment = (
-            Judgment.GOOD if not SkillActive.judgment or Judgment.GOOD == Judgment.MISS else Judgment.PERFECT
-        )
-        self.result.accuracy = self.judgment_window.good.end
-        if self.result.bucket.id != -1:
-            self.result.bucket_value = self.result.accuracy * WINDOW_SCALE
-        self.despawn = True
-        self.should_play_hit_effects = True
-        self.wrong_way = False
-        self.pending_post_judge = True
-
     def handle_damage_tick_input(self):
         if time() > self.input_interval.end:
             return
@@ -1023,17 +1069,6 @@ class BaseNote(PlayArchetype):
         return result
 
     def handle_late_miss(self):
-        if (
-            (self.is_slide_end_flick or self.is_trace_flick)
-            and self.best_touch_time != DEFAULT_BEST_TOUCH_TIME
-            and (not self.best_touch_matches_direction or self.is_slide_end_flick)
-        ):
-            if self.is_slide_end_flick:
-                self.judge_slide_end_good_late()
-            else:
-                self.fail_late()
-            return
-
         kind = self.kind
         match kind:
             case NoteKind.NORM_TICK | NoteKind.CRIT_TICK | NoteKind.HIDE_TICK:
@@ -1109,13 +1144,13 @@ class BaseNote(PlayArchetype):
             case FlickDirection.UP_OMNI | FlickDirection.DOWN_OMNI:
                 return True
             case FlickDirection.UP_LEFT:
-                target_angle = pi / 2 + 1
+                target_angle = 3 * pi / 4
             case FlickDirection.UP_RIGHT:
-                target_angle = pi / 2 - 1
+                target_angle = pi / 4
             case FlickDirection.DOWN_LEFT:
-                target_angle = -pi / 2 - 1
+                target_angle = -3 * pi / 4
             case FlickDirection.DOWN_RIGHT:
-                target_angle = -pi / 2 + 1
+                target_angle = -pi / 4
             case _:
                 assert_never(self.direction)
         angle_diff = abs((angle + DynamicLayout.rotate + self.visual_stage_rotate - target_angle + pi) % (2 * pi) - pi)
@@ -1738,6 +1773,7 @@ def compute_slide_input_bounds(ease_type: EaseType, head: BaseNote, tail: BaseNo
         leniency,
         input_y_offset,
         stage_transform=input_transform.to_screen_transform(),
+        sekai_bounds=head.stage_ref.index <= 0 and tail.stage_ref.index <= 0,
     ).bounds
 
 

@@ -12,7 +12,7 @@ from sonolus.script.values import alloc
 from sekai.lib import archetype_names
 from sekai.lib.buckets import SLIDE_END_LOCKOUT_DURATION
 from sekai.lib.layout import DynamicLayout, Layout, segment_closeness_score, stage_aspect_ratio_locked
-from sekai.lib.note import is_head
+from sekai.lib.note import get_note_window, is_head
 from sekai.lib.options import Options
 from sekai.play import note
 from sekai.play.input_index import INPUT_CANDIDATE_TOUCHES, InputCandidates, TapPriorityQuery, sort_input_notes
@@ -21,8 +21,89 @@ INPUT_SLOTS = INPUT_CANDIDATE_TOUCHES
 INPUT_SCORE_TIME_SCALE = 0.05
 
 
+def tap_center_score(touch, target) -> float:
+    segment = target.hitbox.target
+    axis = (segment.r - segment.l).normalize_or_zero()
+    center = (segment.l + segment.r) / 2
+    distance = (touch.position - center).dot(axis)
+    return -distance * distance
+
+
+def tap_has_high_accuracy(touch, target) -> bool:
+    return touch.time - target.target_time in get_note_window(target.kind, False).great
+
+
+def tap_input_is_eligible(touch, target) -> bool:
+    return (
+        target.captured_touch_id == 0
+        and target.unadjusted_input_interval.start < touch.time < target.unadjusted_input_interval.end
+        and target.hitbox.bounds.contains_point(touch.position)
+    )
+
+
+def select_tap_candidate(active, touch) -> tuple[int, float]:
+    # Sekai repeatedly compares the first and last eligible candidates. Two cursors
+    # preserve that order without allocating or removing items from a candidate list.
+    left = 0
+    right = len(active) - 1
+    priority = TapPriorityQuery.new()
+    while left <= right:
+        first = active[left].get()
+        if not tap_input_is_eligible(touch, first) or (
+            first.is_trace_flick and priority.contains(active, touch, first.beat, has_priority_tap)
+        ):
+            left += 1
+            continue
+        current = active[right].get()
+        if not tap_input_is_eligible(touch, current) or (
+            current.is_trace_flick and priority.contains(active, touch, current.beat, has_priority_tap)
+        ):
+            right -= 1
+            continue
+        if left == right:
+            break
+        if first.target_time == current.target_time:
+            if tap_center_score(touch, first) > tap_center_score(touch, current):
+                right -= 1
+            else:
+                left += 1
+        elif tap_has_high_accuracy(touch, current) and not tap_has_high_accuracy(touch, first):
+            left += 1
+        else:
+            right -= 1
+    result = -1
+    score = 0.0
+    if left <= right:
+        result = left
+        score = tap_center_score(touch, active[left].get())
+    return result, score
+
+
+def prepare_tap_candidates(active, candidates: InputCandidates) -> bool:
+    for i in range(min(INPUT_SLOTS, len(processed_touches()))):
+        touch = processed_touches()[i]
+        if not touch.started:
+            continue
+        last_time = -1e8
+        last_high = False
+        for note_i in range(len(active)):
+            target = active[note_i].get()
+            if not tap_input_is_eligible(touch, target):
+                continue
+            high = tap_has_high_accuracy(touch, target)
+            # Mixed grades at one timestamp need grouping before grade priority; use the scan path.
+            if last_time == target.target_time and last_high != high:
+                return False
+            last_time = target.target_time
+            last_high = high
+            candidates.offer(i, note_i, tap_center_score(touch, target), 2 + high, target.target_time)
+        candidates.finish(i)
+    return True
+
+
 @level_memory
 class InputState:
+    frame: int
     processed_touches: VarArray[Touch, Dim[32]]
     disallowed_empty_touches: ArraySet[int, Dim[32]]
     disallowed_release_touches: ArrayMap[int, float, Dim[32]]
@@ -88,6 +169,7 @@ class InputManager(PlayArchetype):
 
     @callback(order=-4)
     def update_sequential(self):
+        InputState.frame += 1
         preprocess_touches()
         note.NoteMemory.active_tap_input_notes.clear()
         note.NoteMemory.active_release_input_notes.clear()
@@ -158,6 +240,8 @@ def _prepare_input_candidates(active, candidates: InputCandidates, release: bool
     candidates.limit = count
     for i in range(INPUT_SLOTS):
         candidates.counts[i] = 0
+    if not release:
+        return prepare_tap_candidates(active, candidates)
     for note_i in range(len(active)):
         target = active[note_i].get()
         if target.captured_touch_id != 0:
@@ -169,7 +253,7 @@ def _prepare_input_candidates(active, candidates: InputCandidates, release: bool
                 continue
             if not target.hitbox.bounds.contains_point(touch.position):
                 continue
-            if touch.time not in target.unadjusted_input_interval:
+            if not target.unadjusted_input_interval.start < touch.time < target.unadjusted_input_interval.end:
                 continue
             if release and not ignore_lockout and not is_allowed_release(touch, target.target_time):
                 continue
@@ -217,27 +301,7 @@ def preassign_taps():
                     scores[i] = candidates.entries[i * INPUT_SLOTS].score
                 continue
             touch = processed_touches()[i]
-            # Captures change between allocation rounds, so each query scope is fresh.
-            priority = TapPriorityQuery.new()
-            for note_i in range(len(active)):
-                target_note = active[note_i].get()
-                if target_note.captured_touch_id != 0:
-                    continue
-                if not target_note.hitbox.bounds.contains_point(touch.position):
-                    continue
-                if touch.time not in target_note.unadjusted_input_interval:
-                    continue
-                # Trace flicks consume tap starts, but yield to other notes on the same beat.
-                # A touch inside both hitboxes is in their overlap, regardless of stage transforms.
-                if target_note.is_trace_flick and priority.contains(active, touch, target_note.beat, has_priority_tap):
-                    continue
-                score = (
-                    segment_closeness_score(touch.position, target_note.hitbox.target) / DynamicLayout.w_scale
-                    + (time() - target_note.target_time) / INPUT_SCORE_TIME_SCALE
-                )
-                if preferred[i] == -1 or score > scores[i]:
-                    scores[i] = score
-                    preferred[i] = note_i
+            preferred[i], scores[i] = select_tap_candidate(active, touch)
 
         any_assigned = False
         for i in range(INPUT_SLOTS):
@@ -277,7 +341,7 @@ def has_priority_tap(touch: Touch, beat: float, query: TapPriorityQuery | None =
                 query.has_candidates = True
         if target_note.is_trace_flick or target_note.beat != beat or target_note.captured_touch_id != 0:
             continue
-        if touch.time not in target_note.unadjusted_input_interval:
+        if not target_note.unadjusted_input_interval.start < touch.time < target_note.unadjusted_input_interval.end:
             continue
         if target_note.hitbox.bounds.contains_point(touch.position):
             return True
@@ -322,7 +386,11 @@ def preassign_releases():
                     continue
                 if not target_note.hitbox.bounds.contains_point(touch.position):
                     continue
-                if touch.time not in target_note.unadjusted_input_interval:
+                if (
+                    not target_note.unadjusted_input_interval.start
+                    < touch.time
+                    < target_note.unadjusted_input_interval.end
+                ):
                     continue
                 ignore_lockout = False
                 if target_note.active_head_ref.index > 0:
