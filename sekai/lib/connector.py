@@ -381,12 +381,16 @@ class ConnectorSfxEvent(Record):
     kind: ConnectorKind
 
 
-@level_memory
-class ConnectorSfxState:
+class ConnectorSfxChannel(Record):
     active_time: float
     inactive_time: float
-    kind: ConnectorKind
     active_head_index: int
+
+
+@level_memory
+class ConnectorSfxState:
+    # Sekai's long cues each use CueLimit=1, mode=0: a new playback replaces the old one.
+    channels: Array[ConnectorSfxChannel, Dim[2]]
 
 
 class ConnectorMaskStatus(IntEnum):
@@ -2554,10 +2558,14 @@ def inactive_connector_sfx_times() -> ConnectorSfxTimes:
 
 
 def init_connector_sfx_times():
-    ConnectorSfxState.active_time = CONNECTOR_SFX_ACTIVE_TIME_INIT
-    ConnectorSfxState.inactive_time = CONNECTOR_SFX_INACTIVE_TIME_INIT
-    ConnectorSfxState.kind = ConnectorKind.NONE
-    ConnectorSfxState.active_head_index = 0
+    for channel in ConnectorSfxState.channels:
+        channel.active_time = CONNECTOR_SFX_ACTIVE_TIME_INIT
+        channel.inactive_time = CONNECTOR_SFX_INACTIVE_TIME_INIT
+        channel.active_head_index = 0
+
+
+def connector_sfx_channel(kind: ConnectorKind) -> ConnectorSfxChannel:
+    return ConnectorSfxState.channels[int(get_connector_sfx_kind(kind) == ConnectorKind.ACTIVE_CRITICAL)]
 
 
 def is_sfx_connector(kind: ConnectorKind) -> bool:
@@ -2582,33 +2590,36 @@ def activate_connector_sfx(
     active_tail_target_time: float,
     active_head_index: int,
 ) -> ConnectorSfxTimes:
-    sfx_time = clamp(event_time, active_head_target_time, active_tail_target_time)
-    if ConnectorSfxState.inactive_time == CONNECTOR_SFX_INACTIVE_TIME_INIT:
-        ConnectorSfxState.inactive_time = sfx_time
-    ConnectorSfxState.active_time = sfx_time
-    ConnectorSfxState.kind = get_connector_sfx_kind(kind)
-    ConnectorSfxState.active_head_index = active_head_index
-    return ConnectorSfxTimes(ConnectorSfxState.active_time, ConnectorSfxState.inactive_time)
+    channel = connector_sfx_channel(kind)
+    channel.active_time = event_time
+    channel.inactive_time = CONNECTOR_SFX_ACTIVE_TIME_INIT
+    channel.active_head_index = active_head_index
+    return ConnectorSfxTimes(channel.active_time, channel.inactive_time)
 
 
 def deactivate_connector_sfx(
     event_time: float,
     active_head_target_time: float,
     active_tail_target_time: float,
+    kind: ConnectorKind,
+    active_head_index: int,
 ) -> ConnectorSfxTimes:
-    ConnectorSfxState.inactive_time = clamp(event_time, active_head_target_time, active_tail_target_time)
-    return ConnectorSfxTimes(ConnectorSfxState.active_time, ConnectorSfxState.inactive_time)
+    channel = connector_sfx_channel(kind)
+    # Stopping a stolen playback ID must not stop its replacement or resume an older hold.
+    if channel.active_head_index == active_head_index:
+        channel.active_time = CONNECTOR_SFX_ACTIVE_TIME_INIT
+        channel.inactive_time = event_time
+        channel.active_head_index = 0
+    return ConnectorSfxTimes(channel.active_time, channel.inactive_time)
 
 
 def connector_sfx_is_active(times: ConnectorSfxTimes) -> bool:
     return times.active_time >= times.inactive_time
 
 
-def current_connector_sfx_is_active() -> bool:
-    return (
-        ConnectorSfxState.active_time >= ConnectorSfxState.inactive_time
-        and offset_adjusted_time() >= ConnectorSfxState.active_time
-    )
+def current_connector_sfx_is_active(kind: ConnectorKind) -> bool:
+    channel = connector_sfx_channel(kind)
+    return channel.active_head_index > 0 and offset_adjusted_time() >= channel.active_time
 
 
 def update_circular_connector_particle(

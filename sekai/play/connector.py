@@ -4,10 +4,11 @@ from math import inf
 from typing import assert_never, cast
 
 from sonolus.script.archetype import EntityRef, PlayArchetype, callback, entity_data, entity_memory, imported
+from sonolus.script.array import Array, Dim
 from sonolus.script.effect import LoopedEffectHandle
 from sonolus.script.interval import Interval, lerp
 from sonolus.script.particle import ParticleHandle
-from sonolus.script.runtime import input_offset, offset_adjusted_time, time
+from sonolus.script.runtime import delta_time, input_offset, offset_adjusted_time, time
 from sonolus.script.timing import beat_to_time
 from sonolus.script.values import alloc
 
@@ -22,13 +23,12 @@ from sekai.lib.connector import (
     ActiveConnectorKind,
     ConnectorKind,
     ConnectorRenderInfo,
-    ConnectorSfxEvent,
-    ConnectorSfxState,
     ConnectorSfxTimes,
     ConnectorVisualState,
     DamageConnectorKind,
     SlideConnectorKind,
     activate_connector_sfx,
+    connector_sfx_channel,
     current_connector_sfx_is_active,
     deactivate_connector_sfx,
     destroy_looped_particle,
@@ -44,6 +44,7 @@ from sekai.lib.connector import (
     get_connector_sfx_kind,
     inactive_connector_sfx_times,
     is_fake_active_connector,
+    is_sfx_connector,
     should_show_connector_hitbox,
     spawn_connector_slot_particles,
     spawn_linear_connector_trail_particle,
@@ -59,7 +60,7 @@ from sekai.lib.layout import (
     blend_stage_transform,
     current_layout_transform,
 )
-from sekai.lib.note import NoteKind, draw_connector_hitbox_overlay, draw_slide_note_head
+from sekai.lib.note import NoteKind, draw_connector_hitbox_overlay, draw_slide_note_head, get_note_window, has_tap_input
 from sekai.lib.options import Options
 from sekai.lib.stage import VisualMask, masked_note_extents_by_limits
 from sekai.lib.streams import Streams
@@ -582,6 +583,9 @@ class SlideManager(PlayArchetype):
     next_slot_spawn_time: float = entity_memory()
     last_effect_kind: ConnectorKind = entity_memory()
     sfx_active: bool = entity_memory()
+    head_ready: bool = entity_memory()
+    head_touched: bool = entity_memory()
+    head_began_frame: int = entity_memory()
 
     cleanup_time: float = entity_memory()
 
@@ -594,44 +598,85 @@ class SlideManager(PlayArchetype):
         Streams.connector_effect_kinds[self.active_head.index][-2] = ConnectorKind.NONE
         self.last_effect_kind = ConnectorKind.NONE
         self.sfx_active = False
+        self.head_began_frame = -1
+
+    @property
+    def tail_finished(self) -> bool:
+        tail = self.active_tail
+        return (
+            tail.is_despawned
+            or tail.pending_despawn
+            or (not tail.is_scored and offset_adjusted_time() >= tail.target_time)
+            or (tail.is_scored and offset_adjusted_time() - delta_time() > tail.target_time + note.JUDGMENT_LAST_TIME)
+        )
 
     @callback(order=2)
     def update_sequential(self):
         if Options.auto_sfx:
             return
-        current_time = time()
-        adj_time = offset_adjusted_time()
-        if (
-            current_time >= self.active_tail.target_time
-            or adj_time >= self.active_tail.target_time
-            or self.active_tail.is_despawned
-        ):
-            self.deactivate_sfx_if_needed(adj_time)
-            return
-        if adj_time < self.active_head.target_time:
-            return
+        head = self.active_head
+        t = offset_adjusted_time()
+        if not self.head_ready:
+            if t >= head.target_time and (self.head_touched or not head.is_scored):
+                self.head_ready = True
+                self.head_began_frame = input_manager.InputState.frame
+            elif (
+                has_tap_input(head.kind) and head.captured_touch_id > 0
+            ) or t - delta_time() > head.target_time + 0.125:
+                self.head_ready = True
+        # With touches, wait until note judgments finish. Without touches, handle Release here.
+        if len(input_manager.processed_touches()) == 0:
+            self.update_sfx_state()
 
-        info = self.active_head.active_connector_info
-        match get_connector_base_kind(info.connector_kind):
-            case (
-                ConnectorKind.ACTIVE_NORMAL
-                | ConnectorKind.ACTIVE_CRITICAL
-                | ConnectorKind.FAKE_ACTIVE_NORMAL
-                | ConnectorKind.FAKE_ACTIVE_CRITICAL
-            ) if info.is_active:
-                if self.sfx_active:
-                    # A color or sound change does not create another hold/release event.
-                    kind = get_connector_sfx_kind(info.connector_kind)
-                    if ConnectorSfxState.active_head_index == self.active_head.index and ConnectorSfxState.kind != kind:
-                        ConnectorSfxState.kind = kind
-                        self.write_sfx_times(
-                            adj_time,
-                            ConnectorSfxTimes(ConnectorSfxState.active_time, ConnectorSfxState.inactive_time),
-                        )
-                    return
-                self.activate_sfx_if_needed(info.connector_kind, adj_time)
-            case _:
-                self.deactivate_sfx_if_needed(adj_time)
+    @callback(order=2)
+    def touch(self):
+        self.update_sfx_state()
+
+    def update_sfx_state(self):
+        if Options.auto_sfx:
+            return
+        head = self.active_head
+        tail = self.active_tail
+        t = offset_adjusted_time()
+        kind = head.segment_kind
+        if self.tail_finished or tail.target_time <= head.target_time or not is_sfx_connector(kind):
+            self.deactivate_sfx_if_needed(t)
+            return
+        if not self.head_ready:
+            if has_tap_input(head.kind) and head.captured_touch_id > 0:
+                self.head_ready = True
+            elif (
+                head.is_trace
+                and head.input_interval.start < time() < head.input_interval.end
+                and any(
+                    head.hitbox.bounds.contains_point(touch.position) for touch in input_manager.processed_touches()
+                )
+            ):
+                self.head_touched = True
+            if not self.head_ready:
+                return
+        info = head.active_connector_info
+        bounds = +info.input_bounds
+        if t < head.target_time:
+            bounds @= note.compute_slide_input_bounds(
+                head.connector_ease, head, head, t, get_connector_input_leniency(kind)
+            )
+        elif t >= tail.target_time:
+            bounds @= note.compute_slide_input_bounds(
+                tail.connector_ease, tail, tail, t, get_connector_input_leniency(kind)
+            )
+        held = self.head_began_frame == input_manager.InputState.frame or is_fake_active_connector(kind)
+        held = held or any(bounds.contains_point(touch.position) for touch in input_manager.processed_touches())
+        if t >= tail.target_time:
+            after = get_note_window(head.kind, False).bad.end if head.is_scored else 5 / 60
+            if t - tail.target_time >= after:
+                held = False
+        if group_hide_notes(head.timescale_group):
+            held = False
+        if held:
+            self.activate_sfx_if_needed(kind, t)
+        else:
+            self.deactivate_sfx_if_needed(t)
 
     def update_parallel(self):
         current_time = time()
@@ -643,7 +688,8 @@ class SlideManager(PlayArchetype):
             destroy_looped_particle(self.linear_particle)
             connector_effect_kind_stream[adj_time] = ConnectorKind.NONE
             self.last_effect_kind = ConnectorKind.NONE
-            self.despawn = True
+            if Options.auto_sfx or self.tail_finished:
+                self.despawn = True
             return
         info = self.active_head.active_connector_info
         if info.visual_connector_index > 0 and info.visual_update_time == time():
@@ -801,12 +847,20 @@ class SlideManager(PlayArchetype):
     def deactivate_sfx_if_needed(self, event_time: float):
         if not self.sfx_active:
             return
-        times = deactivate_connector_sfx(event_time, self.active_head.target_time, self.active_tail.target_time)
-        self.write_sfx_times(times.inactive_time, times)
+        kind = get_connector_sfx_kind(self.active_head.segment_kind)
+        owns_sound = connector_sfx_channel(kind).active_head_index == self.active_head.index
+        times = deactivate_connector_sfx(
+            event_time, self.active_head.target_time, self.active_tail.target_time, kind, self.active_head.index
+        )
+        if owns_sound:
+            self.write_sfx_times(event_time, times)
         self.sfx_active = False
 
     def write_sfx_times(self, event_time: float, times: ConnectorSfxTimes):
-        Streams.connector_sfx_events[event_time] = ConnectorSfxEvent(times, ConnectorSfxState.kind)
+        if get_connector_sfx_kind(self.active_head.segment_kind) == ConnectorKind.ACTIVE_CRITICAL:
+            Streams.connector_critical_sfx_times[0][event_time] = times
+        else:
+            Streams.connector_normal_sfx_times[0][event_time] = times
 
     def active_segment_transform_and_note_alpha(self) -> tuple[StageTransform, float]:
         result = +StageTransform
@@ -854,21 +908,26 @@ class SlideManager(PlayArchetype):
 class ConnectorSfxManager(PlayArchetype):
     name = archetype_names.CONNECTOR_SFX_MANAGER
 
-    sfx: LoopedEffectHandle = entity_memory()
-    last_kind: ConnectorKind = entity_memory()
+    sfx: Array[LoopedEffectHandle, Dim[2]] = entity_memory()
+    last_head: Array[int, Dim[2]] = entity_memory()
 
     def initialize(self):
-        Streams.unified_connector_sfx = True
-        Streams.connector_sfx_events[-2] = ConnectorSfxEvent(inactive_connector_sfx_times(), ConnectorKind.NONE)
+        Streams.unified_connector_sfx = False
+        Streams.connector_normal_sfx_times[0][-2] = inactive_connector_sfx_times()
+        Streams.connector_critical_sfx_times[0][-2] = inactive_connector_sfx_times()
 
     def update_parallel(self):
-        if current_connector_sfx_is_active():
-            kind = ConnectorSfxState.kind
-            update_connector_sfx(self.sfx, cast(ActiveConnectorKind, kind), kind != self.last_kind)
-            self.last_kind = kind
-        else:
-            destroy_looped_sfx(self.sfx)
-            self.last_kind = ConnectorKind.NONE
+        for i in range(2):
+            kind = ConnectorKind.ACTIVE_NORMAL if i == 0 else ConnectorKind.ACTIVE_CRITICAL
+            channel = connector_sfx_channel(kind)
+            if current_connector_sfx_is_active(kind):
+                update_connector_sfx(
+                    self.sfx[i], cast(ActiveConnectorKind, kind), channel.active_head_index != self.last_head[i]
+                )
+                self.last_head[i] = channel.active_head_index
+            else:
+                destroy_looped_sfx(self.sfx[i])
+                self.last_head[i] = 0
 
 
 CONNECTOR_ARCHETYPES = (

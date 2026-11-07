@@ -24,6 +24,7 @@ from sekai.lib.connector import (
     ActiveConnectorKind,
     ConnectorKind,
     connector_sfx_is_active,
+    get_connector_sfx_kind,
     inactive_connector_sfx_times,
     is_sfx_connector,
     schedule_connector_sfx,
@@ -293,14 +294,15 @@ def setting_combo(head: int, skill: int) -> None:
 def schedule_auto_connector_sfx(entity_count: int):
     connector_id = WatchConnector._compile_time_id()
 
-    slide_head = 0
+    normal_head = 0
+    critical_head = 0
     for i in range(entity_count - 1, -1, -1):
         info = entity_info_at(i)
         mro = WatchArchetype._get_mro_id_array(info.archetype_id)
         if connector_id not in mro:
             continue
         connector = WatchConnector.at(i)
-        if connector.active_head_ref.index <= 0:
+        if connector.active_head_ref.index <= 0 or connector.head_ref.index != connector.active_head_ref.index:
             continue
         if connector.active_head.target_time == connector.active_tail.target_time:
             # Zero-length slide: its activation and release land on the same instant, which the
@@ -308,11 +310,16 @@ def schedule_auto_connector_sfx(entity_count: int):
             # duration, so skip it entirely.
             continue
         if is_sfx_connector(connector.segment_head.segment_kind):
-            connector.sfx_act_next.index = slide_head
-            connector.sfx_deact_next.index = slide_head
-            slide_head = i
+            critical = get_connector_sfx_kind(connector.segment_head.segment_kind) == ConnectorKind.ACTIVE_CRITICAL
+            connector.sfx_act_next.index = critical_head if critical else normal_head
+            connector.sfx_deact_next.index = connector.sfx_act_next.index
+            if critical:
+                critical_head = i
+            else:
+                normal_head = i
 
-    schedule_auto_connector_sfx_events(slide_head)
+    schedule_auto_connector_sfx_events(normal_head)
+    schedule_auto_connector_sfx_events(critical_head)
 
 
 def schedule_auto_connector_sfx_events(list_head: int):
@@ -370,7 +377,9 @@ def schedule_auto_connector_sfx_events(list_head: int):
             act_ref = WatchConnector.at(act_ref).sfx_act_next.index
 
         while deact_ref > 0 and WatchConnector.at(deact_ref).active_tail.target_time == next_time:
-            inactive_time = next_time
+            if deact_ref == active_connector_index:
+                inactive_time = next_time
+                active_connector_index = 0
             deact_ref = WatchConnector.at(deact_ref).sfx_deact_next.index
 
         current_time = next_time
