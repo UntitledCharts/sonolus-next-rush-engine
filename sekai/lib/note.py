@@ -1097,7 +1097,7 @@ def handle_note_particles(
     page: ParticlePage | None = None,
     aura_limit: int = 12,
 ):
-    if size <= 0:
+    if size <= 0 or not has_note_particles(kind):
         return
 
     def place(q):
@@ -1390,6 +1390,9 @@ def schedule_note_slot_effects(
     if is_tutorial():
         return
     if not Options.slot_effect_enabled:
+        return
+    # Hidden ticks and anchors have no visual family, but still run note preprocessing.
+    if not has_note_particles(kind):
         return
     pool_id = note_effect_pool_family(get_note_visual_family(kind, direction), judgment)
     sprite_set = get_note_sprite_set(kind, direction, style)

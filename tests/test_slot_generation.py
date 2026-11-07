@@ -1,11 +1,32 @@
 import random
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from sonolus.script.debug import simulation_context
 from sonolus.script.sprite import Sprite
 
+from sekai.lib import note as notes
 from sekai.lib import skin
 from sekai.lib import slot_effect as slots
+from sekai.lib.layout import FlickDirection, NoteStageParams
+
+
+class HiddenNoteEffectTests(unittest.TestCase):
+    def test_hidden_notes_skip_visual_family_lookup(self):
+        # An invalid visual family aborts the Watch callback before ComboJudge.spawn.
+        with (
+            simulation_context(),
+            patch.object(notes, "Options", SimpleNamespace(slot_effect_enabled=True)),
+            patch.object(notes, "is_tutorial", return_value=False),
+            patch.object(notes, "get_note_visual_family", side_effect=AssertionError("hidden visual family")),
+        ):
+            for kind in (notes.NoteKind.HIDE_TICK, notes.NoteKind.HIDE_DAMAGE_TICK, notes.NoteKind.ANCHOR):
+                with self.subTest(kind=kind):
+                    notes.schedule_note_slot_effects(kind, 0, 2, 1, FlickDirection.UP_OMNI, stage=+NoteStageParams)
+                    notes.handle_note_particles(
+                        kind, notes.NoteEffectKind.NONE, 0, 2, FlickDirection.UP_OMNI, notes.Judgment.PERFECT
+                    )
 
 
 class SlotGenerationIndexTests(unittest.TestCase):
