@@ -193,6 +193,33 @@ class CompiledParticleManagementTests(unittest.TestCase):
         assert runner.spawned == 16
         assert runner.destroyed == [1, 2, 3, 4]
 
+    def test_intact_page_check_cost_does_not_grow_with_member_count(self):
+        costs = []
+        for count in (1, 8):
+            runner = self.runner()
+            pool = manager.note_particle_pool(0, 0)
+            self.emit(runner, pool, count)
+            memory = runner.keepers[0][1]
+            self.invoke(
+                runner,
+                0,
+                "updateSequential",
+                values={
+                    "particle_id": 4,
+                    "owner": 0,
+                    "pool_id": pool,
+                    "count": 1,
+                    "first": 0,
+                    "component": 0,
+                    "page_index": 0,
+                },
+            )
+            runner.calls.clear()
+            self.invoke(runner, 0, "updateParallel", memory)
+            costs.append(sum(runner.calls.values()))
+            assert not runner.destroyed
+        assert costs[1] <= costs[0]
+
     def test_compiled_lane_replacement_and_seek(self):
         runner = self.runner()
         pool = manager.note_particle_pool(7, 5)

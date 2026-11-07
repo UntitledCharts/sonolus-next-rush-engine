@@ -49,6 +49,17 @@ class ParticleRuleTests(unittest.TestCase):
         assert self.destroyed == [1, 2, 3, 4]
         assert self.spawned == 16
 
+    def test_partial_page_reclaims_each_expired_prefix_once(self):
+        pool = manager.note_particle_pool(0, 0)
+        self.emit(pool, range(8))
+        first_page = self.pages[0]
+        self.emit(pool, range(4))
+        assert not self.destroyed
+        for removed in range(1, 9):
+            self.emit(pool, [0])
+            assert self.destroyed == list(range(1, removed + 1))
+        assert len(first_page.entries) == 0
+
     def test_wide_stage_grows_aura_without_changing_gen_limit(self):
         pool = manager.note_particle_pool(0, 0)
         self.emit(pool, range(24), aura_limit=24)

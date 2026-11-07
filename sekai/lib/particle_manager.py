@@ -93,7 +93,7 @@ class ParticlePageEntry(Record):
 
 class ParticlePage(Record):
     pool_id: int
-    serial: int
+    serial: int  # Lane generation, or the first live entry index in a ring pool.
     version: int
     epoch: int
     end_time: float
@@ -174,6 +174,7 @@ def emit_particle(
         page.pool_id = pool_id
         page.epoch = ParticleHandler.epoch
         page.end_time = time() + duration
+        page.serial = 0
         if pool_id >= LANE_POOL_START:
             ParticleHandler.serials[pool_id] += 1
             page.serial = ParticleHandler.serials[pool_id]
@@ -204,16 +205,25 @@ def update_particle_page(page: ParticlePage) -> bool:
     if page.version == serial:
         return False
     page.version = serial
+    if page.pool_id < LANE_POOL_START:
+        limit = max(_POOL_LIMITS[page.pool_id], ParticleHandler.aura_limits[page.pool_id])
+        # Tickets increase in emission order, so only an expired prefix can be reclaimed.
+        # Stop at the first live entry instead of checking the rest of an intact page.
+        while page.serial < len(page.entries):
+            entry = page.entries[page.serial]
+            if entry.handle.id >= 0:
+                if serial - entry.ticket < limit:
+                    return False
+                entry.handle.destroy()
+                entry.handle.id = -1
+            page.serial += 1
+        page.entries.clear()
+        return True
     alive = 0
     for entry in page.entries:
         if entry.handle.id < 0:
             continue
-        keep = False
-        if page.pool_id >= LANE_POOL_START:
-            keep = ParticleHandler.lanes[page.pool_id - LANE_POOL_START][entry.ticket] == page.serial
-        else:
-            keep = serial - entry.ticket < max(_POOL_LIMITS[page.pool_id], ParticleHandler.aura_limits[page.pool_id])
-        if keep:
+        if ParticleHandler.lanes[page.pool_id - LANE_POOL_START][entry.ticket] == page.serial:
             alive += 1
         else:
             entry.handle.destroy()
