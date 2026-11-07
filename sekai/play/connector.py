@@ -62,6 +62,7 @@ from sekai.lib.layout import (
 )
 from sekai.lib.note import NoteKind, draw_connector_hitbox_overlay, draw_slide_note_head, get_note_window, has_tap_input
 from sekai.lib.options import Options
+from sekai.lib.particle_manager import release_hold_particles, reserve_hold_particles
 from sekai.lib.stage import VisualMask, masked_note_extents_by_limits
 from sekai.lib.streams import Streams
 from sekai.lib.timescale import (
@@ -587,9 +588,11 @@ class SlideManager(PlayArchetype):
     head_touched: bool = entity_memory()
     head_began_frame: int = entity_memory()
 
+    effect_pool_slot: int = entity_memory()
     cleanup_time: float = entity_memory()
 
     def initialize(self):
+        self.effect_pool_slot = -1
         self.cleanup_time = self.active_tail.target_time
         self.segment_head_ref @= self.active_head_ref
         self.segment_cursor_time = -1e8
@@ -612,6 +615,15 @@ class SlideManager(PlayArchetype):
 
     @callback(order=2)
     def update_sequential(self):
+        if self.effect_pool_slot < 0:
+            self.effect_pool_slot = reserve_hold_particles(
+                self.active_head.index,
+                get_connector_sfx_kind(self.active_head.segment_kind) == ConnectorKind.ACTIVE_CRITICAL,
+                self.cleanup_time + note.JUDGMENT_LAST_TIME + delta_time(),
+            )
+        if self.tail_finished or (Options.auto_sfx and time() >= self.cleanup_time):
+            release_hold_particles(self.effect_pool_slot, self.active_head.index)
+            self.effect_pool_slot = 0
         if Options.auto_sfx:
             return
         head = self.active_head
@@ -633,13 +645,21 @@ class SlideManager(PlayArchetype):
         self.update_sfx_state()
 
     def update_sfx_state(self):
+        if self.tail_finished:
+            release_hold_particles(self.effect_pool_slot, self.active_head.index)
+            self.effect_pool_slot = 0
         if Options.auto_sfx:
             return
         head = self.active_head
         tail = self.active_tail
         t = offset_adjusted_time()
         kind = head.segment_kind
-        if self.tail_finished or tail.target_time <= head.target_time or not is_sfx_connector(kind):
+        if (
+            self.effect_pool_slot == 0
+            or self.tail_finished
+            or tail.target_time <= head.target_time
+            or not is_sfx_connector(kind)
+        ):
             self.deactivate_sfx_if_needed(t)
             return
         if not self.head_ready:
@@ -712,7 +732,7 @@ class SlideManager(PlayArchetype):
                 | ConnectorKind.ACTIVE_CRITICAL
                 | ConnectorKind.FAKE_ACTIVE_NORMAL
                 | ConnectorKind.FAKE_ACTIVE_CRITICAL
-            ) if info.is_active:
+            ) if info.is_active and self.effect_pool_slot > 0:
                 if current_time < info.active_start_time + CONNECTOR_PARTICLE_ACTIVE_DELAY:
                     destroy_looped_particle(self.circular_particle)
                     destroy_looped_particle(self.linear_particle)

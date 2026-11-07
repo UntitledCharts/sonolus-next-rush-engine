@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import inf
+from math import ceil, inf
 from typing import cast
 
 from sonolus.script.archetype import (
@@ -82,7 +82,6 @@ from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
 from sekai.lib.particle_manager import (
     ParticlePage,
-    ParticleStorage,
     destroy_particle_page,
     update_particle_page,
 )
@@ -123,7 +122,6 @@ MIN_START_TIME = 0.0167  # Executes the terminate process with a guaranteed mini
 
 
 class WatchBaseNote(WatchArchetype):
-    particle_storage: ParticleStorage = shared_memory()
     beat: StandardImport.BEAT
     timescale_group: StandardImport.TIMESCALE_GROUP
     stage_ref: EntityRef[WatchDynamicStage] = imported(name="stage")
@@ -394,6 +392,7 @@ class WatchBaseNote(WatchArchetype):
             single_line=single_line,
             stage=stage,
             style=self.style,
+            aura_limit=self.aura_pool_limit(t),
         )
 
     def spawn_time(self) -> float:
@@ -541,6 +540,7 @@ class WatchBaseNote(WatchArchetype):
             lane_particles=self.visual_lane_particles,
             transform=self.visual_stage_transform().to_screen_transform(),
             style=self.style,
+            aura_limit=self.aura_pool_limit(),
         )
 
     def _basic_input_geometry(self, context: InputGeometryContext) -> InputGeometry:
@@ -752,6 +752,13 @@ class WatchBaseNote(WatchArchetype):
         else:
             result @= self._basic_visual_stage_transform()
         return result
+
+    def aura_pool_limit(self, t: float | None = None) -> int:
+        if not self.is_attached and self.stage_ref.index <= 0:
+            return 12
+        sample_time = time() if t is None else t
+        bounds = self.input_geometry(InputGeometryContext.at(sample_time)).stage_bounds
+        return max(12, min(254, ceil(bounds.end - bounds.start)))
 
     def stage_params(self, t: float | None = None) -> NoteStageParams:
         result = +NoteStageParams

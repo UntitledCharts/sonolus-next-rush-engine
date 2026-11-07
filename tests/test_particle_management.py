@@ -12,7 +12,7 @@ from sonolus.backend.interpret import Interpreter
 from sonolus.backend.node import FunctionNode
 from sonolus.backend.ops import Op
 from sonolus.build.engine import package_engine, unpackage_data
-from sonolus.script.archetype import PlayArchetype, entity_memory, imported, shared_memory
+from sonolus.script.archetype import PlayArchetype, entity_memory, imported
 from sonolus.script.bucket import Judgment
 from sonolus.script.engine import EngineData, PlayMode
 from sonolus.script.particle import Particle
@@ -28,10 +28,9 @@ from sekai.play.particle_manager import ParticleManager
 
 class CompiledParticleProbe(PlayArchetype):
     name = "NormalTapNote"
-    particle_storage: manager.ParticleStorage = shared_memory()
     particle_id: int = imported()
     owner: int = imported()
-    kind: manager.ParticleManageKind = imported()
+    pool_id: int = imported()
     count: int = imported()
     first: int = imported()
     component: int = imported()
@@ -48,12 +47,9 @@ class CompiledParticleProbe(PlayArchetype):
 
     def update_sequential(self):
         particle = Particle(self.particle_id)
-        ref = manager.begin_particle_chunk(particle, self.owner, self.kind, self.component, self.page_index)
-        if self.kind == manager.ParticleManageKind.LANE:
-            manager.prepare_particle_lanes(ref, particle, self.first + 0.5, self.first + self.count - 0.5)
         start = self.page_index * manager.PARTICLE_PAGE_SIZE
         for i in range(start, min(self.count, start + manager.PARTICLE_PAGE_SIZE)):
-            manager.emit_particle(particle, +Quad, 1, self.kind, self.first + i + 0.5, ref, True, self.page)
+            manager.emit_particle(particle, +Quad, 1, self.pool_id, self.first + i + 0.5, True, self.page)
 
     def update_parallel(self):
         if manager.update_particle_page(self.page):
@@ -75,6 +71,7 @@ class ScheduledFlickProbe(PlayArchetype):
             FlickDirection.UP_OMNI,
             Judgment.PERFECT,
             group_id=self.owner,
+            aura_limit=max(12, int(2 * self.size)),
             transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
         )
 
@@ -164,21 +161,20 @@ class CompiledParticleManagementTests(unittest.TestCase):
         for archetype, memory in runner.keepers:
             self.invoke(runner, archetype, "updateParallel", memory)
 
-    def emit(self, runner, particle_id, owner, kind, count, first=0, component=0, refresh=True):
+    def emit(self, runner, pool_id, count, first=0):
         for page_index in range((count + manager.PARTICLE_PAGE_SIZE - 1) // manager.PARTICLE_PAGE_SIZE):
             values = {
-                "particle_id": particle_id,
-                "owner": owner,
-                "kind": kind,
+                "particle_id": 4,
+                "owner": 0,
+                "pool_id": pool_id,
                 "count": count,
                 "first": first,
-                "component": component,
+                "component": 0,
                 "page_index": page_index,
             }
             memory = self.invoke(runner, 0, "updateSequential", values=values)
             runner.keepers.append((0, memory))
-        if refresh:
-            self.refresh(runner)
+        self.refresh(runner)
 
     def schedule(self, runner, owner, critical=True, size=6):
         self.invoke(runner, 1, "updateSequential", values={"owner": owner, "critical": critical, "size": size})
@@ -191,104 +187,57 @@ class CompiledParticleManagementTests(unittest.TestCase):
         runner.queued.clear()
         self.refresh(runner)
 
-    def test_compiled_six_bundles_then_seventh_removes_only_the_oldest(self):
+    def test_compiled_aura_recycles_individual_lanes_across_pages(self):
         runner = self.runner()
-        for owner in range(6):
-            self.emit(runner, 5, owner, manager.ParticleManageKind.MULTI, 12)
-        assert not runner.destroyed
-        self.emit(runner, 5, 6, manager.ParticleManageKind.MULTI, 12)
-        assert set(runner.destroyed) == set(range(1, 13))
+        self.emit(runner, manager.note_particle_pool(0, 0), 16)
+        assert runner.spawned == 16
+        assert runner.destroyed == [1, 2, 3, 4]
 
-    def test_compiled_default_group_two_arrows_both_survive(self):
+    def test_compiled_lane_replacement_and_seek(self):
         runner = self.runner()
-        for _ in range(2):
-            self.emit(runner, 4, 0, manager.ParticleManageKind.REST, 1, component=-1)
-        assert runner.spawned == 2
-        assert not runner.destroyed
-
-    def test_compiled_wide_bundles_have_no_global_handle_capacity_eviction(self):
-        runner = self.runner()
-        for owner in range(10):
-            self.emit(runner, 5, owner, manager.ParticleManageKind.MULTI, 256)
-        assert runner.spawned == 2560
-        assert set(runner.destroyed) == set(range(1, 1025))
-
-    def test_compiled_partial_lane_replacement_and_clear(self):
-        runner = self.runner()
-        self.emit(runner, 7, 0, manager.ParticleManageKind.LANE, 4, -2)
-        self.emit(runner, 7, 1, manager.ParticleManageKind.LANE, 2, 0)
-        assert runner.destroyed == [3, 4]
+        pool = manager.note_particle_pool(7, 5)
+        self.emit(runner, pool, 12, -6)
+        self.emit(runner, pool, 2, 0)
+        assert runner.destroyed == [7, 8]
         self.invoke(runner, 0, "preprocess")
         self.refresh(runner)
-        assert sorted(runner.destroyed) == list(range(1, 7))
-        self.emit(runner, 7, 0, manager.ParticleManageKind.LANE, 2)
-        assert runner.spawned == 8
+        assert sorted(runner.destroyed) == list(range(1, 15))
 
-    def test_real_simultaneous_flicks_keep_both_arrows_with_an_existing_wide_bundle(self):
-        runner = self.runner()
-        self.emit(runner, 1, 0, manager.ParticleManageKind.MULTI, 256)
-        for owner in (1, 2):
-            self.schedule(runner, owner)
-        self.start_queued(runner)
-        assert Counter(kind for _, kind in runner.effects) == {1: 256, 2: 2, 3: 2, 4: 2, 5: 24, 7: 24}
-        arrows = {handle for handle, kind in runner.effects if kind == 4}
-        assert len(arrows) == 2
-        assert arrows.isdisjoint(runner.destroyed)
-        assert len(runner.destroyed) == 12  # Only the first critical lane bundle overlaps.
-
-    def test_real_normal_lanes_keep_both_overlapping_bundles(self):
-        runner = self.runner()
-        for owner in (1, 2):
-            self.schedule(runner, owner, critical=False)
-        self.start_queued(runner)
-        assert sum(kind == 7 for _, kind in runner.effects) == 24
-        assert not runner.destroyed
-
-    def test_real_seventh_same_frame_bundle_is_removed_before_presentation(self):
+    def test_real_flick_emissions_use_lane_aura_center_gen_and_five_flashes(self):
         runner = self.runner()
         for owner in range(7):
-            self.schedule(runner, owner, critical=False)
+            self.schedule(runner, owner, size=6)
         self.start_queued(runner)
-        first = runner.effects[:27]
-        assert {handle for handle, _ in first} == set(runner.destroyed)
+        assert Counter(kind for _, kind in runner.effects) == {2: 84, 3: 7, 4: 7, 5: 84, 7: 84}
+        remaining = Counter(kind for handle, kind in runner.effects if handle not in runner.destroyed)
+        assert remaining == {2: 12, 3: 6, 4: 5, 5: 12, 7: 12}
 
-    def test_compiled_interleaved_pages_do_not_revive_an_evicted_bundle(self):
+    def test_real_twenty_four_lane_stage_does_not_clip_aura(self):
         runner = self.runner()
-        for owner in range(7):
-            values = {
-                "particle_id": 5,
-                "owner": owner,
-                "kind": manager.ParticleManageKind.MULTI,
-                "count": 32,
-                "first": 0,
-                "component": 0,
-                "page_index": 0,
-            }
-            memory = self.invoke(runner, 0, "updateSequential", values=values)
-            runner.keepers.append((0, memory))
-        assert runner.spawned == 7 * manager.PARTICLE_PAGE_SIZE
-        values["owner"] = 0
-        values["page_index"] = 1
-        self.invoke(runner, 0, "updateSequential", values=values)
-        assert runner.spawned == 7 * manager.PARTICLE_PAGE_SIZE
-        self.refresh(runner)
-        assert set(runner.destroyed) == set(range(1, manager.PARTICLE_PAGE_SIZE + 1))
-
-    def test_real_wide_critical_flick_pages_form_one_lane_bundle(self):
-        runner = self.runner()
-        self.schedule(runner, 1, critical=True, size=128)
+        self.schedule(runner, 1, size=12)
         self.start_queued(runner)
-        assert sum(kind == 7 for _, kind in runner.effects) == 254
+        assert Counter(kind for _, kind in runner.effects) == {2: 24, 3: 1, 4: 1, 5: 24, 7: 24}
         assert not runner.destroyed
 
-    def test_natural_expiry_releases_pages_without_destroying_finished_handles(self):
-        runner = self.runner()
-        self.emit(runner, 4, 0, manager.ParticleManageKind.REST, 1)
-        runner.blocks[PlayBlock.RuntimeUpdate][0] = 2
-        self.refresh(runner)
-        assert not runner.destroyed
-        offset = CompiledParticleProbe._memory_fields_["page"].offset
-        assert runner.keepers[0][1][offset + manager.ParticlePage._size_() - 1] == 0
+    def test_good_gen_is_still_one_center_particle(self):
+        from sonolus.script.debug import simulation_context
+
+        from sekai.lib.note import iter_note_particle_pages
+        from sekai.lib.note_style import NoteStyle
+
+        with (
+            simulation_context(),
+            patch("sekai.lib.note.get_note_particles", critical_particles),
+            patch.object(Particle, "is_available", property(lambda self: self.id >= 0)),
+        ):
+            Options.note_effect_enabled = True
+            Options.lane_effect_enabled = False
+            pages = list(
+                iter_note_particle_pages(
+                    NoteKind.NORM_TAP, FlickDirection.UP_OMNI, Judgment.GOOD, 20, True, NoteStyle.DEFAULT
+                )
+            )
+        assert [(c, p) for c, p in pages if c == 1] == [(1, 0)]
 
 
 if __name__ == "__main__":

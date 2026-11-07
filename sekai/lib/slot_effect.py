@@ -26,7 +26,7 @@ from sekai.lib.skin import BaseSkin
 SLOT_GLOW_EFFECT_DURATION = 0.25
 SLOT_EFFECT_DURATION = 0.5
 
-SLOT_EFFECT_LIMIT = 6.0
+SLOT_EFFECT_LIMIT = 12.0
 
 
 # Slot IDs are engine bindings, independent of the external skin's texture layout.
@@ -48,7 +48,8 @@ class SlotGeneration(Record):
 @level_memory
 class SlotEffectHandler:
     epoch: int
-    slots: Array[SlotGeneration, Dim[SLOT_KIND_COUNT]]
+    slots: Array[SlotGeneration, Dim[SLOT_KIND_COUNT + 13]]
+    aura_limits: Array[int, Dim[13]]
 
 
 def clear_slot_effects():
@@ -56,25 +57,37 @@ def clear_slot_effects():
     SlotEffectHandler.epoch += 1
 
 
-def next_slot_generation(sprite: Sprite, group_id: float) -> float:
+def _slot_pool_index(sprite: Sprite, pool_id: int) -> int:
+    if pool_id >= 0:
+        return SLOT_KIND_COUNT + pool_id % 13
     index = _SLOT_STATE_INDICES[sprite.id]
     assert index >= 0, "Unregistered slot effect sprite"
-    entry = SlotEffectHandler.slots[index]
+    return index
+
+
+def next_slot_generation(sprite: Sprite, group_id: float, count: int = 1, pool_id: int = -1) -> float:
+    entry = SlotEffectHandler.slots[_slot_pool_index(sprite, pool_id)]
+    if pool_id >= 0:
+        family = pool_id % 13
+        SlotEffectHandler.aura_limits[family] = max(SlotEffectHandler.aura_limits[family], pool_id // 13)
     epoch = SlotEffectHandler.epoch + 1
     if entry.epoch != epoch:
-        entry.generation = 0
+        entry.generation = -1
         entry.epoch = epoch
-    elif entry.group_id != group_id:
-        entry.generation += 1
-    entry.group_id = group_id
-    return entry.generation
+        entry.group_id = -1
+    if entry.group_id != group_id:
+        entry.generation += count
+        entry.group_id = group_id
+    # Both slot sprites and glow sprites belong to the same per-lane Aura instance.
+    return entry.generation - count + 1
 
 
-def is_slot_generation_visible(sprite: Sprite, generation: float) -> bool:
-    index = _SLOT_STATE_INDICES[sprite.id]
-    assert index >= 0, "Unregistered slot effect sprite"
-    entry = SlotEffectHandler.slots[index]
-    return entry.epoch != SlotEffectHandler.epoch + 1 or entry.generation - generation < SLOT_EFFECT_LIMIT
+def is_slot_generation_visible(sprite: Sprite, generation: float, pool_id: int = -1) -> bool:
+    entry = SlotEffectHandler.slots[_slot_pool_index(sprite, pool_id)]
+    limit = SLOT_EFFECT_LIMIT
+    if pool_id >= 0:
+        limit = max(limit, SlotEffectHandler.aura_limits[pool_id % 13])
+    return entry.epoch == SlotEffectHandler.epoch + 1 and entry.generation - generation < limit
 
 
 def slot_glow_progress_height(progress: float) -> float:
@@ -131,6 +144,8 @@ def draw_slot_effects_in_range(
     *,
     transform: StageScreenTransform,
     bounds: Interval | None = None,
+    generation: float | None = None,
+    pool_id: int = -1,
 ):
     """Draw slot effects at lanes i + 0.5 + shift for i in [left, right), skipping off-screen slots."""
     progress = unlerp_clamped(start_time, end_time, time())
@@ -145,6 +160,8 @@ def draw_slot_effects_in_range(
     first = max(left, floor(lo - shift) - 1)
     last = min(right, ceil(hi - shift) + 1)
     for i in range(first, last):
+        if generation is not None and not is_slot_generation_visible(sprite, generation + i - left, pool_id):
+            continue
         lane = i + 0.5 + shift
         left_edge = lane - 0.485
         right_edge = lane + 0.485
@@ -171,6 +188,8 @@ def draw_slot_glow_effects_in_range(
     transform: StageScreenTransform,
     shift: float = 0.0,
     bounds: Interval | None = None,
+    generation: float | None = None,
+    pool_id: int = -1,
 ):
     """Draw per-lane slot glows on the stage's grid, skipping off-screen slots."""
     progress = unlerp_clamped(start_time, end_time, time())
@@ -186,6 +205,8 @@ def draw_slot_glow_effects_in_range(
     first = max(left, floor(lo - shift) - 1)
     last = min(right, ceil(hi - shift) + 1)
     for i in range(first, last):
+        if generation is not None and not is_slot_generation_visible(sprite, generation + i - left, pool_id):
+            continue
         lane = i + 0.5 + shift
         left_edge = lane - 0.5
         right_edge = lane + 0.5

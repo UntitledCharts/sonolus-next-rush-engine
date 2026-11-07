@@ -30,20 +30,22 @@ class SlotGlowEffect(PlayArchetype):
     projection: NoteStageProjection = entity_memory()
     end_time: float = entity_memory()
     group_id: float = entity_memory()
+    pool_id: int = entity_memory()
     generation: float = entity_memory()
-    generation_set: bool = entity_memory()
 
     def initialize(self):
+        self.generation = -1
         self.end_time = self.start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed
 
     def update_sequential(self):
-        if self.despawn or self.generation_set:
+        if self.despawn or self.generation >= 0:
             return
-        self.generation = next_slot_generation(self.sprite, self.group_id)
-        self.generation_set = True
+        self.generation = next_slot_generation(self.sprite, self.group_id, self.right - self.left, self.pool_id)
 
     def update_parallel(self):
-        if time() > self.end_time or not is_slot_generation_visible(self.sprite, self.generation):
+        if time() > self.end_time or not is_slot_generation_visible(
+            self.sprite, self.generation + self.right - self.left - 1, self.pool_id
+        ):
             self.despawn = True
             return
         if self.stage.has_transform():
@@ -56,6 +58,8 @@ class SlotGlowEffect(PlayArchetype):
                 self.right,
                 shift=self.shift,
                 bounds=self.bounds,
+                generation=self.generation,
+                pool_id=self.pool_id,
                 y_offset=self.y_offset,
                 transform=self.projection.transform,
             )
@@ -68,6 +72,8 @@ class SlotGlowEffect(PlayArchetype):
                 self.right,
                 shift=self.shift,
                 bounds=self.bounds,
+                generation=self.generation,
+                pool_id=self.pool_id,
                 y_offset=self.y_offset,
                 transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
             )
@@ -87,20 +93,22 @@ class SlotEffect(PlayArchetype):
     projection: NoteStageProjection = entity_memory()
     end_time: float = entity_memory()
     group_id: float = entity_memory()
+    pool_id: int = entity_memory()
     generation: float = entity_memory()
-    generation_set: bool = entity_memory()
 
     def initialize(self):
+        self.generation = -1
         self.end_time = self.start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed
 
     def update_sequential(self):
-        if self.despawn or self.generation_set:
+        if self.despawn or self.generation >= 0:
             return
-        self.generation = next_slot_generation(self.sprite, self.group_id)
-        self.generation_set = True
+        self.generation = next_slot_generation(self.sprite, self.group_id, self.right - self.left, self.pool_id)
 
     def update_parallel(self):
-        if time() > self.end_time or not is_slot_generation_visible(self.sprite, self.generation):
+        if time() > self.end_time or not is_slot_generation_visible(
+            self.sprite, self.generation + self.right - self.left - 1, self.pool_id
+        ):
             self.despawn = True
             return
         if self.stage.has_transform():
@@ -113,6 +121,8 @@ class SlotEffect(PlayArchetype):
                 self.right,
                 self.shift,
                 bounds=self.bounds,
+                generation=self.generation,
+                pool_id=self.pool_id,
                 y_offset=self.y_offset,
                 transform=self.projection.transform,
             )
@@ -125,6 +135,8 @@ class SlotEffect(PlayArchetype):
                 self.right,
                 self.shift,
                 bounds=self.bounds,
+                generation=self.generation,
+                pool_id=self.pool_id,
                 y_offset=self.y_offset,
                 transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
             )

@@ -68,7 +68,7 @@ class WatchScheduledLaneEffect(WatchArchetype):
     def initialize(self):
         self.played = False
 
-    def update_parallel(self):
+    def update_sequential(self):
         if self.played:
             return
         self.played = True

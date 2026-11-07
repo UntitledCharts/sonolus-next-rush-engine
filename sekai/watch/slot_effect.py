@@ -31,10 +31,11 @@ class WatchSlotGlowEffect(WatchArchetype):
     projection: NoteStageProjection = entity_memory()
     end_time: float = entity_memory()
     group_id: float = entity_memory()
+    pool_id: int = entity_memory()
     generation: float = entity_memory()
-    generation_set: bool = entity_memory()
 
     def initialize(self):
+        self.generation = -1
         self.end_time = self.start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed
 
     def spawn_time(self) -> float:
@@ -46,15 +47,14 @@ class WatchSlotGlowEffect(WatchArchetype):
     def update_sequential(self):
         if is_skip():
             clear_slot_effects()
-            self.generation_set = False
+            self.generation = -1
             return
-        if self.generation_set:
+        if self.generation >= 0:
             return
-        self.generation = next_slot_generation(self.sprite, self.group_id)
-        self.generation_set = True
+        self.generation = next_slot_generation(self.sprite, self.group_id, self.right - self.left, self.pool_id)
 
     def update_parallel(self):
-        if not is_slot_generation_visible(self.sprite, self.generation):
+        if not is_slot_generation_visible(self.sprite, self.generation + self.right - self.left - 1, self.pool_id):
             return
         if self.stage.has_transform():
             self.projection.update(self.stage)
@@ -66,6 +66,8 @@ class WatchSlotGlowEffect(WatchArchetype):
                 self.right,
                 shift=self.shift,
                 bounds=self.bounds,
+                generation=self.generation,
+                pool_id=self.pool_id,
                 y_offset=self.y_offset,
                 transform=self.projection.transform,
             )
@@ -78,12 +80,14 @@ class WatchSlotGlowEffect(WatchArchetype):
                 self.right,
                 shift=self.shift,
                 bounds=self.bounds,
+                generation=self.generation,
+                pool_id=self.pool_id,
                 y_offset=self.y_offset,
                 transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
             )
 
     def terminate(self):
-        self.generation_set = False
+        self.generation = -1
 
 
 class WatchSlotEffect(WatchArchetype):
@@ -100,10 +104,11 @@ class WatchSlotEffect(WatchArchetype):
     projection: NoteStageProjection = entity_memory()
     end_time: float = entity_memory()
     group_id: float = entity_memory()
+    pool_id: int = entity_memory()
     generation: float = entity_memory()
-    generation_set: bool = entity_memory()
 
     def initialize(self):
+        self.generation = -1
         self.end_time = self.start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed
 
     def spawn_time(self) -> float:
@@ -115,15 +120,14 @@ class WatchSlotEffect(WatchArchetype):
     def update_sequential(self):
         if is_skip():
             clear_slot_effects()
-            self.generation_set = False
+            self.generation = -1
             return
-        if self.generation_set:
+        if self.generation >= 0:
             return
-        self.generation = next_slot_generation(self.sprite, self.group_id)
-        self.generation_set = True
+        self.generation = next_slot_generation(self.sprite, self.group_id, self.right - self.left, self.pool_id)
 
     def update_parallel(self):
-        if not is_slot_generation_visible(self.sprite, self.generation):
+        if not is_slot_generation_visible(self.sprite, self.generation + self.right - self.left - 1, self.pool_id):
             return
         if self.stage.has_transform():
             self.projection.update(self.stage)
@@ -135,6 +139,8 @@ class WatchSlotEffect(WatchArchetype):
                 self.right,
                 self.shift,
                 bounds=self.bounds,
+                generation=self.generation,
+                pool_id=self.pool_id,
                 y_offset=self.y_offset,
                 transform=self.projection.transform,
             )
@@ -147,12 +153,14 @@ class WatchSlotEffect(WatchArchetype):
                 self.right,
                 self.shift,
                 bounds=self.bounds,
+                generation=self.generation,
+                pool_id=self.pool_id,
                 y_offset=self.y_offset,
                 transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
             )
 
     def terminate(self):
-        self.generation_set = False
+        self.generation = -1
 
 
 WATCH_SLOT_EFFECT_ARCHETYPES = (

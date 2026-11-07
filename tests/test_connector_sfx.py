@@ -50,6 +50,7 @@ class Hold:
         self.active_tail = Namespace(
             target_time=5, is_scored=True, is_despawned=False, pending_despawn=False, connector_ease=EaseType.LINEAR
         )
+        self.effect_pool_slot = 1
         self.sfx_active = False
         self.head_ready = False
         self.head_touched = False
