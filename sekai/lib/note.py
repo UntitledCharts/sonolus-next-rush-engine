@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from enum import IntEnum, auto
-from math import ceil, floor
+from math import ceil, floor, inf
 from typing import Literal, TypeIs, assert_never, cast
 
 from sonolus.script.archetype import EntityRef, HapticType, PlayArchetype, WatchArchetype, get_archetype_by_name
@@ -1820,8 +1820,8 @@ def get_leniency(kind: NoteKind) -> float:
     return 1.0
 
 
-def hitbox_ignores_height(kind: NoteKind, direction: FlickDirection) -> bool:
-    return direction == FlickDirection.UP_LEFT and kind in {
+def hitbox_height_limit(kind: NoteKind, direction: FlickDirection) -> float:
+    if direction == FlickDirection.UP_LEFT and kind in {
         NoteKind.NORM_FLICK,
         NoteKind.CRIT_FLICK,
         NoteKind.NORM_HEAD_FLICK,
@@ -1834,7 +1834,9 @@ def hitbox_ignores_height(kind: NoteKind, direction: FlickDirection) -> bool:
         NoteKind.CRIT_HEAD_TRACE_FLICK,
         NoteKind.NORM_TAIL_TRACE_FLICK,
         NoteKind.CRIT_TAIL_TRACE_FLICK,
-    }
+    }:
+        return inf
+    return 3.5 / 1.19
 
 
 def has_tap_input(kind: NoteKind) -> bool:

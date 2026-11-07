@@ -13,7 +13,7 @@ from sonolus.script.archetype import (
     shared_memory,
 )
 from sonolus.script.bucket import Judgment
-from sonolus.script.interval import lerp
+from sonolus.script.interval import Interval, lerp
 from sonolus.script.quad import Quad
 from sonolus.script.runtime import is_replay, is_skip, time
 from sonolus.script.timing import beat_to_time
@@ -68,6 +68,7 @@ from sekai.lib.note import (
     has_note_particles,
     hitbox_draw_alpha,
     hitbox_draw_start,
+    hitbox_height_limit,
     is_avoided_damage,
     is_head,
     iter_note_particle_pages,
@@ -281,6 +282,8 @@ class WatchBaseNote(WatchArchetype):
                 self.target_time,
                 self.y_offset_at(self.target_time),
                 stage_transform=self.stage_transform_at(self.target_time).to_screen_transform(),
+                stage_bounds=self.input_geometry(InputGeometryContext.at(self.target_time)).stage_bounds,
+                height_limit=hitbox_height_limit(self.kind, self.direction),
             )
 
         if is_replay():
@@ -547,6 +550,7 @@ class WatchBaseNote(WatchArchetype):
             result.lane += self.rel_lane
         else:
             result.lane = self.lane
+            result.stage_bounds = Interval(-6, 6)
             result.transform @= identity_stage_transform()
         if self.elevation != 0.0:
             result.transform @= self._basic_stage_transform_at(context.time)
@@ -560,6 +564,12 @@ class WatchBaseNote(WatchArchetype):
             head_geometry = head._basic_input_geometry(context)
             tail_geometry = tail._basic_input_geometry(context)
             result.lane = lerp(head_geometry.lane, tail_geometry.lane, self.attach_eased_frac)
+            result.stage_bounds.start = lerp(
+                head_geometry.stage_bounds.start, tail_geometry.stage_bounds.start, self.attach_eased_frac
+            )
+            result.stage_bounds.end = lerp(
+                head_geometry.stage_bounds.end, tail_geometry.stage_bounds.end, self.attach_eased_frac
+            )
             result.mask @= interpolate_visual_masks(head_geometry.mask, tail_geometry.mask, self.attach_eased_frac)
             result.y_offset = lerp(
                 head_geometry.y_offset,
@@ -1058,6 +1068,10 @@ def compute_slide_input_bounds(
         leniency,
         input_y_offset,
         stage_transform=input_transform.to_screen_transform(),
+        stage_bounds=Interval(
+            lerp(head_geometry.stage_bounds.start, tail_geometry.stage_bounds.start, input_interp_frac),
+            lerp(head_geometry.stage_bounds.end, tail_geometry.stage_bounds.end, input_interp_frac),
+        ),
     ).bounds
 
 

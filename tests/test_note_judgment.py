@@ -7,13 +7,14 @@ from unittest.mock import patch
 
 import test_tick_judgment as tick_fixture
 from sonolus.script.bucket import Judgment
+from sonolus.script.interval import Interval
 from sonolus.script.quad import Rect
 from sonolus.script.vec import Vec2
 from test_input_index import make_notes
 
 from sekai.lib import layout
 from sekai.lib.layout import FlickDirection
-from sekai.lib.note import NoteKind, get_leniency, hitbox_ignores_height
+from sekai.lib.note import NoteKind, get_leniency, hitbox_height_limit
 from sekai.play import note as play
 
 TickHarness = tick_fixture.TickHarness
@@ -218,8 +219,7 @@ class NoteJudgmentTests(unittest.TestCase):
                     0.5,
                     get_leniency(kind),
                     stage_transform=layout.IDENTITY_STAGE_SCREEN_TRANSFORM,
-                    sekai_bounds=True,
-                    ignore_height=hitbox_ignores_height(kind, direction),
+                    height_limit=hitbox_height_limit(kind, direction),
                 ).bounds
 
             for kind in (NoteKind.NORM_TAP, NoteKind.CRIT_TAP, NoteKind.NORM_TRACE, NoteKind.NORM_TAIL_RELEASE):
@@ -234,6 +234,29 @@ class NoteJudgmentTests(unittest.TestCase):
             assert bounds(NoteKind.NORM_FLICK, direction=FlickDirection.UP_LEFT).contains_point(Vec2(0, 0.9))
             assert not bounds(NoteKind.NORM_FLICK, direction=FlickDirection.UP_RIGHT).contains_point(Vec2(0, 0.9))
             assert abs(bounds(NoteKind.NORM_TAP, lane=7).bl.x - 0.575) < 1e-12
+
+    def test_dynamic_stage_uses_its_own_lane_range_with_the_same_hitbox_path(self):
+        transform = layout.LayoutTransform(
+            t=0, w_scale=0.1, h_scale=-0.5, x_translate=0, rotate=0, stage_tilt=1, size_zoom=1
+        )
+        stage = layout.StageScreenTransform(a00=2, a01=0, a02=0.2, a10=0, a11=0.5, a12=0.1, elevation=1)
+        with (
+            patch.object(layout, "Layout", SimpleNamespace(w_scale=0.1, t=0, h_scale=-0.5, approach_start=0)),
+            patch.object(layout, "approach_curve_base", side_effect=lambda x: x),
+            patch.object(layout, "screen", return_value=Rect(l=-1, r=1, b=-1, t=1)),
+        ):
+            for direction in (FlickDirection.UP_LEFT, FlickDirection.UP_RIGHT):
+                result = layout.compute_hitbox(
+                    transform,
+                    lane=2,
+                    size=0.5,
+                    leniency=0.75,
+                    stage_transform=stage,
+                    stage_bounds=Interval(1, 5),
+                    height_limit=hitbox_height_limit(NoteKind.NORM_FLICK, direction),
+                )
+                assert abs(result.bounds.bl.x - (0.5 - 0.1 * 1.8 / 1.19)) < 1e-12
+                assert result.bounds.contains_point(Vec2(0.6, 0.9)) == (direction == FlickDirection.UP_LEFT)
 
 
 if __name__ == "__main__":

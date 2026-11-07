@@ -77,7 +77,7 @@ from sekai.lib.note import (
     has_tap_input,
     hitbox_draw_alpha,
     hitbox_draw_start,
-    hitbox_ignores_height,
+    hitbox_height_limit,
     is_head,
     map_note_kind,
     mirror_flick_direction,
@@ -338,8 +338,8 @@ class BaseNote(PlayArchetype):
                 self.target_time,
                 self.y_offset_at(self.target_time),
                 stage_transform=self.stage_transform_at(self.target_time).to_screen_transform(),
-                sekai_bounds=self.stage_ref.index <= 0,
-                ignore_height=hitbox_ignores_height(self.kind, self.direction),
+                stage_bounds=self.input_geometry(InputGeometryContext.at(self.target_time)).stage_bounds,
+                height_limit=hitbox_height_limit(self.kind, self.direction),
             )
 
         if start_time < inf:
@@ -1255,6 +1255,7 @@ class BaseNote(PlayArchetype):
             result.lane += self.rel_lane
         else:
             result.lane = self.lane
+            result.stage_bounds = Interval(-6, 6)
             result.transform @= identity_stage_transform()
         if self.elevation != 0.0:
             result.transform @= self._basic_stage_transform_at(context.time)
@@ -1268,6 +1269,12 @@ class BaseNote(PlayArchetype):
             head_geometry = head._basic_input_geometry(context)
             tail_geometry = tail._basic_input_geometry(context)
             result.lane = lerp(head_geometry.lane, tail_geometry.lane, self.attach_eased_frac)
+            result.stage_bounds.start = lerp(
+                head_geometry.stage_bounds.start, tail_geometry.stage_bounds.start, self.attach_eased_frac
+            )
+            result.stage_bounds.end = lerp(
+                head_geometry.stage_bounds.end, tail_geometry.stage_bounds.end, self.attach_eased_frac
+            )
             result.mask @= interpolate_visual_masks(head_geometry.mask, tail_geometry.mask, self.attach_eased_frac)
             result.y_offset = lerp(
                 head_geometry.y_offset,
@@ -1773,7 +1780,10 @@ def compute_slide_input_bounds(ease_type: EaseType, head: BaseNote, tail: BaseNo
         leniency,
         input_y_offset,
         stage_transform=input_transform.to_screen_transform(),
-        sekai_bounds=head.stage_ref.index <= 0 and tail.stage_ref.index <= 0,
+        stage_bounds=Interval(
+            lerp(head_geometry.stage_bounds.start, tail_geometry.stage_bounds.start, input_interp_frac),
+            lerp(head_geometry.stage_bounds.end, tail_geometry.stage_bounds.end, input_interp_frac),
+        ),
     ).bounds
 
 
