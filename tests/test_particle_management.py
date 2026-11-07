@@ -95,12 +95,15 @@ class ParticleInterpreter(Interpreter):
         self.queued = []
         self.keepers = []
         self.calls = Counter()
+        self.unavailable_particles = set()
 
     def run(self, node):
         if isinstance(node, FunctionNode):
             self.calls[node.func] += 1
             if node.func == Op.HasParticleEffect:
-                return int(self.run(node.args[0]) >= 0)
+                return int(
+                    (particle_id := self.run(node.args[0])) >= 0 and particle_id not in self.unavailable_particles
+                )
             if node.func in (Op.SpawnParticleEffect, Op.DestroyParticleEffect, Op.Spawn):
                 args = [self.run(arg) for arg in node.args]
                 if node.func == Op.SpawnParticleEffect:
@@ -230,23 +233,31 @@ class CompiledParticleManagementTests(unittest.TestCase):
         self.refresh(runner)
         assert sorted(runner.destroyed) == list(range(1, 15))
 
-    def test_real_flick_emissions_use_lane_aura_center_gen_and_five_flashes(self):
+    def test_real_flick_emissions_keep_center_aura_and_legacy_slot_particles(self):
         runner = self.runner()
         for owner in range(7):
             self.schedule(runner, owner, size=6)
         self.start_queued(runner)
-        assert Counter(kind for _, kind in runner.effects) == {2: 84, 3: 7, 4: 7, 5: 84, 7: 84}
+        assert Counter(kind for _, kind in runner.effects) == {2: 7, 3: 7, 4: 7, 5: 84, 7: 84}
         remaining = Counter(kind for handle, kind in runner.effects if handle not in runner.destroyed)
-        assert remaining == {2: 12, 3: 6, 4: 5, 5: 12, 7: 12}
+        assert remaining == {2: 7, 3: 6, 4: 5, 5: 12, 7: 12}
 
-    def test_real_twenty_four_lane_stage_does_not_clip_aura(self):
+    def test_real_twenty_four_lane_stage_keeps_one_center_aura(self):
         runner = self.runner()
         self.schedule(runner, 1, size=12)
         self.start_queued(runner)
-        assert Counter(kind for _, kind in runner.effects) == {2: 24, 3: 1, 4: 1, 5: 24, 7: 24}
+        assert Counter(kind for _, kind in runner.effects) == {2: 1, 3: 1, 4: 1, 5: 24, 7: 24}
         assert not runner.destroyed
 
-    def test_good_gen_is_still_one_center_particle(self):
+    def test_rebuilt_pack_uses_skin_slots_instead_of_duplicate_particles(self):
+        runner = self.runner()
+        runner.unavailable_particles.add(5)
+        self.schedule(runner, 1, size=12)
+        self.start_queued(runner)
+        assert Counter(kind for _, kind in runner.effects) == {2: 1, 3: 1, 4: 1, 7: 24}
+        assert not runner.destroyed
+
+    def test_aura_and_gen_have_one_page_for_wide_good_notes(self):
         from sonolus.script.debug import simulation_context
 
         from sekai.lib.note import iter_note_particle_pages
@@ -264,6 +275,7 @@ class CompiledParticleManagementTests(unittest.TestCase):
                     NoteKind.NORM_TAP, FlickDirection.UP_OMNI, Judgment.GOOD, 20, True, NoteStyle.DEFAULT
                 )
             )
+        assert [(c, p) for c, p in pages if c == 0] == [(0, 0)]
         assert [(c, p) for c, p in pages if c == 1] == [(1, 0)]
 
 

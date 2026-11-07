@@ -2737,6 +2737,8 @@ def spawn_connector_slot_particles(
                 particle @= get_styled_connector_particles(get_connector_style(kind), True).slot_linear
         case _:
             assert_never(base_kind)
+    if not particle.is_available:
+        return
     for slot_lane in iter_slot_lanes(lane, size):
         layout = transform.transform_billboard(
             layout_linear_effect(slot_lane, shear=0, y_offset=y_offset),

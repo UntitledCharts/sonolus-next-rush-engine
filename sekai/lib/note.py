@@ -1010,12 +1010,7 @@ def iter_note_particle_pages(
             if component == 0:
                 particle = particles.get_linear(judgment)
                 if particle.is_available:
-                    count = (
-                        1
-                        if get_note_visual_family(kind, direction)
-                        in (NoteVisualFamily.TRACE_NOTE, NoteVisualFamily.CRITICAL_TRACE_NOTE)
-                        else slot_count
-                    )
+                    count = 1
             elif component == 1:
                 particle = particles.get_circular(judgment)
                 if particle.is_available:
@@ -1124,25 +1119,18 @@ def handle_note_particles(
         linear_particle = particles.get_linear(judgment)
         if component in (-1, 0) and linear_particle.is_available:
             pool_id = note_particle_pool(pool_family, 0)
-            if pool_family in (8, 9):
-                emit_particle(
-                    linear_particle,
-                    billboard(layout_linear_effect(lane, shear=0, y_offset=y_offset)),
-                    0.5 / speed,
-                    pool_id,
-                    lane,
-                    managed,
-                    page,
-                    aura_limit=aura_limit,
-                )
-            else:
-                for slot_lane in _iter_bundled_slot_lanes(
-                    lane, size, pivot_lane=pivot_lane, half_offset=half_offset, first=first_slot, count=slot_count
-                ):
-                    layout = billboard(layout_linear_effect(slot_lane, shear=0, y_offset=y_offset), slot_lane)
-                    emit_particle(
-                        linear_particle, layout, 0.5 / speed, pool_id, slot_lane, managed, page, aura_limit=aura_limit
-                    )
+            # Existing particle packs author the airborne Aura around the note center.
+            # The skin's per-lane slot and glow sprites provide its width on the stage.
+            emit_particle(
+                linear_particle,
+                billboard(layout_linear_effect(lane, shear=0, y_offset=y_offset)),
+                0.5 / speed,
+                pool_id,
+                lane,
+                managed,
+                page,
+                aura_limit=aura_limit,
+            )
         circular_particle = particles.get_circular(judgment)
         if component in (-1, 1) and circular_particle.is_available:
             emit_particle(
