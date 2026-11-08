@@ -202,7 +202,7 @@ class NoteJudgmentTests(unittest.TestCase):
         assert abs(hitbox.bounds.tl.y - (-0.5 + 0.1 * 3.5 / 1.19)) < 1e-12
         assert hitbox.bounds.bl.y == -1
 
-    def test_sekai_hitbox_widths_edges_and_left_flick_height(self):
+    def test_sekai_hitbox_widths_edges_and_uniform_flick_height(self):
         transform = layout.LayoutTransform(
             t=0, w_scale=0.1, h_scale=-0.5, x_translate=0, rotate=0, stage_tilt=1, size_zoom=1
         )
@@ -231,7 +231,7 @@ class NoteJudgmentTests(unittest.TestCase):
             outer = 0.1 * (5.5 + 1.8 / 1.19)
             assert abs(bounds(NoteKind.NORM_TAP, lane=-4.5).bl.x + outer) < 1e-12
             assert abs(bounds(NoteKind.NORM_TAP, lane=4.5).br.x - outer) < 1e-12
-            assert bounds(NoteKind.NORM_FLICK, direction=FlickDirection.UP_LEFT).contains_point(Vec2(0, 0.9))
+            assert not bounds(NoteKind.NORM_FLICK, direction=FlickDirection.UP_LEFT).contains_point(Vec2(0, 0.9))
             assert not bounds(NoteKind.NORM_FLICK, direction=FlickDirection.UP_RIGHT).contains_point(Vec2(0, 0.9))
             assert abs(bounds(NoteKind.NORM_TAP, lane=7).bl.x - 0.575) < 1e-12
 
@@ -256,7 +256,7 @@ class NoteJudgmentTests(unittest.TestCase):
                     height_limit=hitbox_height_limit(NoteKind.NORM_FLICK, direction),
                 )
                 assert abs(result.bounds.bl.x - (0.5 - 0.1 * 1.8 / 1.19)) < 1e-12
-                assert result.bounds.contains_point(Vec2(0.6, 0.9)) == (direction == FlickDirection.UP_LEFT)
+                assert not result.bounds.contains_point(Vec2(0.6, 0.9))
 
 
 if __name__ == "__main__":
