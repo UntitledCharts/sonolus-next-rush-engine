@@ -23,7 +23,11 @@ class ConnectorAnimationTests(unittest.TestCase):
                 normal, active = connector.get_cross_fate_opacities(a, step / 200, 0.5)
                 assert 0 <= normal <= 1
                 assert 0 <= active <= 1
-                assert isclose(normal + active * (1 - normal), a, abs_tol=1e-12)
+                assert isclose(normal + active, a, abs_tol=1e-12)
+                # Equal texture alpha masks must never become more opaque when mixed.
+                for texture_alpha in (0.1, 0.5, 1):
+                    combined = normal * texture_alpha + active * texture_alpha * (1 - normal * texture_alpha)
+                    assert combined <= a * texture_alpha + 1e-12
             assert connector.get_cross_fate_opacities(a, 0, 0.5) == (a, 0)
             normal, active = connector.get_cross_fate_opacities(a, 0.25, 0.5)
             assert isclose(normal, 0)
@@ -32,7 +36,7 @@ class ConnectorAnimationTests(unittest.TestCase):
         normal, active = connector.get_cross_fate_opacities(0.6, 0.0625, 0.5)
         mix = (1 - 2**-0.5) / 2
         assert isclose(normal, 0.6 * (1 - mix))
-        assert isclose(active * (1 - normal), 0.6 * mix)
+        assert isclose(active, 0.6 * mix)
 
     def test_missing_active_sprite_preserves_legacy_skin(self):
         with (

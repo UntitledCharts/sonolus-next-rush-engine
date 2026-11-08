@@ -2522,12 +2522,11 @@ def draw_connector_default(
 
 
 def get_cross_fate_opacities(a, t, period):
-    # Sekai mixes the two RGB textures with a cosine, preserving the base alpha.
-    # Source-over compensation preserves that opacity for opaque sprite texels.
+    # Approximate Sekai's RGB mix without boosting translucent skin texels.
+    # Source-over blending can slightly reduce opacity during the transition.
     mix = (1 - cos(2 * pi * t / period)) / 2
-    # The existing z-order places the normal texture above the active texture.
     normal = a * (1 - mix)
-    active = (a - normal) / (1 - normal) if normal < 1 else 0.0
+    active = a * mix
     return normal, active
 
 
