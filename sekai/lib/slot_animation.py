@@ -2125,19 +2125,28 @@ def slot_effect_duration(pool_id: int) -> float:
 
 
 def slot_glow_appearance(progress: float, pool_id: int = -1) -> tuple[float, float]:
+    height = 0.0
+    alpha = 0.0
     if LevelConfig.ui_version == Version.v1:
-        return 1 - lerp(1, 0, progress) ** 3, lerp(1, 0, progress)
-    profile = slot_profile(pool_id)
-    return sample_curve(_GLOW_HEIGHT, _GLOW_HEIGHT_PROFILE[profile], progress), sample_curve(
-        _GLOW_ALPHA, _GLOW_ALPHA_PROFILE[profile], progress
-    )
+        height = 1 - lerp(1, 0, progress) ** 3
+        alpha = lerp(1, 0, progress)
+    else:
+        profile = slot_profile(pool_id)
+        height = sample_curve(_GLOW_HEIGHT, _GLOW_HEIGHT_PROFILE[profile], progress)
+        alpha = sample_curve(_GLOW_ALPHA, _GLOW_ALPHA_PROFILE[profile], progress)
+    return height, alpha
 
 
 def slot_appearance(progress: float, pool_id: int = -1) -> tuple[float, float]:
+    scale = 1.0
+    alpha = 0.0
     if LevelConfig.ui_version == Version.v1:
-        return 1.0, lerp(1, 0, progress)
-    profile = slot_profile(pool_id)
-    return sample_curve(_SLOT_SCALE, 0, progress), sample_curve(_SLOT_ALPHA, _SLOT_ALPHA_PROFILE[profile], progress)
+        alpha = lerp(1, 0, progress)
+    else:
+        profile = slot_profile(pool_id)
+        scale = sample_curve(_SLOT_SCALE, 0, progress)
+        alpha = sample_curve(_SLOT_ALPHA, _SLOT_ALPHA_PROFILE[profile], progress)
+    return scale, alpha
 
 
 def hold_glow_appearance(progress: float, critical: bool) -> tuple[float, float]:
