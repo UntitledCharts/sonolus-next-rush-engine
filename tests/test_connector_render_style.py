@@ -25,7 +25,7 @@ from sekai.lib.connector import (
 from sekai.lib.ease import EaseType
 from sekai.lib.layout import DynamicLayout, blend_stage_transform, identity_stage_transform
 from sekai.lib.options import Options
-from sekai.lib.skin import init_skin
+from sekai.lib.skin import BaseSkin, init_skin
 from sekai.lib.stage import VisualMask
 
 
@@ -253,6 +253,18 @@ class ConnectorRenderStyleTests(unittest.TestCase):
     def test_disabled_fake_notes_and_zero_alpha_still_hide_connectors(self):
         for options in ({"disable_fake_notes": True}, {"slide_alpha": 0}):
             self.assert_render_equal(default_probe_values(kind=ConnectorKind.FAKE_ACTIVE_NORMAL), options=options)
+
+    def test_guides_use_the_active_color_after_the_chain_head(self):
+        values = default_probe_values(kind=ConnectorKind.GUIDE_GREEN, state=ConnectorVisualState.WAITING)
+        for presentation in SegmentPresentation:
+            runner, node = prepare_probe(self.compiled, 1, values | {"presentation": presentation})
+            for now, active in ((10, False), (10.25, True), (10.75, True), (10.1, False)):
+                runner.set(PlayBlock.RuntimeUpdate, 0, now)
+                runner.draws.clear()
+                runner.run(node)
+                visible = [row[0] for row in runner.draws if row[10] > 1e-8]
+                assert (BaseSkin.guide_green_active.id in visible) == active
+                assert visible
 
     def test_cached_style_reduces_render_work(self):
         values = default_probe_values(state=ConnectorVisualState.ACTIVE)

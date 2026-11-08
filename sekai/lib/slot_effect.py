@@ -2,7 +2,7 @@ from math import ceil, floor
 
 from sonolus.script.array import Array, Dim
 from sonolus.script.globals import level_memory
-from sonolus.script.interval import Interval, lerp, unlerp_clamped
+from sonolus.script.interval import Interval, unlerp_clamped
 from sonolus.script.record import Record
 from sonolus.script.runtime import time
 from sonolus.script.sprite import Sprite
@@ -18,10 +18,10 @@ from sekai.lib.layout import (
     transformed_vec_at,
     visible_lane_range_at,
 )
-from sekai.lib.level_config import LevelConfig
-from sekai.lib.options import Options, Version
+from sekai.lib.options import Options
 from sekai.lib.particle import ActiveParticles
 from sekai.lib.skin import BaseSkin
+from sekai.lib.slot_animation import slot_appearance, slot_glow_appearance
 
 SLOT_GLOW_EFFECT_DURATION = 0.25
 SLOT_EFFECT_DURATION = 0.5
@@ -91,7 +91,7 @@ def is_slot_generation_visible(sprite: Sprite, generation: float, pool_id: int =
 
 
 def slot_glow_progress_height(progress: float) -> float:
-    return unlerp_clamped(1, 0.8, progress) if LevelConfig.ui_version == Version.v3 else 1 - lerp(1, 0, progress) ** 3
+    return slot_glow_appearance(progress)[0]
 
 
 def draw_slot_glow_effect(
@@ -105,13 +105,12 @@ def draw_slot_glow_effect(
     transform: StageScreenTransform,
 ):
     progress = unlerp_clamped(start_time, end_time, time())
-    height = slot_glow_progress_height(progress)
+    height, a = slot_glow_appearance(progress)
     layout = transform.transform_billboard(
         layout_slot_glow_effect(lane, size, height, y_offset=y_offset),
         transformed_vec_at(lane, approach(1 - y_offset)),
     )
     z = get_z(layers.slot_glow_effect, start_time, lane, elevation=transform.elevation, invert_time=True)
-    a = lerp(1, 0, progress)
     lightweight = 0.25 if ActiveParticles.lightweight.is_available else 1
     sprite.draw(layout, z=z.tuple, a=a * lightweight)
 
@@ -126,9 +125,9 @@ def draw_slot_effect(
     transform: StageScreenTransform,
 ):
     progress = unlerp_clamped(start_time, end_time, time())
-    layout = transform.transform_quad(layout_slot_effect(lane, y_offset=y_offset))
+    scale, a = slot_appearance(progress)
+    layout = transform.transform_quad(layout_slot_effect(lane, y_offset=y_offset, scale=scale))
     z = get_z(layers.slot_effect, start_time, lane, elevation=transform.elevation, invert_time=True)
-    a = lerp(1, 0, progress)
     lightweight = 0.25 if ActiveParticles.lightweight.is_available else 1
     sprite.draw(layout, z=z.tuple, a=a * lightweight)
 
@@ -149,10 +148,10 @@ def draw_slot_effects_in_range(
 ):
     """Draw slot effects at lanes i + 0.5 + shift for i in [left, right), skipping off-screen slots."""
     progress = unlerp_clamped(start_time, end_time, time())
-    a = lerp(1, 0, progress)
+    scale, a = slot_appearance(progress, pool_id)
     lightweight = 0.25 if ActiveParticles.lightweight.is_available else 1
     travel = approach(1 - y_offset)
-    nh = DynamicLayout.note_h
+    nh = DynamicLayout.note_h * scale
     lo_b, hi_b = visible_lane_range_at(tilt_depth(1 + nh, travel), transform)
     lo_t, hi_t = visible_lane_range_at(tilt_depth(1 - nh, travel), transform)
     lo = min(lo_b, lo_t)
@@ -163,8 +162,8 @@ def draw_slot_effects_in_range(
         if generation is not None and not is_slot_generation_visible(sprite, generation + i - left, pool_id):
             continue
         lane = i + 0.5 + shift
-        left_edge = lane - 0.485
-        right_edge = lane + 0.485
+        left_edge = lane - 0.485 * scale
+        right_edge = lane + 0.485 * scale
         if bounds is not None:
             left_edge = max(left_edge, bounds.start)
             right_edge = min(right_edge, bounds.end)
@@ -172,7 +171,7 @@ def draw_slot_effects_in_range(
             continue
         center = (left_edge + right_edge) / 2
         size = (right_edge - left_edge) / 2
-        layout = transform.transform_quad(layout_slot_effect(center, y_offset=y_offset, size=size))
+        layout = transform.transform_quad(layout_slot_effect(center, y_offset=y_offset, size=size, height_scale=scale))
         z = get_z(layers.slot_effect, start_time, lane, elevation=transform.elevation, invert_time=True)
         sprite.draw(layout, z=z.tuple, a=a * lightweight)
 
@@ -193,8 +192,7 @@ def draw_slot_glow_effects_in_range(
 ):
     """Draw per-lane slot glows on the stage's grid, skipping off-screen slots."""
     progress = unlerp_clamped(start_time, end_time, time())
-    height = slot_glow_progress_height(progress)
-    a = lerp(1, 0, progress)
+    height, a = slot_glow_appearance(progress, pool_id)
     lightweight = 0.25 if ActiveParticles.lightweight.is_available else 1
     travel = approach(1 - y_offset)
     lo, hi = visible_lane_range_at(travel, transform)

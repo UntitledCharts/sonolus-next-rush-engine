@@ -427,6 +427,13 @@ class Connector(PlayArchetype):
             draw_connector(
                 kind=self.kind,
                 render_info=self.render_info,
+                animation_start_time=(
+                    self.active_head.target_time
+                    if self.active_head_ref.index > 0
+                    else segment_head.active_head_ref.get().target_time
+                    if segment_head.active_head_ref.index > 0
+                    else segment_head.target_time
+                ),
                 visual_state=visual_state,
                 ease_type=self.ease_type,
                 head_lane=head_lane,

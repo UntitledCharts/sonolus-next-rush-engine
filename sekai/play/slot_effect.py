@@ -6,9 +6,8 @@ from sonolus.script.sprite import Sprite
 from sekai.lib import archetype_names
 from sekai.lib.layout import IDENTITY_STAGE_SCREEN_TRANSFORM, NoteStageParams, NoteStageProjection
 from sekai.lib.options import Options
+from sekai.lib.slot_animation import slot_effect_duration, slot_glow_duration
 from sekai.lib.slot_effect import (
-    SLOT_EFFECT_DURATION,
-    SLOT_GLOW_EFFECT_DURATION,
     draw_slot_effects_in_range,
     draw_slot_glow_effects_in_range,
     is_slot_generation_visible,
@@ -35,7 +34,7 @@ class SlotGlowEffect(PlayArchetype):
 
     def initialize(self):
         self.generation = -1
-        self.end_time = self.start_time + SLOT_GLOW_EFFECT_DURATION / Options.effect_animation_speed
+        self.end_time = self.start_time + slot_glow_duration(self.pool_id) / Options.effect_animation_speed
 
     def update_sequential(self):
         if self.despawn or self.generation >= 0:
@@ -98,7 +97,7 @@ class SlotEffect(PlayArchetype):
 
     def initialize(self):
         self.generation = -1
-        self.end_time = self.start_time + SLOT_EFFECT_DURATION / Options.effect_animation_speed
+        self.end_time = self.start_time + slot_effect_duration(self.pool_id) / Options.effect_animation_speed
 
     def update_sequential(self):
         if self.despawn or self.generation >= 0:

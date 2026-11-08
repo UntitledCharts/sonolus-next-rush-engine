@@ -27,7 +27,13 @@ from sekai.lib.connector import (
 )
 from sekai.lib.custom_elements import init_fixed_ui_layout
 from sekai.lib.fever import FeverWindows, advance_fever_window, prepare_fever_windows
-from sekai.lib.initialization import LastNote, calculate_note_weight, count_entities, sort_entities_by_time
+from sekai.lib.initialization import (
+    LastNote,
+    calculate_note_weight,
+    count_entities,
+    prepare_guide_heads,
+    sort_entities_by_time,
+)
 from sekai.lib.layout import (
     StaticStageData,
     init_layout,
@@ -124,6 +130,7 @@ class Initialization(PlayArchetype):
 def sorted_linked_list(entity_count: int):
     prepare_fever_windows(FeverChance, FeverStart)
     note_head, note_length, skill_head, skill_length = initial_list(entity_count)
+    prepare_guide_heads(entity_count, note.BaseNote)
 
     sorted_skill_head = +EntityRef[Skill]
     if skill_length > 0:
