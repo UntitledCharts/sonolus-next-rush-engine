@@ -5,6 +5,9 @@ from collections.abc import Sequence
 from sonolus.script.array import Array
 from sonolus.script.interval import clamp, lerp
 
+from sekai.lib.level_config import LevelConfig
+from sekai.lib.options import Version
+
 _PROFILE = Array(0, 0, 0, 1, 2, 3, 4, 5, 0, 1, 0, 1, 0)
 _GLOW_DURATION = Array(0.25, 0.25, 0.4, 0.3, 0.35, 0.25)
 _SLOT_DURATION = Array(0.48, 0.48, 0.45, 0.65, 0.5, 0.48)
@@ -2110,14 +2113,20 @@ def sample_curve(values: Sequence[float], profile: int, progress: float) -> floa
 
 
 def slot_glow_duration(pool_id: int) -> float:
+    if LevelConfig.ui_version == Version.v1:
+        return 0.25
     return _GLOW_DURATION[slot_profile(pool_id)]
 
 
 def slot_effect_duration(pool_id: int) -> float:
+    if LevelConfig.ui_version == Version.v1:
+        return 0.5
     return _SLOT_DURATION[slot_profile(pool_id)]
 
 
 def slot_glow_appearance(progress: float, pool_id: int = -1) -> tuple[float, float]:
+    if LevelConfig.ui_version == Version.v1:
+        return 1 - lerp(1, 0, progress) ** 3, lerp(1, 0, progress)
     profile = slot_profile(pool_id)
     return sample_curve(_GLOW_HEIGHT, _GLOW_HEIGHT_PROFILE[profile], progress), sample_curve(
         _GLOW_ALPHA, _GLOW_ALPHA_PROFILE[profile], progress
@@ -2125,6 +2134,8 @@ def slot_glow_appearance(progress: float, pool_id: int = -1) -> tuple[float, flo
 
 
 def slot_appearance(progress: float, pool_id: int = -1) -> tuple[float, float]:
+    if LevelConfig.ui_version == Version.v1:
+        return 1.0, lerp(1, 0, progress)
     profile = slot_profile(pool_id)
     return sample_curve(_SLOT_SCALE, 0, progress), sample_curve(_SLOT_ALPHA, _SLOT_ALPHA_PROFILE[profile], progress)
 

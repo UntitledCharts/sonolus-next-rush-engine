@@ -10,7 +10,7 @@ from sonolus.script.containers import VarArray
 from sonolus.script.easing import ease_in_circ, ease_in_out_circ, ease_out_circ, ease_out_in_circ
 from sonolus.script.effect import Effect, LoopedEffectHandle
 from sonolus.script.globals import level_memory
-from sonolus.script.interval import clamp, lerp
+from sonolus.script.interval import clamp, lerp, remap_clamped
 from sonolus.script.particle import Particle, ParticleHandle
 from sonolus.script.quad import Quad, QuadLike
 from sonolus.script.record import Record
@@ -2813,6 +2813,19 @@ def draw_connector_slot_glow_effect(
                 sprite @= get_styled_active_connector_sprites(get_connector_style(kind), True).slot_glow
         case _:
             assert_never(base_kind)
+    if LevelConfig.ui_version == Version.v1:
+        height = 0.2 + (1.2 - 0.2) * ((sin((time() - start_time) * 2.5 * pi) + 1) / 2)
+        layout = transform.transform_billboard(
+            layout_slot_glow_effect(lane, size, height, y_offset=y_offset),
+            transformed_vec_at(lane, approach(1 - y_offset)),
+        )
+        if not quad_touches_screen(layout):
+            return
+        z = get_z(layers.slot_glow_effect, start_time, lane, elevation=transform.elevation, invert_time=True)
+        a = remap_clamped(start_time, start_time + 0.25, 0.0, 0.25, time())
+        lightweight = 0.25 if ActiveParticles.lightweight.is_available else 1
+        sprite.draw(layout, z=z.tuple, a=a * lightweight)
+        return
     critical = base_kind in (ConnectorKind.ACTIVE_CRITICAL, ConnectorKind.FAKE_ACTIVE_CRITICAL)
     ex = 0.035 * abs(2 * size) + 0.08 if LevelConfig.ui_version == Version.v3 else 0
     age = max(0, (time() - start_time) * Options.effect_animation_speed)
