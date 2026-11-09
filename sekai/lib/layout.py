@@ -26,6 +26,7 @@ from sonolus.script.values import swap
 from sonolus.script.vec import Vec2
 
 from sekai.lib import archetype_names
+from sekai.lib import hud_geometry as hud
 from sekai.lib.baseevent import get_event_as, next_event_time_in_list, query_event_list
 from sekai.lib.ease import EaseType, eased_range, event_progress
 from sekai.lib.level_config import EngineRevision, LevelConfig
@@ -1627,6 +1628,51 @@ def layout_custom_tag() -> Quad:
     )
 
 
+def v3_hud_anchor(right: bool = False) -> Vec2:
+    safe = safe_area()
+    safe_width = safe.r - safe.l
+    # SpriteAnchor reserves 60 reference pixels at each side when safe-area
+    # insets exist. Express that padding in the 1080-high HUD reference frame.
+    full = screen()
+    if safe.l != full.l or safe.r != full.r or safe.t != full.t or safe.b != full.b:
+        safe_width = max(0, safe_width - 120 / 540)
+    safe_aspect = safe_width / (safe.t - safe.b)
+    x, y = hud.hud_anchor(aspect_ratio(), safe_aspect, right)
+    return Vec2(x, y)
+
+
+def v3_hud_rect(x: float, y: float, w: float, h: float, scale: float = 1, right: bool = False) -> Quad:
+    anchor = v3_hud_anchor(right)
+    unit = hud.hud_unit(aspect_ratio()) * scale
+    center = anchor + Vec2(x, y) * unit
+    return Quad(
+        bl=center + Vec2(-w / 2, -h / 2) * unit,
+        br=center + Vec2(w / 2, -h / 2) * unit,
+        tl=center + Vec2(-w / 2, h / 2) * unit,
+        tr=center + Vec2(w / 2, h / 2) * unit,
+    )
+
+
+def v3_align_bar_point(point: Vec2, right: bool = False) -> Vec2:
+    # Rebase legacy number/rank offsets onto the same sprite rectangle.
+    ratio = min(1, aspect_ratio() / TARGET_ASPECT_RATIO)
+    scale = runtime_ui().secondary_metric_config.scale if right else runtime_ui().primary_metric_config.scale
+    old_h = (0.196 if right else 0.27) * scale
+    old_w = old_h * (4.22 if right else 4.6) * ratio
+    old_x = (
+        screen().r - UIMargin.life_bar_x * ratio - old_w / 2
+        if right
+        else screen().l + UIMargin.score_bar_x * ratio + old_w / 2
+    )
+    old_y = (UIMargin.life_bar_y if right else UIMargin.score_bar_y) + old_h * (1 - ratio) / 2
+    frame = layout_life_bar() if right else layout_score_bar()
+    center = (frame.bl + frame.tr) / 2
+    return center + Vec2(
+        (point.x - old_x) * (frame.br.x - frame.bl.x) / old_w,
+        (point.y - old_y) * (frame.tl.y - frame.bl.y) / (old_h * ratio),
+    )
+
+
 def init_ui_margin():
     has_side_notch = (screen().l != safe_area().l) or (screen().r != safe_area().r)
 
@@ -1646,6 +1692,18 @@ def init_ui_margin():
 
 
 def layout_life_bar() -> Quad:
+    ui = runtime_ui()
+    result = +Quad
+    if LevelConfig.ui_version == Version.v3:
+        result @= v3_hud_rect(
+            hud.LIFE_X, hud.LIFE_Y, hud.LIFE_WIDTH, hud.LIFE_HEIGHT, ui.secondary_metric_config.scale, True
+        )
+    else:
+        result @= _layout_life_bar_legacy()
+    return result
+
+
+def _layout_life_bar_legacy() -> Quad:
     ui = runtime_ui()
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
@@ -1675,6 +1733,23 @@ def layout_life_bar() -> Quad:
 
 
 def layout_life_gauge(life, edge=False) -> Quad:
+    ui = runtime_ui()
+    result = +Quad
+    if LevelConfig.ui_version == Version.v3:
+        progress = clamp(life / 1000, 0, 1)
+        body = 2.45 * (250 / 261)
+        cap = 2.45 * (11 / 261)
+        start = -0.61 - 1.7946 - 2.45 / 2
+        x = start + body * progress + cap / 2 if edge else start + body * progress / 2
+        result @= v3_hud_rect(
+            x, -0.602 + 0.082, cap if edge else body * progress, 0.144, ui.secondary_metric_config.scale, True
+        )
+    else:
+        result @= _layout_life_gauge_legacy(life, edge)
+    return result
+
+
+def _layout_life_gauge_legacy(life, edge=False) -> Quad:
     ui = runtime_ui()
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
@@ -1742,6 +1817,18 @@ def layout_life_gauge(life, edge=False) -> Quad:
 
 def layout_score_bar() -> Quad:
     ui = runtime_ui()
+    result = +Quad
+    if LevelConfig.ui_version == Version.v3:
+        result @= v3_hud_rect(
+            hud.SCORE_X, hud.SCORE_Y, hud.SCORE_WIDTH, hud.SCORE_HEIGHT, ui.primary_metric_config.scale
+        )
+    else:
+        result @= _layout_score_bar_legacy()
+    return result
+
+
+def _layout_score_bar_legacy() -> Quad:
+    ui = runtime_ui()
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
 
@@ -1775,6 +1862,19 @@ class ScoreGaugeType(IntEnum):
 
 
 def layout_score_gauge(gauge=0.0, score_type: ScoreGaugeType = ScoreGaugeType.NORMAL) -> Quad:
+    ui = runtime_ui()
+    result = +Quad
+    if LevelConfig.ui_version == Version.v3:
+        fraction = 1 - clamp(gauge, 0, 1) if score_type == ScoreGaugeType.MASK else 1.0
+        width = max(4.923 * fraction, 1e-3)
+        right = 3.7862 - 2.4542003 + 4.923
+        result @= v3_hud_rect(right - width / 2, -0.42 - 0.10000026, width, 0.22, ui.primary_metric_config.scale)
+    else:
+        result @= _layout_score_gauge_legacy(gauge, score_type)
+    return result
+
+
+def _layout_score_gauge_legacy(gauge=0.0, score_type: ScoreGaugeType = ScoreGaugeType.NORMAL) -> Quad:
     ui = runtime_ui()
 
     scale_ratio = min(1, aspect_ratio() / (16 / 9))
@@ -1874,6 +1974,11 @@ def layout_score_rank() -> Quad:
     center_y = UIMargin.score_bar_y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
+    if LevelConfig.ui_version == Version.v3:
+        screen_center @= v3_align_bar_point(screen_center, False)
+        factor = hud.SCORE_HEIGHT / (5 * 0.27)
+        w *= factor
+        h *= factor
 
     return Quad(
         bl=Vec2(screen_center.x - w / 2, screen_center.y - h / 2),
@@ -1911,6 +2016,11 @@ def layout_score_rank_text() -> Quad:
     center_y = UIMargin.score_bar_y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
+    if LevelConfig.ui_version == Version.v3:
+        screen_center @= v3_align_bar_point(screen_center, False)
+        factor = hud.SCORE_HEIGHT / (5 * 0.27)
+        w *= factor
+        h *= factor
 
     return Quad(
         bl=Vec2(screen_center.x - w / 2, screen_center.y - h / 2),
@@ -2425,13 +2535,16 @@ def layout_skill_bar(
             )
         )
     else:
-        layout @= transform_fixed_quad(
-            Quad(
-                bl=Vec2(center.x - w, center.y + h),
-                br=Vec2(center.x + w, center.y + h),
-                tl=Vec2(center.x - w, center.y - h),
-                tr=Vec2(center.x + w, center.y - h),
-            )
+        # Map the notification's existing local glyph offsets into the source
+        # SkillTextView rectangle, independent of stage projection and tilt.
+        x_factor = hud.SKILL_WIDTH / (2 * 0.08 * 21)
+        y_factor = hud.SKILL_HEIGHT / (2 * 0.08)
+        layout @= v3_hud_rect(
+            hud.SKILL_X + (center.x + 6.7) * x_factor,
+            hud.SKILL_Y - (center.y - 0.443) * y_factor,
+            2 * w * x_factor,
+            2 * h * y_factor,
+            runtime_ui().primary_metric_config.scale,
         )
     return layout
 

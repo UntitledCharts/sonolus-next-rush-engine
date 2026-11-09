@@ -20,12 +20,9 @@ from sekai.lib.layout import (
     IDENTITY_STAGE_SCREEN_TRANSFORM,
     LANE_B,
     LANE_T,
-    TARGET_ASPECT_RATIO,
     DynamicLayout,
     Layout,
     StageScreenTransform,
-    UIMargin,
-    aspect_ratio,
     get_note_spawn_depth,
     get_perspective_y,
     layout_dynamic_fever_side,
@@ -449,12 +446,9 @@ def draw_skill_bar(
     x_ratio = 0
     y_ratio = 0
     if LevelConfig.ui_version == Version.v3:
-        scale_ratio = min(1, aspect_ratio() / TARGET_ASPECT_RATIO)
-        # Match the score bar's screen-space inset before converting to fixed UI coordinates.
-        bar_left = screen().l + UIMargin.score_bar_x * scale_ratio
-        bar_center_x = bar_left / Layout.fixed_w_scale + SKILL_BAR_HALF_W
-        x_ratio = bar_center_x - SKILL_BAR_BASE_X
-        y_ratio = SKILL_REF_TOP_EDGE - (screen().t - Layout.t) / Layout.fixed_h_scale + SKILL_REF_Y_RATIO
+        # Position is resolved by the common FrontUIView anchor in layout_skill_bar.
+        x_ratio = 0
+        y_ratio = 0
 
         x = SKILL_BAR_BASE_X + x_ratio
         y = 0.433 - y_ratio + SKILL_BAR_GROUP_OFFSET_Y

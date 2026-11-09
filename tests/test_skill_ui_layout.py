@@ -39,7 +39,7 @@ class SkillUiLayoutTests(unittest.TestCase):
                 ("aspect_ratio", lambda: self.aspect),
                 ("screen", lambda: Rect(l=-self.aspect, r=self.aspect, b=-1, t=1)),
             ):
-                stack.enter_context(patch.object(module, name, value))
+                stack.enter_context(patch.object(module, name, value, create=True))
         stack.enter_context(
             patch.object(
                 layout,
@@ -83,18 +83,32 @@ class SkillUiLayoutTests(unittest.TestCase):
                         ):
                             self.draw_skill(draw_time, effect)
                             assert len(self.draws) > 2
-                            for _, quad, _ in self.draws:
+                            for sprite_id, quad, alpha in self.draws:
+                                # OpenSekai's background extends beyond its left anchor;
+                                # its transparent border is deliberately screen-clipped.
+                                if sprite_id in (100, 101, 102) or alpha == 0:
+                                    continue
                                 for point in (quad.bl, quad.br, quad.tl, quad.tr):
                                     assert -aspect <= point.x <= aspect
                                     assert -1 <= point.y <= 1
 
-    def test_settled_skill_bar_aligns_with_score_bar(self):
+    def test_settled_skill_bar_matches_source_prefab(self):
         for aspect in (8 / 5, 4 / 3, 16 / 9, 21 / 9):
             for notch_left, notch_right in ((0, 0), (0.1, 0), (0, 0.1)):
                 with self.subTest(aspect=aspect, notch=(notch_left, notch_right)):
                     self.configure(aspect, notch_left, notch_right)
                     self.draw_skill(1, SkillMode.SCORE)
-                    assert isclose(self.draws[0][1].tl.x, layout.layout_score_bar().tl.x)
+                    quad = self.draws[0][1]
+                    unit = min(1, aspect / (16 / 9)) / 5
+                    half_height = 1 / unit
+                    reserved = 120 / 540 if notch_left or notch_right else 0
+                    safe_aspect = (2 * aspect - notch_left - notch_right - reserved) / 2
+                    anchor_x = -(half_height - 0.1) * safe_aspect * unit
+                    anchor_y = (half_height - 0.1) * unit
+                    assert isclose((quad.bl.x + quad.tr.x) / 2, anchor_x + 1.7111 * unit)
+                    assert isclose((quad.bl.y + quad.tr.y) / 2, anchor_y - 3.22 * unit)
+                    assert isclose(quad.br.x - quad.bl.x, 4.08 * unit)
+                    assert isclose(quad.tl.y - quad.bl.y, 1.36 * unit)
 
 
 if __name__ == "__main__":

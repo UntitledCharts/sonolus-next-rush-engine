@@ -23,6 +23,7 @@ from sekai.lib.layout import (
     layout_dead_effect_quads,
     transform_fixed_size,
     transform_static_quad,
+    v3_align_bar_point,
 )
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, Version
@@ -615,6 +616,13 @@ def draw_life_number(number: int, z: ZIndex, alpha: float = 1.0):
 
     screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=center_y)
 
+    if LevelConfig.ui_version == Version.v3:
+        screen_center @= v3_align_bar_point(screen_center, True)
+        factor = (93 / (108 * 0.9)) / (5 * 0.196)
+        w *= factor
+        h *= factor
+        digit_gap *= factor
+
     drawing_ui = UILayout(
         core=UICoreConfig(number, digit_count, mode=UIMode.LIFE),
         common=CommonConfig(
@@ -684,6 +692,13 @@ def draw_score_bar_number(number: int, z: ZIndex, alpha: float = 1.0):
     center_y = UIMargin.score_bar_y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
+
+    if LevelConfig.ui_version == Version.v3:
+        screen_center @= v3_align_bar_point(screen_center, False)
+        factor = (128 / (108 * 0.9)) / (5 * 0.27)
+        w *= factor
+        h *= factor
+        digit_gap *= factor
 
     drawing_ui = UILayout(
         core=UICoreConfig(number, digit_count, mode=UIMode.SCORE_BAR),
@@ -758,6 +773,13 @@ def draw_score_bar_raw_number(number: int, z: ZIndex, time: float, alpha: float 
     center_y = UIMargin.score_bar_y + (y_offset * final_scale) + y_shift
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
+
+    if LevelConfig.ui_version == Version.v3:
+        screen_center @= v3_align_bar_point(screen_center, False)
+        factor = (128 / (108 * 0.9)) / (5 * 0.27)
+        w *= factor
+        h *= factor
+        digit_gap *= factor
 
     drawing_ui = UILayout(
         core=UICoreConfig(number, digit_count, mode=UIMode.SCORE_ADD),
