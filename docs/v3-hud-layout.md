@@ -42,10 +42,10 @@ advance, and its label is at (6.241, 1.513). Judgment sizing uses judgment UI
 scale independently from combo UI scale. The engine-only percentage display is
 kept above the combo group; OpenSekai has no equivalent percentage readout.
 
-Versioned score/life number placement changes apply only to v3. Score uses the
-source NumberRoot's right anchor with equal visible-ink gaps (rather than the
-original fixed cell advance); life uses its right-aligned root and 0.325 advance
-scaled by the source 0.63 root scale. v1 metric-number
+Versioned score/life number placement changes apply only to v3. Both metrics use the
+source least-significant-digit SpriteRenderer root: score has a 0.305 world-unit
+advance and 0.94 child scale; life has a 0.325 advance under a 0.63 root scale.
+There is no extra text-block alignment or visible-gap kerning. v1 metric-number
 placement remains unchanged.
 
 ## Visible glyph bounds
@@ -57,14 +57,23 @@ rectangles and pivots. `font_metrics.py` registers each digit's visible alpha
 bounds and source pivot independently from the fixed layout advance. AP and glow
 images share the main glyph canvas registration; fallback fonts are left alone.
 Metric ink fitting is v3-only, while combo fitting follows the shared combo path.
+The metric target includes the visible union of `NumberRoot` and
+`NumberOutlineRoot`. Fitting the baked outlined glyph to only the source white
+layer made score/life digits too small. At 1920x1080, source digit 0 including its
+outline is approximately 50 pixels high for score and 33 for life (previous
+white-only targets were approximately 41 and 27). The source atlas uses separate
+white and outline textures; the skin bakes them together, so stroke proportions
+can still differ despite matching outer bounds.
 The calibration targets the inspected Dropbox v3 skins (all four variants use
 the same normal combo glyph bounds), not arbitrary external fonts.
 
 Validation uses real engine Sprite.draw calls captured from the Sonolus simulation
 and composites the actual SCP atlas in draw order. At 1080-high reference size,
 visible combo 1234 differs from OpenSekai's source atlas bounds by at most one
-pixel. Metric glyph sizes/pivots use the source ink calibration; their horizontal
-positions now use constant visible gaps for the flattened skin. Separate 4:3 and 21:9 fixtures cover 1111 and 8888.
+pixel. Score 12345678 and life 1000 also differ by at most one pixel at this
+reference size when compared with both source font layers. Metric regression
+fixtures cover all digits, dim leading zeroes, 4:3/16:9/21:9, and multiple UI
+scales; their positions use the original fixed SpriteRenderer advances.
 These are offline raster checks, not screenshots from a Sonolus client. They
 check geometry and texture padding, not client-specific filtering or color space.
 
@@ -81,10 +90,3 @@ rectangle in frame pixels is (108.1,48.65) with size (553*0.854,25*0.9275).
 The mask's visible cut runs from 109 to 577; its own transparent left margin is
 subtracted before drawing. This keeps each fill fraction registered to the same
 frame. At 100% no v3 mask is drawn, so a minimum-width quad cannot leave a sliver.
-
-v3 score numbers use proportional advances from visible glyph bounds with a
-3-pixel gap at 1080-high, default UI scale. Their right ink edge stays fixed even
-when the trailing digit is narrow; dim leading zeroes use the zero's registration.
-Raster fixtures at 4:3, 16:9, and 21:9 produce gaps within one pixel of the scaled
-target, accounting for antialiasing and pixel rounding. v1 placement and advances
-are unchanged.
