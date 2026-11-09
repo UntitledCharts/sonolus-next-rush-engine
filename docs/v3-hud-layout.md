@@ -46,3 +46,22 @@ Versioned score/life number placement changes apply only to v3. Score uses the
 source NumberRoot's right alignment and 0.305 advance; life uses its right-aligned
 root and 0.325 advance scaled by the source 0.63 root scale. v1 metric-number
 placement remains unchanged.
+
+## Visible glyph bounds
+
+The Next RUSH 150x150 combo canvases include considerable transparent padding:
+normal digits occupy approximately 50-79 pixels horizontally and 97-101 pixels
+vertically. The 40x40 metric canvases also differ from OpenSekai's trimmed sprite
+rectangles and pivots. `font_metrics.py` registers each digit's visible alpha
+bounds and source pivot independently from the fixed layout advance. AP and glow
+images share the main glyph canvas registration; fallback fonts are left alone.
+Metric ink fitting is v3-only, while combo fitting follows the shared combo path.
+The calibration targets the inspected Dropbox v3 skins (all four variants use
+the same normal combo glyph bounds), not arbitrary external fonts.
+
+Validation uses real engine Sprite.draw calls captured from the Sonolus simulation
+and composites the actual SCP atlas in draw order. At 1080-high reference size,
+visible combo 1234 and metric digits 1-8 differ from OpenSekai's source atlas
+bounds by at most one pixel. Separate 4:3 and 21:9 fixtures cover 1111 and 8888.
+These are offline raster checks, not screenshots from a Sonolus client. They
+check geometry and texture padding, not client-specific filtering or color space.

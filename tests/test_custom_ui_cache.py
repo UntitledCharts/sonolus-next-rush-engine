@@ -100,11 +100,21 @@ class CustomUiCacheTests(unittest.TestCase):
                         ui.draw_combo_number(0, True, cache)
                     first, last = self.draws[1][1], self.draws[-1][1]
                     scale = 0.6 + 0.4 * min(1, self.now / 0.112)
-                    width = (150 / 108) * 0.2 * (0.67 if fallback else 1)
-                    gap = 0.95 * 0.2 - width
-                    assert isclose(last.tr.x - first.tl.x, scale * (3 * width + 2 * gap))
-                    assert isclose((first.tl.x + last.tr.x) / 2, 6.217 * 0.2)
-                    assert isclose(abs(first.tl.y - first.bl.y), scale * (150 / 108) * 0.2 * (0.67 if fallback else 1))
+                    if fallback:
+                        width = (150 / 108) * 0.2 * 0.67
+                        gap = 0.95 * 0.2 - width
+                        assert isclose(last.tr.x - first.tl.x, scale * (3 * width + 2 * gap))
+                        assert isclose((first.tl.x + last.tr.x) / 2, 6.217 * 0.2)
+                    else:
+                        # Compare visible ink, not padded 150x150 rectangles.
+                        # These landmarks are from OpenSekai's trimmed glyphs 1/3.
+                        ink_left = first.tl.x + (first.tr.x - first.tl.x) * (50 / 150)
+                        ink_right = last.tl.x + (last.tr.x - last.tl.x) * (111 / 150)
+                        source_left = (5 - 0.5899191 * 77.84776) / 108
+                        source_right = (107 - 0.51788145 * 111.84775) / 108
+                        assert isclose(ink_left, (6.217 + scale * (-0.95 + source_left)) / 5, abs_tol=2e-8)
+                        assert isclose(ink_right, (6.217 + scale * (0.95 + source_right)) / 5, abs_tol=2e-8)
+                        assert isclose((first.tl.y - first.bl.y) * (97 / 150), scale * (132 / 108) / 5, abs_tol=2e-8)
 
     def test_judgment_uses_judgment_scale_and_ignores_stage_projection(self):
         self.options.custom_accuracy = True

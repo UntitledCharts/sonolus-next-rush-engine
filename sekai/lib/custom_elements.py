@@ -10,6 +10,7 @@ from sonolus.script.runtime import aspect_ratio, is_replay, is_watch, runtime_ui
 from sonolus.script.sprite import Sprite, ZIndex
 from sonolus.script.vec import Vec2
 
+from sekai.lib import font_metrics
 from sekai.lib import hud_geometry as hud
 from sekai.lib.layer import (
     LAYER_DAMAGE,
@@ -451,6 +452,27 @@ class ComboNumberLayout(Record):
                 unscaled_t2 = self.common.center_y - self.layout2.height / 2
                 unscaled_b2 = self.common.center_y + self.layout2.height / 2
 
+            if not ActiveSkin.combo_number.is_fallback and digit < 10:
+                # Preserve cell advances; fit only the image drawn inside each
+                # cell, including transparent padding and the source pivot.
+                for shadow in range(2):
+                    width = final_draw_w1 if shadow == 0 else final_draw_w2
+                    height = (unscaled_b1 - unscaled_t1) if shadow == 0 else (unscaled_b2 - unscaled_t2)
+                    dx = width * font_metrics.COMBO_DX[digit]
+                    dy = height * font_metrics.COMBO_DY[digit]
+                    center_y = ((unscaled_t1 + unscaled_b1) if shadow == 0 else (unscaled_t2 + unscaled_b2)) / 2 + dy
+                    height *= font_metrics.COMBO_H[digit]
+                    if shadow == 0:
+                        digit_center_x += dx
+                        final_draw_w1 *= font_metrics.COMBO_W[digit]
+                        unscaled_t1 = center_y - height / 2
+                        unscaled_b1 = center_y + height / 2
+                    else:
+                        digit_center_x2 += dx
+                        final_draw_w2 *= font_metrics.COMBO_W[digit]
+                        unscaled_t2 = center_y - height / 2
+                        unscaled_b2 = center_y + height / 2
+
             l1 = self.layout1.scale * (digit_center_x - final_draw_w1 / 2) + s_inv * self.common.center_x
             r1 = self.layout1.scale * (digit_center_x + final_draw_w1 / 2) + s_inv * self.common.center_x
             t1 = self.layout1.scale * unscaled_t1 + s_inv * self.common.center_y
@@ -867,6 +889,14 @@ class UILayout(Record):
 
             unscaled_t = self.common.center_y + self.layout.height / 2
             unscaled_b = self.common.center_y - self.layout.height / 2
+
+            if LevelConfig.ui_version == Version.v3 and digit < 10:
+                digit_center_x += self.layout.width * font_metrics.METRIC_DX[digit]
+                center_y = self.common.center_y + self.layout.height * font_metrics.METRIC_DY[digit]
+                final_draw_w *= font_metrics.METRIC_W[digit]
+                height = self.layout.height * font_metrics.METRIC_H[digit]
+                unscaled_t = center_y + height / 2
+                unscaled_b = center_y - height / 2
 
             l = (digit_center_x - final_draw_w / 2) + s_inv * self.common.center_x
             r = (digit_center_x + final_draw_w / 2) + s_inv * self.common.center_x

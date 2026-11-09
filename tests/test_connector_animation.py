@@ -109,5 +109,5 @@ class ConnectorAnimationTests(unittest.TestCase):
             assert slot_glow_duration(4) == 0.4
             assert slot_glow_duration(6) == 0.35
             assert slot_effect_duration(0) == 0.48
-            assert isclose(slot_appearance(0)[0], 0.39)
-            assert isclose(slot_appearance(1)[0], 1.3)
+            assert slot_appearance(0)[0] == 1  # Serialized SizeModule is disabled.
+            assert slot_appearance(1)[0] == 1
