@@ -72,6 +72,10 @@ type ElevationTransform = Callable[[float, float], StageTransform]
 
 CONNECTOR_TRAIL_SPAWN_PERIOD = 0.1
 CONNECTOR_SLOT_SPAWN_PERIOD = 0.2
+# Representative body alpha in the Next RUSH v1/v3 skins: variants include
+# 192/255 and 214/255; styled connectors use 204/255. Texture edges and v1
+# gradients cannot be corrected exactly without access to per-texel alpha.
+CONNECTOR_TEXTURE_ALPHA = 0.8
 CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY = 5.0
 CONNECTOR_LENIENCY = 1
 CONNECTOR_PARTICLE_ACTIVE_DELAY = 0.05
@@ -2522,11 +2526,13 @@ def draw_connector_default(
 
 
 def get_cross_fate_opacities(a, t, period):
-    # Approximate Sekai's RGB mix without boosting translucent skin texels.
-    # Source-over blending can slightly reduce opacity during the transition.
+    # Normal is drawn above active. Compensate for its actual body coverage,
+    # rather than assuming opaque texels or simply summing the draw alphas.
+    # At the representative texture alpha this preserves both the original
+    # coverage (a * texture alpha) and the intended RGB mixing weights.
     mix = (1 - cos(2 * pi * t / period)) / 2
     normal = a * (1 - mix)
-    active = a * mix
+    active = a * mix / (1 - normal * CONNECTOR_TEXTURE_ALPHA)
     return normal, active
 
 
