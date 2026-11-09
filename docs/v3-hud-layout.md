@@ -43,8 +43,9 @@ scale independently from combo UI scale. The engine-only percentage display is
 kept above the combo group; OpenSekai has no equivalent percentage readout.
 
 Versioned score/life number placement changes apply only to v3. Score uses the
-source NumberRoot's right alignment and 0.305 advance; life uses its right-aligned
-root and 0.325 advance scaled by the source 0.63 root scale. v1 metric-number
+source NumberRoot's right anchor with equal visible-ink gaps (rather than the
+original fixed cell advance); life uses its right-aligned root and 0.325 advance
+scaled by the source 0.63 root scale. v1 metric-number
 placement remains unchanged.
 
 ## Visible glyph bounds
@@ -61,7 +62,29 @@ the same normal combo glyph bounds), not arbitrary external fonts.
 
 Validation uses real engine Sprite.draw calls captured from the Sonolus simulation
 and composites the actual SCP atlas in draw order. At 1080-high reference size,
-visible combo 1234 and metric digits 1-8 differ from OpenSekai's source atlas
-bounds by at most one pixel. Separate 4:3 and 21:9 fixtures cover 1111 and 8888.
+visible combo 1234 differs from OpenSekai's source atlas bounds by at most one
+pixel. Metric glyph sizes/pivots use the source ink calibration; their horizontal
+positions now use constant visible gaps for the flattened skin. Separate 4:3 and 21:9 fixtures cover 1111 and 8888.
 These are offline raster checks, not screenshots from a Sonolus client. They
 check geometry and texture padding, not client-specific filtering or color space.
+
+## Score frame registration
+
+The source Unity gauge's 4.923 x 0.22 world rectangle cannot be applied directly
+to this flattened skin: its raster opening and transparent padding differ.
+The frame opening is approximately (109,50)-(577,71) at the half-alpha boundary.
+The normal gauge's original texture has a 553x25 canvas with an ink right edge
+at 549; the mask has distinct left padding (8 pixels at half alpha).
+The gauge transform is fitted against the actual frame alpha edge, including
+its partial opacity, using the middle horizontal/vertical scanlines. Its draw
+rectangle in frame pixels is (108.1,48.65) with size (553*0.854,25*0.9275).
+The mask's visible cut runs from 109 to 577; its own transparent left margin is
+subtracted before drawing. This keeps each fill fraction registered to the same
+frame. At 100% no v3 mask is drawn, so a minimum-width quad cannot leave a sliver.
+
+v3 score numbers use proportional advances from visible glyph bounds with a
+3-pixel gap at 1080-high, default UI scale. Their right ink edge stays fixed even
+when the trailing digit is narrow; dim leading zeroes use the zero's registration.
+Raster fixtures at 4:3, 16:9, and 21:9 produce gaps within one pixel of the scaled
+target, accounting for antialiasing and pixel rounding. v1 placement and advances
+are unchanged.

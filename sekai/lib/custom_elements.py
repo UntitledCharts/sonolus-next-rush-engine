@@ -862,6 +862,24 @@ class UILayout(Record):
         elif self.layout.alignment == UIAlignment.CENTER:
             base_x = self.layout.start_x - total_width / 2
 
+        fit_score_ink = LevelConfig.ui_version == Version.v3 and self.core.mode == UIMode.SCORE_BAR
+        ink_cursor = base_x
+        ink_gap = self.layout.width * font_metrics.SCORE_INK_GAP
+        if fit_score_ink:
+            ink_total = (item_count - 1) * ink_gap
+            for i in range(item_count):
+                digit = int(floor(self.core.number / 10 ** (7 - i)) % 10)
+                ink_total += self.layout.width * (
+                    font_metrics.METRIC_INK_RIGHT[digit] - font_metrics.METRIC_INK_LEFT[digit]
+                )
+            # Stable visible right edge; a narrow trailing '1' must not move it.
+            ink_cursor = (
+                self.layout.start_x
+                - self.layout.width / 2
+                + self.layout.width * font_metrics.METRIC_INK_RIGHT[0]
+                - ink_total
+            )
+
         for i in range(item_count):
             digit = 0
 
@@ -886,15 +904,23 @@ class UILayout(Record):
             final_draw_w = self.layout.width
 
             digit_center_x = base_x + (i * (self.layout.width + self.layout.gap)) + self.layout.width / 2
+            metric_digit = 0 if digit == 10 else digit
+            if fit_score_ink:
+                digit_center_x = ink_cursor - self.layout.width * font_metrics.METRIC_INK_LEFT[metric_digit]
+                ink_cursor += (
+                    self.layout.width
+                    * (font_metrics.METRIC_INK_RIGHT[metric_digit] - font_metrics.METRIC_INK_LEFT[metric_digit])
+                    + ink_gap
+                )
 
             unscaled_t = self.common.center_y + self.layout.height / 2
             unscaled_b = self.common.center_y - self.layout.height / 2
 
-            if LevelConfig.ui_version == Version.v3 and digit < 10:
-                digit_center_x += self.layout.width * font_metrics.METRIC_DX[digit]
-                center_y = self.common.center_y + self.layout.height * font_metrics.METRIC_DY[digit]
-                final_draw_w *= font_metrics.METRIC_W[digit]
-                height = self.layout.height * font_metrics.METRIC_H[digit]
+            if LevelConfig.ui_version == Version.v3 and metric_digit < 10:
+                digit_center_x += self.layout.width * font_metrics.METRIC_DX[metric_digit]
+                center_y = self.common.center_y + self.layout.height * font_metrics.METRIC_DY[metric_digit]
+                final_draw_w *= font_metrics.METRIC_W[metric_digit]
+                height = self.layout.height * font_metrics.METRIC_H[metric_digit]
                 unscaled_t = center_y + height / 2
                 unscaled_b = center_y - height / 2
 

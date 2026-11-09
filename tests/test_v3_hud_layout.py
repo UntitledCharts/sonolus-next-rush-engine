@@ -87,13 +87,20 @@ class V3HudTests(unittest.TestCase):
                         assert isclose(
                             call["dimensions"].x, (96 / 108) * hud_geometry.hud_unit(aspect) * life_scale * menu_scale
                         )
-                        unit = hud_geometry.hud_unit(aspect)
-                        source_top = 1 - 0.1 * unit
-                        source_left = -source_top * aspect
                         gauge = layout.layout_score_gauge()
-                        assert isclose(gauge.bl.x, source_left + (3.7862 - 2.4542003) * unit)
-                        assert isclose(gauge.br.x - gauge.bl.x, 4.923 * unit)
-                        assert isclose((gauge.bl.y + gauge.tl.y) / 2, source_top - 0.52000026 * unit)
+                        frame = layout.layout_score_bar()
+                        pixel_scale = (frame.br.x - frame.bl.x) / 600
+                        assert isclose((gauge.bl.x - frame.bl.x) / pixel_scale, 108.1)
+                        assert isclose((frame.tl.y - gauge.tl.y) / pixel_scale, 48.65)
+                        assert isclose((gauge.br.x - gauge.bl.x) / pixel_scale, 553 * 0.854)
+                        for progress in (0, 0.45, 0.6, 0.75, 0.9):
+                            mask = layout.layout_score_gauge(progress, layout.ScoreGaugeType.MASK)
+                            width = mask.br.x - mask.bl.x
+                            visible_left = mask.bl.x + width * (8 / 553)
+                            visible_right = mask.bl.x + width * (549 / 553)
+                            assert isclose((visible_left - frame.bl.x) / pixel_scale, 109 + 468 * progress)
+                            assert isclose((visible_right - frame.bl.x) / pixel_scale, 577)
+                        unit = hud_geometry.hud_unit(aspect)
                         empty = layout.layout_life_gauge(0)
                         full = layout.layout_life_gauge(1000)
                         cap = layout.layout_life_gauge(1000, True)

@@ -1865,10 +1865,18 @@ def layout_score_gauge(gauge=0.0, score_type: ScoreGaugeType = ScoreGaugeType.NO
     ui = runtime_ui()
     result = +Quad
     if LevelConfig.ui_version == Version.v3:
-        fraction = 1 - clamp(gauge, 0, 1) if score_type == ScoreGaugeType.MASK else 1.0
-        width = max(4.923 * fraction, 1e-3)
-        right = 3.7862 - 2.4542003 + 4.923
-        result @= v3_hud_rect(right - width / 2, -0.42 - 0.10000026, width, 0.22, ui.primary_metric_config.scale)
+        progress = clamp(gauge, 0, 1) if score_type == ScoreGaugeType.MASK else 0.0
+        left = hud.SCORE_GAUGE_DRAW_LEFT
+        width = hud.SCORE_GAUGE_DRAW_WIDTH
+        if score_type == ScoreGaugeType.MASK:
+            ink_width = (hud.SCORE_GAUGE_RIGHT - hud.SCORE_GAUGE_LEFT) * (1 - progress)
+            left = hud.SCORE_GAUGE_LEFT + (hud.SCORE_GAUGE_RIGHT - hud.SCORE_GAUGE_LEFT) * progress
+            width = ink_width * hud.SCORE_GAUGE_TEXTURE_WIDTH / (hud.SCORE_MASK_INK_RIGHT - hud.SCORE_MASK_INK_LEFT)
+            left -= width * hud.SCORE_MASK_INK_LEFT / hud.SCORE_GAUGE_TEXTURE_WIDTH
+        x = hud.SCORE_X + (left + width / 2 - 300) / hud.SKIN_PIXELS_PER_UNIT
+        y = hud.SCORE_Y + (64 - hud.SCORE_GAUGE_DRAW_TOP - hud.SCORE_GAUGE_DRAW_HEIGHT / 2) / hud.SKIN_PIXELS_PER_UNIT
+        height = hud.SCORE_GAUGE_DRAW_HEIGHT / hud.SKIN_PIXELS_PER_UNIT
+        result @= v3_hud_rect(x, y, max(width / hud.SKIN_PIXELS_PER_UNIT, 1e-3), height, ui.primary_metric_config.scale)
     else:
         result @= _layout_score_gauge_legacy(gauge, score_type)
     return result

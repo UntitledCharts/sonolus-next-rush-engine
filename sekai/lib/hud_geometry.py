@@ -39,3 +39,22 @@ SKILL_X = 1.7111
 SKILL_Y = -3.22
 SKILL_WIDTH = 4.08
 SKILL_HEIGHT = 1.36
+
+# Measured alpha > 24/255 bounds in the flattened Score Bar, not Unity's
+# separately sliced gauge dimensions. All gauge pieces share this pixel frame.
+SCORE_GAUGE_LEFT = 109
+SCORE_GAUGE_RIGHT = 577
+SCORE_GAUGE_TOP = 51
+SCORE_GAUGE_BOTTOM = 70
+SCORE_GAUGE_TEXTURE_WIDTH = 553
+SCORE_GAUGE_INK_WIDTH = 549
+SCORE_MASK_INK_LEFT = 8
+SCORE_MASK_INK_RIGHT = 549
+
+# Alpha-edge registration against the translucent frame (not just binary bbox).
+# Fitting the gauge's middle scanlines avoids both a dark seam in the opening
+# and colored bleed into the partially transparent frame edge.
+SCORE_GAUGE_DRAW_LEFT = 108.1
+SCORE_GAUGE_DRAW_TOP = 48.65
+SCORE_GAUGE_DRAW_WIDTH = 553 * 0.854
+SCORE_GAUGE_DRAW_HEIGHT = 25 * 0.9275
