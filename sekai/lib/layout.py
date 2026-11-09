@@ -2503,6 +2503,16 @@ def layout_sim_line(
     )
 
 
+def layout_center_ui(center: Vec2, w: float, h: float) -> Quad:
+    # FrontUIView's center-anchored sprites use the same camera as the HUD,
+    # without any note-stage translation, tilt, zoom, or rotation.
+    unit = hud.hud_unit(aspect_ratio())
+    center *= unit
+    w *= unit
+    h *= unit
+    return Quad(bl=center + Vec2(-w, -h), br=center + Vec2(w, -h), tl=center + Vec2(-w, h), tr=center + Vec2(w, h))
+
+
 def layout_combo_label(
     center: Vec2,
     w: float,

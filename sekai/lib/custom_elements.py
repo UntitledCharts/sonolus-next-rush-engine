@@ -10,6 +10,7 @@ from sonolus.script.runtime import aspect_ratio, is_replay, is_watch, runtime_ui
 from sonolus.script.sprite import Sprite, ZIndex
 from sonolus.script.vec import Vec2
 
+from sekai.lib import hud_geometry as hud
 from sekai.lib.layer import (
     LAYER_DAMAGE,
     LAYER_JUDGMENT,
@@ -19,11 +20,10 @@ from sekai.lib.layout import (
     ComboType,
     Quad,
     UIMargin,
-    layout_combo_label,
+    layout_center_ui,
     layout_dead_effect_quads,
-    transform_fixed_size,
-    transform_static_quad,
     v3_align_bar_point,
+    v3_hud_anchor,
 )
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.options import Options, Version
@@ -55,36 +55,27 @@ class FixedUiLayout:
 def init_fixed_ui_layout():
     ui = runtime_ui()
 
-    combo_base_h = 0.09 * ui.combo_config.scale
-    combo_base_w = combo_base_h * 2.5 * 7.183
-    combo_h, combo_w = transform_fixed_size(combo_base_h, combo_base_w)
-    FixedUiLayout.combo_label = layout_combo_label(Vec2(x=5.337, y=0.483), w=combo_w / 2, h=combo_h / 2)
-
-    accuracy_base_h = 0.054 * 1.3 * ui.judgment_config.scale
-    accuracy_base_w = accuracy_base_h * (123 / 38) * 7.183
-    accuracy_h, accuracy_w = transform_fixed_size(accuracy_base_h, accuracy_base_w)
-    FixedUiLayout.judgment_accuracy = layout_combo_label(Vec2(x=0, y=0.723), w=accuracy_w / 2, h=accuracy_h / 2)
-
+    # These elements have no v1/v3 split: apply the center-camera layout to both.
+    combo_scale = ui.combo_config.scale
+    judgment_scale = ui.judgment_config.scale
+    FixedUiLayout.combo_label = layout_center_ui(
+        Vec2(6.241, 1.513), w=(192 / 108) * combo_scale / 2, h=(77 / 108) * combo_scale / 2
+    )
+    FixedUiLayout.judgment_accuracy = layout_center_ui(
+        Vec2(0, -1.17 + 0.58), w=(164 / 108) * 0.8 * judgment_scale / 2, h=(50 / 108) * 0.8 * judgment_scale / 2
+    )
     FixedUiLayout.damage_flash = layout_dead_effect_quads()
-
-    fallback_scale = COMBO_NUMBER_FALLBACK_SCALE if ActiveSkin.combo_number.is_fallback else 1.0
-    base_h = 0.23 * ui.combo_config.scale * fallback_scale
-    base_h2 = 0.25 * ui.combo_config.scale * fallback_scale
-    h, w = transform_fixed_size(base_h, base_h * 7.183)
-    h2, w2 = transform_fixed_size(base_h2, base_h2 * 7.183)
-    FixedUiLayout.combo_h = h
-    FixedUiLayout.combo_w = w
-    FixedUiLayout.combo_h2 = h2
-    FixedUiLayout.combo_w2 = w2
-    gap_coeff = 0.5 / fallback_scale - 1
-    FixedUiLayout.combo_gap = w * gap_coeff
-    FixedUiLayout.combo_gap2 = w2 * gap_coeff
-    FixedUiLayout.combo_s2_start = base_h / base_h2
-
-    judgment_h = 0.09 * ui.combo_config.scale
-    h, w = transform_fixed_size(judgment_h, judgment_h * (310 / 80) * 7.183)
-    FixedUiLayout.judgment_h = h
-    FixedUiLayout.judgment_w = w
+    fallback = COMBO_NUMBER_FALLBACK_SCALE if ActiveSkin.combo_number.is_fallback else 1.0
+    FixedUiLayout.combo_h = (150 / 108) * combo_scale * fallback
+    FixedUiLayout.combo_w = FixedUiLayout.combo_h
+    FixedUiLayout.combo_h2 = FixedUiLayout.combo_h * (0.25 / 0.23)
+    FixedUiLayout.combo_w2 = FixedUiLayout.combo_h2
+    FixedUiLayout.combo_gap = 0.95 * combo_scale - FixedUiLayout.combo_w
+    FixedUiLayout.combo_gap2 = 0.95 * combo_scale * (0.25 / 0.23) - FixedUiLayout.combo_w2
+    FixedUiLayout.combo_s2_start = 0.23 / 0.25
+    # Judgment size must follow judgment scaling, independently of combo scale.
+    FixedUiLayout.judgment_h = (80 / 108) * judgment_scale
+    FixedUiLayout.judgment_w = (310 / 108) * judgment_scale
 
 
 class ComboNumberCache(Record):
@@ -103,8 +94,8 @@ class ComboNumberCache(Record):
         digit_count = len(self.digits)
         total_width = digit_count * FixedUiLayout.combo_w + (digit_count - 1) * FixedUiLayout.combo_gap
         total_width2 = digit_count * FixedUiLayout.combo_w2 + (digit_count - 1) * FixedUiLayout.combo_gap2
-        self.start_x = 5.337 - total_width / 2
-        self.start_x2 = 5.337 - total_width2 / 2
+        self.start_x = 6.217 - total_width / 2
+        self.start_x2 = 6.217 - total_width2 / 2
 
 
 @level_memory
@@ -196,7 +187,7 @@ def draw_combo_number(draw_time: float, ap: bool, cache: ComboNumberCache):
 
     ui = runtime_ui()
 
-    screen_center = Vec2(x=5.337, y=0.585)
+    screen_center = Vec2(x=6.217, y=0.787 - 0.18)
 
     s = 0.6 + 0.4 * unlerp_clamped(draw_time, draw_time + 0.112, time())
     s2_start = FixedUiLayout.combo_s2_start
@@ -272,20 +263,20 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
             n_int += 1
     digit_count = n_int + 6
 
-    screen_center = Vec2(x=5.337, y=0.41)
+    screen_center = Vec2(x=6.217, y=2.0)
 
     fallback_scale = COMBO_NUMBER_FALLBACK_SCALE if ActiveSkin.combo_number.is_fallback else 1.0
-    base_h = 0.23 * ui.combo_config.scale * 0.4 * fallback_scale
-    base_w = base_h * 7.183
+    base_h = (150 / 108) * ui.combo_config.scale * 0.4 * fallback_scale
+    base_w = base_h
 
     s = 1.0
 
     a = ui.combo_config.alpha
     a3 = ui.combo_config.alpha * (sin(time() * AP_EFFECT_SPEED) + 1) * 0.5
 
-    h, w = transform_fixed_size(base_h, base_w)
+    h, w = base_h, base_w
 
-    digit_gap = w * (0.5 / fallback_scale - 1)
+    digit_gap = 0.95 * ui.combo_config.scale * 0.4 - w
 
     s_int = 1.0
     s_dot = 0.5
@@ -364,14 +355,7 @@ class ComboNumberLayout(Record):
     layout2: LayoutConfig
 
     def layout_combo_number(self, l: float, r: float, t: float, b: float) -> Quad:
-        return transform_static_quad(
-            Quad(
-                bl=Vec2(l, b),
-                br=Vec2(r, b),
-                tl=Vec2(l, t),
-                tr=Vec2(r, t),
-            )
-        )
+        return layout_center_ui(Vec2((l + r) / 2, (t + b) / 2), w=(r - l) / 2, h=(b - t) / 2)
 
     def draw_number(self, z, z1, z2, digits: VarArray[int, Dim[16]] | None = None):
         s_inv = 1 - self.layout1.scale
@@ -514,12 +498,12 @@ def draw_judgment_text(draw_time: float, sprite: Sprite):
 
     ui = runtime_ui()
 
-    screen_center = Vec2(x=0, y=0.792)
+    screen_center = Vec2(x=0, y=-1.17)
 
     h, w = FixedUiLayout.judgment_h, FixedUiLayout.judgment_w
     a = ui.judgment_config.alpha * unlerp_clamped(draw_time, draw_time + 0.064, time())
     s = unlerp_clamped(draw_time, draw_time + 0.064, time())
-    layout = layout_combo_label(screen_center, w=w * s / 2, h=h * s / 2)
+    layout = layout_center_ui(screen_center, w=w * s / 2, h=h * s / 2)
     sprite.draw(quad=layout, z=get_z_alt(LAYER_JUDGMENT).tuple, a=a)
 
 
@@ -617,11 +601,11 @@ def draw_life_number(number: int, z: ZIndex, alpha: float = 1.0):
     screen_center = Vec2(x=number_center_x - (current_bar_w / 2), y=center_y)
 
     if LevelConfig.ui_version == Version.v3:
-        screen_center @= v3_align_bar_point(screen_center, True)
-        factor = (93 / (108 * 0.9)) / (5 * 0.196)
-        w *= factor
-        h *= factor
-        digit_gap *= factor
+        unit = hud.hud_unit(aspect_ratio()) * ui.secondary_metric_config.scale
+        w = h = 0.48 * 0.63 * unit
+        digit_gap = 0.325 * 0.63 * unit - w
+        screen_center @= v3_hud_anchor(True) + Vec2(-0.61 - 0.666, -0.602 + 0.3584) * unit
+        screen_center.x += w / 2
 
     drawing_ui = UILayout(
         core=UICoreConfig(number, digit_count, mode=UIMode.LIFE),
@@ -693,12 +677,16 @@ def draw_score_bar_number(number: int, z: ZIndex, alpha: float = 1.0):
 
     screen_center = Vec2(x=number_center_x + (current_bar_w / 2), y=center_y)
 
+    alignment = UIAlignment.LEFT
     if LevelConfig.ui_version == Version.v3:
-        screen_center @= v3_align_bar_point(screen_center, False)
-        factor = (128 / (108 * 0.9)) / (5 * 0.27)
-        w *= factor
-        h *= factor
-        digit_gap *= factor
+        unit = hud.hud_unit(aspect_ratio()) * ui.primary_metric_config.scale
+        w = h = 0.48 * 0.94 * unit
+        digit_gap = 0.305 * unit - w
+        screen_center @= (
+            v3_hud_anchor() + Vec2(3.7862 - 0.067200184 - 0.029999971, -0.42 - 0.2470001 - 0.26999998) * unit
+        )
+        screen_center.x += w / 2
+        alignment = UIAlignment.RIGHT
 
     drawing_ui = UILayout(
         core=UICoreConfig(number, digit_count, mode=UIMode.SCORE_BAR),
@@ -706,7 +694,7 @@ def draw_score_bar_number(number: int, z: ZIndex, alpha: float = 1.0):
             center_x=screen_center.x,
             center_y=screen_center.y,
         ),
-        layout=UILayoutConfig(width=w, gap=digit_gap, height=h, start_x=screen_center.x, alignment=UIAlignment.LEFT),
+        layout=UILayoutConfig(width=w, gap=digit_gap, height=h, start_x=screen_center.x, alignment=alignment),
     )
     drawing_ui.draw_number(z=z, a=alpha)
 

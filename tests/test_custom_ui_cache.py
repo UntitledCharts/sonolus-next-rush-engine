@@ -42,6 +42,7 @@ class CustomUiCacheTests(unittest.TestCase):
             judgment_config=SimpleNamespace(scale=1, alpha=0.7),
         )
         self.now = 0.3
+        stack.enter_context(patch.object(layout, "aspect_ratio", return_value=16 / 9))
         self.draws = []
         for name, value in (
             ("Options", self.options),
@@ -93,15 +94,31 @@ class CustomUiCacheTests(unittest.TestCase):
             for self.now in (0, 0.056, 0.112, 0.152, 0.192, 0.3):
                 with self.subTest(fallback=fallback, time=self.now):
                     self.draws.clear()
-                    with patch.object(ui, "transform_fixed_size", side_effect=AssertionError("recomputed")):
+                    with patch.object(
+                        ui, "transform_fixed_size", side_effect=AssertionError("recomputed"), create=True
+                    ):
                         ui.draw_combo_number(0, True, cache)
                     first, last = self.draws[1][1], self.draws[-1][1]
                     scale = 0.6 + 0.4 * min(1, self.now / 0.112)
-                    width = 0.23 * 7.183 * 0.11 * (0.67 if fallback else 1)
-                    gap = width * (0.5 / (0.67 if fallback else 1) - 1)
+                    width = (150 / 108) * 0.2 * (0.67 if fallback else 1)
+                    gap = 0.95 * 0.2 - width
                     assert isclose(last.tr.x - first.tl.x, scale * (3 * width + 2 * gap))
-                    assert isclose((first.tl.x + last.tr.x) / 2, 5.337 * 0.13)
-                    assert isclose(abs(first.tl.y - first.bl.y), scale * 0.23 * 0.5 * (0.67 if fallback else 1))
+                    assert isclose((first.tl.x + last.tr.x) / 2, 6.217 * 0.2)
+                    assert isclose(abs(first.tl.y - first.bl.y), scale * (150 / 108) * 0.2 * (0.67 if fallback else 1))
+
+    def test_judgment_uses_judgment_scale_and_ignores_stage_projection(self):
+        self.options.custom_accuracy = True
+        self.now = 0.2
+        for combo_scale, judgment_scale in ((0.5, 1), (2, 1), (1, 1.5)):
+            self.visibility.combo_config.scale = combo_scale
+            self.visibility.judgment_config.scale = judgment_scale
+            ui.init_fixed_ui_layout()
+            self.draws.clear()
+            ui.draw_judgment_text(0, Sprite(800))
+            quad = self.draws[-1][1]
+            assert isclose((quad.bl.y + quad.tl.y) / 2, -1.17 / 5)
+            assert isclose(quad.tr.x - quad.tl.x, (310 / 108) * judgment_scale / 5)
+            assert isclose(quad.tl.y - quad.bl.y, (80 / 108) * judgment_scale / 5)
 
     def test_ap_sprites_and_ui_visibility_remain_dynamic(self):
         cache = +ui.ComboNumberCache

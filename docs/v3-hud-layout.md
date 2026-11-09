@@ -32,3 +32,17 @@ Validation covers 9:16, 4:3, 16:10, 16:9, 19.5:9, 21:9, and 32:9 with multiple
 life and menu scales, plus skill animation and asymmetric safe-area insets.
 The HUD render paths are also compiled with the Sonolus compiler. This does
 not replace checking the artwork in a Sonolus client.
+
+## Common custom elements
+
+Judgment and combo sprites have no version split and now use center-camera
+coordinates for both v1/v3. Judgment is at (0, -1.17); timing feedback is at
+(0, -0.59). Combo digits are centered at (6.217, 0.607), with a 0.95-world-unit
+advance, and its label is at (6.241, 1.513). Judgment sizing uses judgment UI
+scale independently from combo UI scale. The engine-only percentage display is
+kept above the combo group; OpenSekai has no equivalent percentage readout.
+
+Versioned score/life number placement changes apply only to v3. Score uses the
+source NumberRoot's right alignment and 0.305 advance; life uses its right-aligned
+root and 0.325 advance scaled by the source 0.63 root scale. v1 metric-number
+placement remains unchanged.
