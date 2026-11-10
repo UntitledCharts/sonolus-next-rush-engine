@@ -607,3 +607,11 @@ description.ko = "플레이 모드에서도 판정 범위 표시와 화면비 �
 description.fr = "Permet aux options d’affichage des hitboxes et de test du format d’image de fonctionner en mode jeu."
 description.ru = "Позволяет использовать отображение хитбоксов и проверку соотношения сторон в режиме игры."
 description.ja = "プレイモードでも「判定範囲を表示」と「アスペクト比をテスト」を有効にします。"
+
+[options.touch_surface_short_side]
+title.en = "Play Area Short Side (cm)"
+title.ko = "플레이 화면 짧은 변 길이(cm)"
+title.ja = "プレイ画面の短辺の長さ(cm)"
+description.en = "The physical length of the shorter side of the visible play area. Calibrates flick motion independently of lane width. Default: 7 cm. A larger value makes flicks easier."
+description.ko = "표시되는 플레이 화면의 짧은 변을 실제 cm로 입력합니다. 레인 폭과 무관하게 플릭 이동량을 보정합니다. 기본값은 7cm이며 값을 높이면 플릭이 더 쉽게 인정됩니다."
+description.ja = "表示されるプレイ画面の短辺の実際の長さをcmで設定します。レーン幅に依存せずフリックを補正します。初期値は7cmで、大きくするとフリックが反応しやすくなります。"

@@ -527,6 +527,17 @@ class Options:
         default=False,
     )
 
+    touch_surface_short_side: float = slider_option(
+        name="Touch Surface Short Side",
+        category=gameplay,
+        scope="Rush",
+        advanced=True,
+        default=7,
+        min=3,
+        max=30,
+        step=0.1,
+    )
+
     replay_fallback_option_names = (
         StandardText.SPEED,
         StandardText.NOTE_SPEED,

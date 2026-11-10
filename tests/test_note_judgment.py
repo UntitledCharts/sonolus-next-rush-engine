@@ -1,7 +1,7 @@
 """Sekai timing, registered flick inputs, and note selection regressions."""
 
 import unittest
-from math import radians
+from math import cos, radians, sin
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -36,6 +36,7 @@ class NoteJudgmentTests(unittest.TestCase):
             started=started,
             ended=ended,
             speed=speed,
+            delta=Vec2(cos(radians(angle)), sin(radians(angle))) * (speed / 60),
             angle=radians(angle),
             time=now,
             start_time=now if started else 0.95,
@@ -49,7 +50,7 @@ class NoteJudgmentTests(unittest.TestCase):
         play.input_manager.InputState.frame += 1
         self.touches.return_value = touches
         with (
-            patch.object(play, "Layout", SimpleNamespace(flick_speed_threshold=1)),
+            patch.object(play, "Layout", SimpleNamespace(flick_distance=1 / 60)),
             patch.object(play, "DynamicLayout", SimpleNamespace(rotate=0)),
         ):
             note.update_sequential()
@@ -83,7 +84,7 @@ class NoteJudgmentTests(unittest.TestCase):
         note = self.make_note(NoteKind.NORM_FLICK)
         for i in range(9):
             assert note.register_flick_touch(self.touch(0.95, touch_id=100 + i)) == (i if i < 8 else -1)
-        with patch.object(play, "Layout", SimpleNamespace(flick_speed_threshold=1)):
+        with patch.object(play, "Layout", SimpleNamespace(flick_distance=1 / 60)):
             for i in range(8):
                 note.record_flick_motion(self.touch(1, touch_id=100 + i, speed=2), i)
         assert len(note.flick_touch_ids) == 8

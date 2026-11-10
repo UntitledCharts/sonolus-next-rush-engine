@@ -29,6 +29,7 @@ from sekai.lib import archetype_names
 from sekai.lib import hud_geometry as hud
 from sekai.lib.baseevent import get_event_as, next_event_time_in_list, query_event_list
 from sekai.lib.ease import EaseType, eased_range, event_progress
+from sekai.lib.input_calibration import flick_distance
 from sekai.lib.level_config import EngineRevision, LevelConfig
 from sekai.lib.options import Options, StageCoverNoteSpeedCompensation, Version
 
@@ -134,7 +135,7 @@ class Layout:
     cutoff_depth: float
     spawn_progress_start: float
     spawn_progress_cutoff: float
-    flick_speed_threshold: float
+    flick_distance: float
     initial_background: Quad
     t: float
     w_scale: float
@@ -820,7 +821,7 @@ def init_layout():
     Layout.spawn_progress_start = visibility.start
     Layout.spawn_progress_cutoff = visibility.end
 
-    Layout.flick_speed_threshold = 2 * DynamicLayout.w_scale
+    Layout.flick_distance = flick_distance(min(screen().w, screen().h), Options.touch_surface_short_side)
 
 
 class CameraChangeLike(Protocol):

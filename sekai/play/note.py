@@ -35,6 +35,7 @@ from sekai.lib.connector import (
     is_fake_active_connector,
 )
 from sekai.lib.ease import EaseType, ease
+from sekai.lib.input_calibration import has_flick_motion
 from sekai.lib.layout import (
     IDENTITY_STAGE_SCREEN_TRANSFORM,
     DynamicLayout,
@@ -872,9 +873,9 @@ class BaseNote(PlayArchetype):
         return len(self.flick_touch_ids) - 1
 
     def record_flick_motion(self, touch: Touch, index: int) -> bool:
-        if touch.speed <= Layout.flick_speed_threshold:
+        if not has_flick_motion(touch.delta, delta_time(), Layout.flick_distance):
             return False
-        correct = self.check_direction_matches(touch.angle)
+        correct = self.check_direction_matches(touch.delta.angle)
         shift = 4**index
         previous = self.flick_touch_states // shift % 4
         self.flick_touch_states += ((2 if correct else 1) - previous) * shift
@@ -909,9 +910,13 @@ class BaseNote(PlayArchetype):
                 ):
                     self.register_flick_touch(touch)
                     input_manager.disallow_empty(touch)
+                    if not is_head(self.kind):
+                        input_manager.record_note_input(touch)
                 continue
             if index < 0:
                 continue
+            if not is_head(self.kind):
+                input_manager.record_note_input(touch)
             if self.record_flick_motion(touch, index):
                 self.finish_flick(touch.time)
                 return
@@ -960,11 +965,13 @@ class BaseNote(PlayArchetype):
             input_manager.disallow_empty(touch)
             if self.is_slide_end_flick:
                 self.slide_end_input = True
+            if not self.is_slide_end_flick and not is_head(self.kind):
+                input_manager.record_note_input(touch)
             self.last_flick_input_frame = input_manager.InputState.frame
             moved = self.record_flick_motion(touch, index)
             if (
                 moved
-                and self.check_direction_matches(touch.angle)
+                and self.check_direction_matches(touch.delta.angle)
                 and touch.time >= self.target_time + JUST_PERFECT_HALF
             ):
                 self.finish_flick(touch.time)
@@ -1113,7 +1120,9 @@ class BaseNote(PlayArchetype):
                 assert_never(kind)
 
     def check_touch_touch_is_eligible_for_flick(self, touch: Touch) -> bool:
-        if touch.start_time < self.captured_touch_time or touch.speed < Layout.flick_speed_threshold:
+        if touch.start_time < self.captured_touch_time or not has_flick_motion(
+            touch.delta, delta_time(), Layout.flick_distance
+        ):
             return False
         is_captured = self.captured_touch_id != 0 and touch.id == self.captured_touch_id
         return (
@@ -1128,7 +1137,9 @@ class BaseNote(PlayArchetype):
         return is_captured or self.hitbox.bounds.contains_point(touch.position)
 
     def check_touch_is_eligible_for_trace_flick(self, touch: Touch) -> bool:
-        if touch.time < self.unadjusted_input_interval.start or touch.speed < Layout.flick_speed_threshold:
+        if touch.time < self.unadjusted_input_interval.start or not has_flick_motion(
+            touch.delta, delta_time(), Layout.flick_distance
+        ):
             return False
         is_captured = self.best_touch_id != -1 and touch.id == self.best_touch_id
         return (
