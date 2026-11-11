@@ -2144,21 +2144,29 @@ def layout_note_body_slices_by_edges(l: float, r: float, travel: float) -> tuple
     half_width = max(((span - 1) * 1.2178 + 2.06) / (2 * 1.19), 0)
     cap = min(93 / (108 * 1.19), half_width)
 
-    def section(left: float, right: float, u_left: float, u_right: float, edge: int) -> Quad:
+    full = Quad(
+        bl=note_body_point(lane, span, -half_width, 0, -1, travel),
+        tl=note_body_point(lane, span, -half_width, 0, 1, travel),
+        tr=note_body_point(lane, span, half_width, 1, 1, travel),
+        br=note_body_point(lane, span, half_width, 1, -1, travel),
+    )
+    cap_fraction = cap / max(2 * half_width, 1e-9)
+
+    def section(start: float, end: float, edge: int) -> Quad:
         return untransform_note_body_sprite(
             Quad(
-                bl=note_body_point(lane, span, left, u_left, -1, travel),
-                tl=note_body_point(lane, span, left, u_left, 1, travel),
-                tr=note_body_point(lane, span, right, u_right, 1, travel),
-                br=note_body_point(lane, span, right, u_right, -1, travel),
+                bl=lerp(full.bl, full.br, start),
+                tl=lerp(full.tl, full.tr, start),
+                tr=lerp(full.tl, full.tr, end),
+                br=lerp(full.bl, full.br, end),
             ),
             edge,
         )
 
     return (
-        section(-half_width, -half_width + cap, 0, 93 / 354, -1),
-        section(-half_width + cap, half_width - cap, 93 / 354, 261 / 354, 0),
-        section(half_width - cap, half_width, 261 / 354, 1, 1),
+        section(0, cap_fraction, -1),
+        section(cap_fraction, 1 - cap_fraction, 0),
+        section(1 - cap_fraction, 1, 1),
     )
 
 
