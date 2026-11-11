@@ -230,15 +230,6 @@ class Options:
         scope="Rush",
         default=True,
     )
-    note_perspective: float = slider_option(
-        name="Note Perspective",
-        category=graphics,
-        scope="Rush",
-        default=1,
-        min=0,
-        max=1,
-        step=0.1,
-    )
     sfx_enabled: bool = toggle_option(
         name=StandardText.EFFECT,
         category=audio,

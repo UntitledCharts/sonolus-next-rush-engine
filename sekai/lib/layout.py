@@ -39,6 +39,24 @@ NOTE_H = 75 / 850 / 2
 NOTE_EDGE_W = 0.25
 NOTE_SLIM_EDGE_W = 0.125
 
+NOTE_REFERENCE_LANES = 12
+NOTE_REFERENCE_LANE_WIDTH = 1.19
+NOTE_REFERENCE_PIXELS_PER_UNIT = 108
+NOTE_SPAN_WIDTH = 1.2178
+NOTE_BASE_WIDTH = 2.06
+NOTE_BODY_HEIGHT = 1.7222
+NOTE_PERSPECTIVE_SKEW = 0.6
+NOTE_TEXTURE_WIDTH = 354
+NOTE_TEXTURE_HEIGHT = 186
+NOTE_TEXTURE_PADDING = 43
+NOTE_TEXTURE_CAP_WIDTH = 93
+NOTE_TEXTURE_REGULAR_HEIGHT = 108
+NOTE_TEXTURE_SLIM_HEIGHT = 68
+NOTE_SKIN_BODY_HEIGHT = 80
+NOTE_SKIN_CAP_WIDTH = 36
+NOTE_VERTICAL_INSET = (NOTE_TEXTURE_HEIGHT - NOTE_SKIN_BODY_HEIGHT) / (2 * NOTE_TEXTURE_HEIGHT)
+NOTE_CAP_INVERSE_SCALE = NOTE_SKIN_CAP_WIDTH / NOTE_TEXTURE_CAP_WIDTH
+
 TARGET_ASPECT_RATIO = 16 / 9
 
 TEST_ASPECT_SCALE = 0.5
@@ -2095,42 +2113,94 @@ def layout_fallback_judge_line() -> Quad:
     return perspective_rect(l=-6, r=6, t=1 - nh, b=1 + nh)
 
 
-def layout_note_body_by_edges(l: float, r: float, h: float, travel: float):
-    return perspective_rect(l=l, r=r, t=1 - h, b=1 + h, travel=travel, p=Options.note_perspective)
+def note_body_point(lane: float, span: float, x: float, u: float, v: float, travel: float) -> Vec2:
+    width = tilt_width_factor(travel)
+    offset = (
+        (lane / (NOTE_REFERENCE_LANES / 2) + (span - 0.5) / NOTE_REFERENCE_LANES * (2 * u - 1))
+        * travel
+        * NOTE_PERSPECTIVE_SKEW
+        / NOTE_REFERENCE_LANE_WIDTH
+    )
+    visible = 1.0 if span > 0 else 0.0
+    height = v * NOTE_BODY_HEIGHT / (2 * NOTE_REFERENCE_LANE_WIDTH) * width * DynamicLayout.w_scale * visible
+    return transform_vec(Vec2((lane + (x - v * offset * current_stage_tilt()) * visible) * width, travel)) + Vec2(
+        height * DynamicLayout.rotate_sin, height * DynamicLayout.rotate_cos
+    )
 
 
-def layout_note_body_slices_by_edges(
-    l: float, r: float, h: float, edge_w: float, travel: float
-) -> tuple[Quad, Quad, Quad]:
-    m = (l + r) / 2
-    if r < l:
-        # Make the note 0 width; shouldn't normally happen, but in case, we want to handle it gracefully
-        l = r = m
-    ml = min(l + edge_w, m)
-    mr = max(r - edge_w, m)
-    depth_b, depth_t, wb, wt = perspective_edge_factors(1 - h, 1 + h, travel, Options.note_perspective)
-    left = Quad(
-        bl=transform_vec(Vec2(l * wb, depth_b)),
-        br=transform_vec(Vec2(ml * wb, depth_b)),
-        tl=transform_vec(Vec2(l * wt, depth_t)),
-        tr=transform_vec(Vec2(ml * wt, depth_t)),
+def untransform_note_body_sprite(q: Quad, edge: int = 0) -> Quad:
+    result = Quad(
+        bl=lerp(q.bl, q.tl, NOTE_VERTICAL_INSET),
+        tl=lerp(q.tl, q.bl, NOTE_VERTICAL_INSET),
+        tr=lerp(q.tr, q.br, NOTE_VERTICAL_INSET),
+        br=lerp(q.br, q.tr, NOTE_VERTICAL_INSET),
     )
-    right = Quad(
-        bl=transform_vec(Vec2(mr * wb, depth_b)),
-        br=transform_vec(Vec2(r * wb, depth_b)),
-        tl=transform_vec(Vec2(mr * wt, depth_t)),
-        tr=transform_vec(Vec2(r * wt, depth_t)),
+    if edge < 0:
+        result.bl @= lerp(result.br, result.bl, NOTE_CAP_INVERSE_SCALE)
+        result.tl @= lerp(result.tr, result.tl, NOTE_CAP_INVERSE_SCALE)
+    elif edge > 0:
+        result.br @= lerp(result.bl, result.br, NOTE_CAP_INVERSE_SCALE)
+        result.tr @= lerp(result.tl, result.tr, NOTE_CAP_INVERSE_SCALE)
+    return result
+
+
+def layout_note_body_by_edges(l: float, r: float, travel: float, slim: bool = False) -> Quad:
+    lane = (l + r) / 2
+    span = max(r - l, 0)
+    half_width = max(
+        ((span - 1) * NOTE_SPAN_WIDTH + NOTE_BASE_WIDTH) / (2 * NOTE_REFERENCE_LANE_WIDTH)
+        - NOTE_TEXTURE_PADDING / (NOTE_REFERENCE_PIXELS_PER_UNIT * NOTE_REFERENCE_LANE_WIDTH),
+        0,
     )
-    middle = Quad(bl=left.br, br=right.bl, tl=left.tr, tr=right.tl)
-    return left, middle, right
+    v = (NOTE_TEXTURE_SLIM_HEIGHT if slim else NOTE_TEXTURE_REGULAR_HEIGHT) / NOTE_TEXTURE_HEIGHT
+    return Quad(
+        bl=note_body_point(lane, span, -half_width, NOTE_TEXTURE_PADDING / NOTE_TEXTURE_WIDTH, -v, travel),
+        tl=note_body_point(lane, span, -half_width, NOTE_TEXTURE_PADDING / NOTE_TEXTURE_WIDTH, v, travel),
+        tr=note_body_point(
+            lane, span, half_width, (NOTE_TEXTURE_WIDTH - NOTE_TEXTURE_PADDING) / NOTE_TEXTURE_WIDTH, v, travel
+        ),
+        br=note_body_point(
+            lane, span, half_width, (NOTE_TEXTURE_WIDTH - NOTE_TEXTURE_PADDING) / NOTE_TEXTURE_WIDTH, -v, travel
+        ),
+    )
+
+
+def layout_note_body_slices_by_edges(l: float, r: float, travel: float) -> tuple[Quad, Quad, Quad]:
+    lane = (l + r) / 2
+    span = max(r - l, 0)
+    half_width = max(((span - 1) * NOTE_SPAN_WIDTH + NOTE_BASE_WIDTH) / (2 * NOTE_REFERENCE_LANE_WIDTH), 0)
+    cap = min(NOTE_TEXTURE_CAP_WIDTH / (NOTE_REFERENCE_PIXELS_PER_UNIT * NOTE_REFERENCE_LANE_WIDTH), half_width)
+
+    full = Quad(
+        bl=note_body_point(lane, span, -half_width, 0, -1, travel),
+        tl=note_body_point(lane, span, -half_width, 0, 1, travel),
+        tr=note_body_point(lane, span, half_width, 1, 1, travel),
+        br=note_body_point(lane, span, half_width, 1, -1, travel),
+    )
+    cap_fraction = cap / max(2 * half_width, 1e-9)
+
+    def section(start: float, end: float, edge: int) -> Quad:
+        return untransform_note_body_sprite(
+            Quad(
+                bl=lerp(full.bl, full.br, start),
+                tl=lerp(full.tl, full.tr, start),
+                tr=lerp(full.tl, full.tr, end),
+                br=lerp(full.bl, full.br, end),
+            ),
+            edge,
+        )
+
+    return (
+        section(0, cap_fraction, -1),
+        section(cap_fraction, 1 - cap_fraction, 0),
+        section(1 - cap_fraction, 1, 1),
+    )
 
 
 def layout_regular_note_body(lane: float, size: float, travel: float) -> tuple[Quad, Quad, Quad]:
     return layout_note_body_slices_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
-        h=DynamicLayout.note_h,
-        edge_w=NOTE_EDGE_W,
         travel=travel,
     )
 
@@ -2139,7 +2209,6 @@ def layout_regular_note_body_fallback(lane: float, size: float, travel: float) -
     return layout_note_body_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
-        h=DynamicLayout.note_h,
         travel=travel,
     )
 
@@ -2148,8 +2217,6 @@ def layout_slim_note_body(lane: float, size: float, travel: float) -> tuple[Quad
     return layout_note_body_slices_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
-        h=DynamicLayout.note_h,  # Height is handled by the sprite rather than being changed here
-        edge_w=NOTE_SLIM_EDGE_W,
         travel=travel,
     )
 
@@ -2158,8 +2225,8 @@ def layout_slim_note_body_fallback(lane: float, size: float, travel: float) -> Q
     return layout_note_body_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
-        h=DynamicLayout.note_h / 2,  # For fallback, we need to halve the height manually engine-side
         travel=travel,
+        slim=True,
     )
 
 
