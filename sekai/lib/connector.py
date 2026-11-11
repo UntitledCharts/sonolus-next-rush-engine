@@ -64,6 +64,7 @@ from sekai.lib.skin import (
     get_styled_active_connector_sprites,
     get_styled_damage_connector_sprites,
 )
+from sekai.lib.slot_animation import hold_glow_appearance
 from sekai.lib.stage import VisualMask
 from sekai.lib.timescale import iter_timescale_changes_in_group_from_time
 
@@ -71,6 +72,7 @@ type ElevationTransform = Callable[[float, float], StageTransform]
 
 CONNECTOR_TRAIL_SPAWN_PERIOD = 0.1
 CONNECTOR_SLOT_SPAWN_PERIOD = 0.2
+CONNECTOR_TEXTURE_ALPHA = 0.8
 CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY = 5.0
 CONNECTOR_LENIENCY = 1
 CONNECTOR_PARTICLE_ACTIVE_DELAY = 0.05
@@ -381,12 +383,15 @@ class ConnectorSfxEvent(Record):
     kind: ConnectorKind
 
 
-@level_memory
-class ConnectorSfxState:
+class ConnectorSfxChannel(Record):
     active_time: float
     inactive_time: float
-    kind: ConnectorKind
     active_head_index: int
+
+
+@level_memory
+class ConnectorSfxState:
+    channels: Array[ConnectorSfxChannel, Dim[2]]
 
 
 class ConnectorMaskStatus(IntEnum):
@@ -479,6 +484,34 @@ def get_active_connector_sprites(kind: ActiveConnectorKind) -> ActiveConnectorSp
                 result @= get_styled_active_connector_sprites(get_connector_style(kind), True)
         case _:
             assert_never(base_kind)
+    return result
+
+
+def is_guide_connector(kind: ConnectorKind) -> bool:
+    return ConnectorKind.GUIDE_NEUTRAL <= kind <= ConnectorKind.GUIDE_BLACK
+
+
+def get_guide_connector_active_sprite(kind: GuideConnectorKind) -> Sprite:
+    result = Sprite(-1)
+    match kind:
+        case ConnectorKind.GUIDE_NEUTRAL:
+            result @= ActiveSkin.guide_neutral_active
+        case ConnectorKind.GUIDE_RED:
+            result @= ActiveSkin.guide_red_active
+        case ConnectorKind.GUIDE_GREEN:
+            result @= ActiveSkin.guide_green_active
+        case ConnectorKind.GUIDE_BLUE:
+            result @= ActiveSkin.guide_blue_active
+        case ConnectorKind.GUIDE_YELLOW:
+            result @= ActiveSkin.guide_yellow_active
+        case ConnectorKind.GUIDE_PURPLE:
+            result @= ActiveSkin.guide_purple_active
+        case ConnectorKind.GUIDE_CYAN:
+            result @= ActiveSkin.guide_cyan_active
+        case ConnectorKind.GUIDE_BLACK:
+            result @= ActiveSkin.guide_black_active
+        case _:
+            assert_never(kind)
     return result
 
 
@@ -727,6 +760,7 @@ def get_connector_render_info(
         ):
             sprites = get_guide_connector_sprite(cast(GuideConnectorKind, kind))
             normal_sprite @= sprites
+            active_sprite @= get_guide_connector_active_sprite(cast(GuideConnectorKind, kind))
         case ConnectorKind.DAMAGE:
             normal_sprite @= get_damage_connector_sprite(kind)
             active_sprite @= get_damage_connector_active_sprite(kind)
@@ -790,7 +824,10 @@ def draw_connector(
     head_alpha_frac: float = -1.0,
     tail_alpha_frac: float = -1.0,
     render_info: ConnectorRenderInfo | None = None,
+    animation_start_time: float | None = None,
 ):
+    if animation_start_time is None:
+        animation_start_time = segment_head_target_time
     elevation_dynamic = ease_over_elevation and not shared_transform
     match presentation:
         case SegmentPresentation.DEFAULT:
@@ -856,7 +893,11 @@ def draw_connector(
             | ConnectorKind.GUIDE_CYAN
             | ConnectorKind.GUIDE_BLACK
         ):
-            visual_state = ConnectorVisualState.WAITING
+            visual_state = (
+                ConnectorVisualState.ACTIVE
+                if time() > animation_start_time + 0.125
+                else ConnectorVisualState.WAITING
+            )
         case ConnectorKind.FAKE_DAMAGE:
             segment_head_alpha = 1.0
             segment_tail_alpha = 1.0
@@ -923,7 +964,7 @@ def draw_connector(
                         0.0,
                     )
                 draw_connector_default(
-                    segment_head_target_time=segment_head_target_time,
+                    segment_head_target_time=animation_start_time,
                     kind=kind,
                     base_kind=render_info.base_kind,
                     visual_state=visual_state,
@@ -988,6 +1029,7 @@ def draw_connector(
                 tail_target_time=tail_target_time,
                 tail_alpha=tail_alpha,
                 alpha_option=render_info.alpha,
+                animation_start_time=animation_start_time,
             )
         case _:
             assert_never(presentation)
@@ -2480,14 +2522,10 @@ def draw_connector_default(
 
 
 def get_cross_fate_opacities(a, t, period):
-    phase = (t % period) / period
-    opacity2_base = 1 - abs(1 - 2 * phase)
-    opacity1_base = 1 - opacity2_base
-    correction = 0.6
-    opacity1 = a * (opacity1_base + correction * opacity1_base * opacity2_base)
-    opacity2 = a * (opacity2_base + correction * opacity1_base * opacity2_base)
-
-    return opacity1, opacity2
+    mix = (1 - cos(2 * pi * t / period)) / 2
+    normal = a * (1 - mix)
+    active = a * mix / (1 - normal * CONNECTOR_TEXTURE_ALPHA)
+    return normal, active
 
 
 def draw_connector_full_screen(
@@ -2503,6 +2541,7 @@ def draw_connector_full_screen(
     tail_alpha: float,
     base_kind: BaseConnectorKind | None = None,
     alpha_option: float | None = None,
+    animation_start_time: float = 0.0,
 ):
     judge_frac = safe_unlerp_clamped(head_target_time, tail_target_time, time())
     judge_alpha = lerp(head_alpha, tail_alpha, judge_frac)
@@ -2510,7 +2549,9 @@ def draw_connector_full_screen(
         alpha_option = get_connector_alpha_option(kind, base_kind=base_kind)
     base_a = clamp(get_alpha(time()) * judge_alpha * alpha_option, 0, 1)
     if base_a > 0:
-        draw_connector_quad(screen(), visual_state, normal_sprite, active_sprite, z_normal, z_active, base_a)
+        draw_connector_quad(
+            screen(), visual_state, normal_sprite, active_sprite, z_normal, z_active, base_a, animation_start_time
+        )
 
 
 def draw_connector_quad(
@@ -2554,10 +2595,14 @@ def inactive_connector_sfx_times() -> ConnectorSfxTimes:
 
 
 def init_connector_sfx_times():
-    ConnectorSfxState.active_time = CONNECTOR_SFX_ACTIVE_TIME_INIT
-    ConnectorSfxState.inactive_time = CONNECTOR_SFX_INACTIVE_TIME_INIT
-    ConnectorSfxState.kind = ConnectorKind.NONE
-    ConnectorSfxState.active_head_index = 0
+    for channel in ConnectorSfxState.channels:
+        channel.active_time = CONNECTOR_SFX_ACTIVE_TIME_INIT
+        channel.inactive_time = CONNECTOR_SFX_INACTIVE_TIME_INIT
+        channel.active_head_index = 0
+
+
+def connector_sfx_channel(kind: ConnectorKind) -> ConnectorSfxChannel:
+    return ConnectorSfxState.channels[int(get_connector_sfx_kind(kind) == ConnectorKind.ACTIVE_CRITICAL)]
 
 
 def is_sfx_connector(kind: ConnectorKind) -> bool:
@@ -2582,33 +2627,35 @@ def activate_connector_sfx(
     active_tail_target_time: float,
     active_head_index: int,
 ) -> ConnectorSfxTimes:
-    sfx_time = clamp(event_time, active_head_target_time, active_tail_target_time)
-    if ConnectorSfxState.inactive_time == CONNECTOR_SFX_INACTIVE_TIME_INIT:
-        ConnectorSfxState.inactive_time = sfx_time
-    ConnectorSfxState.active_time = sfx_time
-    ConnectorSfxState.kind = get_connector_sfx_kind(kind)
-    ConnectorSfxState.active_head_index = active_head_index
-    return ConnectorSfxTimes(ConnectorSfxState.active_time, ConnectorSfxState.inactive_time)
+    channel = connector_sfx_channel(kind)
+    channel.active_time = event_time
+    channel.inactive_time = CONNECTOR_SFX_ACTIVE_TIME_INIT
+    channel.active_head_index = active_head_index
+    return ConnectorSfxTimes(channel.active_time, channel.inactive_time)
 
 
 def deactivate_connector_sfx(
     event_time: float,
     active_head_target_time: float,
     active_tail_target_time: float,
+    kind: ConnectorKind,
+    active_head_index: int,
 ) -> ConnectorSfxTimes:
-    ConnectorSfxState.inactive_time = clamp(event_time, active_head_target_time, active_tail_target_time)
-    return ConnectorSfxTimes(ConnectorSfxState.active_time, ConnectorSfxState.inactive_time)
+    channel = connector_sfx_channel(kind)
+    if channel.active_head_index == active_head_index:
+        channel.active_time = CONNECTOR_SFX_ACTIVE_TIME_INIT
+        channel.inactive_time = event_time
+        channel.active_head_index = 0
+    return ConnectorSfxTimes(channel.active_time, channel.inactive_time)
 
 
 def connector_sfx_is_active(times: ConnectorSfxTimes) -> bool:
     return times.active_time >= times.inactive_time
 
 
-def current_connector_sfx_is_active() -> bool:
-    return (
-        ConnectorSfxState.active_time >= ConnectorSfxState.inactive_time
-        and offset_adjusted_time() >= ConnectorSfxState.active_time
-    )
+def current_connector_sfx_is_active(kind: ConnectorKind) -> bool:
+    channel = connector_sfx_channel(kind)
+    return channel.active_head_index > 0 and offset_adjusted_time() >= channel.active_time
 
 
 def update_circular_connector_particle(
@@ -2726,6 +2773,8 @@ def spawn_connector_slot_particles(
                 particle @= get_styled_connector_particles(get_connector_style(kind), True).slot_linear
         case _:
             assert_never(base_kind)
+    if not particle.is_available:
+        return
     for slot_lane in iter_slot_lanes(lane, size):
         layout = transform.transform_billboard(
             layout_linear_effect(slot_lane, shear=0, y_offset=y_offset),
@@ -2760,22 +2809,39 @@ def draw_connector_slot_glow_effect(
                 sprite @= get_styled_active_connector_sprites(get_connector_style(kind), True).slot_glow
         case _:
             assert_never(base_kind)
-    height = (
-        0.85 + (1.2 - 0.85) * ((cos((time() - start_time) * 8 * pi) + 1) / 2)  # min + (max - min) * osc
-        if LevelConfig.ui_version == Version.v3
-        else 0.2 + (1.2 - 0.2) * ((sin((time() - start_time) * 2.5 * pi) + 1) / 2)
-    )
-    ex = 0.035 * abs(2 * size) + 0.08 if LevelConfig.ui_version == Version.v3 else 0
-    layout = transform.transform_billboard(
-        layout_slot_glow_effect(lane, size + ex, height, y_offset=y_offset),
-        transformed_vec_at(lane, approach(1 - y_offset)),
-    )
-    if not quad_touches_screen(layout):
+    if LevelConfig.ui_version == Version.v1:
+        height = 0.2 + (1.2 - 0.2) * ((sin((time() - start_time) * 2.5 * pi) + 1) / 2)
+        layout = transform.transform_billboard(
+            layout_slot_glow_effect(lane, size, height, y_offset=y_offset),
+            transformed_vec_at(lane, approach(1 - y_offset)),
+        )
+        if not quad_touches_screen(layout):
+            return
+        z = get_z(layers.slot_glow_effect, start_time, lane, elevation=transform.elevation, invert_time=True)
+        a = remap_clamped(start_time, start_time + 0.25, 0.0, 0.25, time())
+        lightweight = 0.25 if ActiveParticles.lightweight.is_available else 1
+        sprite.draw(layout, z=z.tuple, a=a * lightweight)
         return
+    critical = base_kind in (ConnectorKind.ACTIVE_CRITICAL, ConnectorKind.FAKE_ACTIVE_CRITICAL)
+    ex = 0.035 * abs(2 * size) + 0.08 if LevelConfig.ui_version == Version.v3 else 0
+    age = max(0, (time() - start_time) * Options.effect_animation_speed)
+    cycle = floor(age / 0.25)
+    phase = age % 0.25
     z = get_z(layers.slot_glow_effect, start_time, lane, elevation=transform.elevation, invert_time=True)
-    a = remap_clamped(start_time, start_time + 0.25, 0.0, 0.25, time())
     lightweight = 0.25 if ActiveParticles.lightweight.is_available else 1
-    sprite.draw(layout, z=z.tuple, a=a * lightweight)
+    for previous in range(2):
+        if previous > cycle:
+            continue
+        progress = (phase + previous * 0.25) / 0.5
+        height, alpha = hold_glow_appearance(progress, critical)
+        if alpha <= 0 or height <= 0:
+            continue
+        layout = transform.transform_billboard(
+            layout_slot_glow_effect(lane, size + ex, height, y_offset=y_offset),
+            transformed_vec_at(lane, approach(1 - y_offset)),
+        )
+        if quad_touches_screen(layout):
+            sprite.draw(layout, z=z.tuple, a=alpha * lightweight)
 
 
 def update_connector_sfx(

@@ -170,9 +170,9 @@ class CompiledRuntimeIndexTests(unittest.TestCase):
     def setUpClass(cls):
         cls.compiled = compile_fixture()
 
-    def test_slot_generations_and_seventh_bundle_in_compiled_memory(self):
+    def test_slot_generations_with_twelve_lane_pool_in_compiled_memory(self):
         runner, _ = make_runner(self.compiled, 0, 16, iterations=6)
-        assert invoke(self.compiled, runner)[2] == 16 * 26
+        assert invoke(self.compiled, runner)[2] == 16 * 27
 
     def test_event_cursor_keeps_duplicates_left_limits_and_rewinds(self):
         runner, _ = make_runner(self.compiled, 1, 64, duplicate_times=True)

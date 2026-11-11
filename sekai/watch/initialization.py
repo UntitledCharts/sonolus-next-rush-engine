@@ -8,7 +8,6 @@ from sonolus.script.archetype import (
     entity_data,
     entity_info_at,
     imported,
-    shared_memory,
 )
 from sonolus.script.bucket import Judgment
 from sonolus.script.containers import sort_linked_entities
@@ -24,6 +23,7 @@ from sekai.lib.connector import (
     ActiveConnectorKind,
     ConnectorKind,
     connector_sfx_is_active,
+    get_connector_sfx_kind,
     inactive_connector_sfx_times,
     is_sfx_connector,
     schedule_connector_sfx,
@@ -31,7 +31,13 @@ from sekai.lib.connector import (
 )
 from sekai.lib.custom_elements import LifeManager, NeumaierSum, init_fixed_ui_layout
 from sekai.lib.fever import FeverWindows, advance_fever_window, prepare_fever_windows
-from sekai.lib.initialization import LastNote, calculate_note_weight, count_entities, sort_entities_by_time
+from sekai.lib.initialization import (
+    LastNote,
+    calculate_note_weight,
+    count_entities,
+    prepare_guide_heads,
+    sort_entities_by_time,
+)
 from sekai.lib.layout import (
     StaticStageData,
     init_layout,
@@ -50,7 +56,6 @@ from sekai.lib.level_config import (
 from sekai.lib.note import init_life, init_score
 from sekai.lib.options import Options, SkillMode
 from sekai.lib.particle import ActiveParticles, init_particles
-from sekai.lib.particle_manager import ParticleStorage
 from sekai.lib.skin import ActiveSkin, init_skin
 from sekai.lib.stage import schedule_lane_sfx
 from sekai.lib.streams import Streams
@@ -63,7 +68,6 @@ from sekai.watch.static_stage import WatchScheduledLaneEffect, WatchStaticStage
 
 
 class WatchInitialization(WatchArchetype):
-    particle_storage: ParticleStorage = shared_memory()
     name = archetype_names.INITIALIZATION
 
     revision: EngineRevision = imported(name="revision", default=EngineRevision.SONOLUS_1_1_0)
@@ -129,6 +133,7 @@ class WatchInitialization(WatchArchetype):
 def sorted_linked_list(entity_count: int):
     prepare_fever_windows(FeverChance, FeverStart)
     note_head, note_length, skill_head, skill_length = initial_list(entity_count)
+    prepare_guide_heads(entity_count, note.WatchBaseNote)
 
     sorted_skill_head = +EntityRef[Skill]
     if skill_length > 0:
@@ -293,14 +298,15 @@ def setting_combo(head: int, skill: int) -> None:
 def schedule_auto_connector_sfx(entity_count: int):
     connector_id = WatchConnector._compile_time_id()
 
-    slide_head = 0
+    normal_head = 0
+    critical_head = 0
     for i in range(entity_count - 1, -1, -1):
         info = entity_info_at(i)
         mro = WatchArchetype._get_mro_id_array(info.archetype_id)
         if connector_id not in mro:
             continue
         connector = WatchConnector.at(i)
-        if connector.active_head_ref.index <= 0:
+        if connector.active_head_ref.index <= 0 or connector.head_ref.index != connector.active_head_ref.index:
             continue
         if connector.active_head.target_time == connector.active_tail.target_time:
             # Zero-length slide: its activation and release land on the same instant, which the
@@ -308,11 +314,16 @@ def schedule_auto_connector_sfx(entity_count: int):
             # duration, so skip it entirely.
             continue
         if is_sfx_connector(connector.segment_head.segment_kind):
-            connector.sfx_act_next.index = slide_head
-            connector.sfx_deact_next.index = slide_head
-            slide_head = i
+            critical = get_connector_sfx_kind(connector.segment_head.segment_kind) == ConnectorKind.ACTIVE_CRITICAL
+            connector.sfx_act_next.index = critical_head if critical else normal_head
+            connector.sfx_deact_next.index = connector.sfx_act_next.index
+            if critical:
+                critical_head = i
+            else:
+                normal_head = i
 
-    schedule_auto_connector_sfx_events(slide_head)
+    schedule_auto_connector_sfx_events(normal_head)
+    schedule_auto_connector_sfx_events(critical_head)
 
 
 def schedule_auto_connector_sfx_events(list_head: int):
@@ -370,7 +381,9 @@ def schedule_auto_connector_sfx_events(list_head: int):
             act_ref = WatchConnector.at(act_ref).sfx_act_next.index
 
         while deact_ref > 0 and WatchConnector.at(deact_ref).active_tail.target_time == next_time:
-            inactive_time = next_time
+            if deact_ref == active_connector_index:
+                inactive_time = next_time
+                active_connector_index = 0
             deact_ref = WatchConnector.at(deact_ref).sfx_deact_next.index
 
         current_time = next_time

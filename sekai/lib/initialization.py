@@ -8,6 +8,8 @@ from sonolus.script.globals import level_data
 from sonolus.script.runtime import level_score
 
 from sekai.lib import archetype_names
+from sekai.lib.connector import is_guide_connector
+from sekai.lib.note import NoteKind
 
 
 class InitializationLike(Protocol):
@@ -93,3 +95,22 @@ def sort_entities_by_time(
         get_value=get_time,
         get_next_ref=get_next if get_next_ref is None else get_next_ref,
     )
+
+
+def prepare_guide_heads(entity_count: int, note_type: Any):
+    note_id = note_type._compile_time_id()
+    for index in range(entity_count):
+        if note_id not in note_type._get_mro_id_array(entity_info_at(index).archetype_id):
+            continue
+        head = note_type.at(index)
+        if head.kind != NoteKind.ANCHOR or not is_guide_connector(head.segment_kind) or head.prev_ref.index > 0:
+            continue
+        ptr = head.ref()
+        for _ in range(entity_count):
+            if ptr.index <= 0:
+                break
+            anchor = ptr.get()
+            if anchor.kind != NoteKind.ANCHOR or not is_guide_connector(anchor.segment_kind):
+                break
+            anchor.active_head_ref = head.ref()
+            ptr @= anchor.next_ref

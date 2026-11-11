@@ -79,6 +79,7 @@ from sekai.lib.level_config import LevelConfig
 from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options, StageCoverMode, Version
 from sekai.lib.particle import ActiveParticles
+from sekai.lib.particle_manager import emit_empty_lane_particle
 from sekai.lib.skin import (
     ActiveSkin,
     JudgmentSpriteSet,
@@ -1957,4 +1958,4 @@ def schedule_lane_sfx(lane: float, target_time: float):
 def play_lane_particle(lane: float, transform: StageScreenTransform):
     if Options.lane_effect_enabled:
         layout = transform.transform_quad(layout_particle_lane(lane, 0.5, compensate_overshoot=False))
-        ActiveParticles.lane.spawn(layout, duration=0.3 / Options.effect_animation_speed)
+        emit_empty_lane_particle(ActiveParticles.lane, layout, 0.3 / Options.effect_animation_speed, lane)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import inf, pi
+from math import ceil, inf, pi
 from typing import assert_never, cast
 
 from sonolus.script.archetype import (
@@ -86,7 +86,6 @@ from sekai.lib.note import (
 )
 from sekai.lib.note_style import NoteStyle
 from sekai.lib.options import Options
-from sekai.lib.particle_manager import ParticleStorage
 from sekai.lib.skin import NoteSpriteSet
 from sekai.lib.stage import (
     DivisionParity,
@@ -126,7 +125,6 @@ JUST_PERFECT_HALF = 1 / 120
 
 
 class BaseNote(PlayArchetype):
-    particle_storage: ParticleStorage = shared_memory()
     beat: StandardImport.BEAT
     timescale_group: StandardImport.TIMESCALE_GROUP
     stage_ref: EntityRef[DynamicStage] = imported(name="stage")
@@ -817,6 +815,7 @@ class BaseNote(PlayArchetype):
                 lane_particles=self.visual_lane_particles,
                 stage=self.stage_params(),
                 style=self.style,
+                aura_limit=self.aura_pool_limit(),
             )
         if self.is_scored:
             self.result.haptic = get_note_haptic_feedback(self.kind, self.result.judgment)
@@ -1545,6 +1544,13 @@ class BaseNote(PlayArchetype):
         else:
             result @= self._basic_visual_stage_transform()
         return result
+
+    def aura_pool_limit(self, t: float | None = None) -> int:
+        if not self.is_attached and self.stage_ref.index <= 0:
+            return 12
+        sample_time = time() if t is None else t
+        bounds = self.input_geometry(InputGeometryContext.at(sample_time)).stage_bounds
+        return max(12, min(254, ceil(bounds.end - bounds.start)))
 
     def stage_params(self, t: float | None = None) -> NoteStageParams:
         result = +NoteStageParams

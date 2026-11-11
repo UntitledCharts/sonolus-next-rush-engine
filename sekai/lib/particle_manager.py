@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from enum import IntEnum
-from math import floor
+from math import floor, inf
 
-from sonolus.script.archetype import get_archetype_by_name
 from sonolus.script.array import Array, Dim
+from sonolus.script.bucket import Judgment
 from sonolus.script.containers import VarArray
 from sonolus.script.globals import level_memory
 from sonolus.script.particle import Particle, ParticleHandle
@@ -12,264 +11,154 @@ from sonolus.script.quad import Quad
 from sonolus.script.record import Record
 from sonolus.script.runtime import time
 
-from sekai.lib import archetype_names
-from sekai.lib.particle import EMPTY_PARTICLE, BaseParticles
+from sekai.lib.note_style import NoteVisualFamily
+from sekai.lib.particle import EMPTY_PARTICLE
 
-PARTICLE_KIND_COUNT = len(BaseParticles._particles_)
-PARTICLE_CHUNKS_PER_KIND = 6
 PARTICLE_PAGE_SIZE = 8
-PARTICLE_ARROW_CACHE_SIZE = 4
-PARTICLE_CHUNKS_PER_NOTE = 4  # Only linear/circular bundles, slot, and lane need a shared ticket.
-PARTICLE_LANE_WORD_BITS = 24
-PARTICLE_LANE_WORDS = 11
-CRITICAL_LANE_IDS = (
-    BaseParticles.lane.id,
-    BaseParticles.critical_flick_note_lane_linear.id,
-    BaseParticles.critical_down_flick_note_lane_linear.id,
-    *range(
-        BaseParticles.colored_critical_flick_note_lane_linear.start_id,
-        BaseParticles.colored_critical_flick_note_lane_linear.start_id + 8,
+AURA_POOL_LIMIT = 12
+GEN_POOL_LIMIT = 6
+FLASH_POOL_LIMIT = 5
+CONNECTION_POOL_LIMIT = 5
+HOLD_POOL_LIMIT = 10
+LANE_COUNT = 254
+FLASH_POOL_START = 13 * 3
+LANE_POOL_START = FLASH_POOL_START + 2
+PARTICLE_POOL_COUNT = LANE_POOL_START + 4
+_POOL_LIMITS = Array(
+    *(
+        12 if family in (8, 9) else 5 if family in (10, 11) else 6 if component in (0, 1) else 12
+        for family in range(13)
+        for component in range(3)
     ),
-    *range(
-        BaseParticles.colored_critical_down_flick_note_lane_linear.start_id,
-        BaseParticles.colored_critical_down_flick_note_lane_linear.start_id + 8,
-    ),
+    FLASH_POOL_LIMIT,
+    FLASH_POOL_LIMIT,
+    1,
+    1,
+    1,
+    1,
 )
-CRITICAL_LANE_SLOTS = len(CRITICAL_LANE_IDS) * PARTICLE_CHUNKS_PER_KIND
 
 
-class ParticleManageKind(IntEnum):
-    LANE = 0
-    REST = 1
-    MULTI = 2
+def note_effect_pool_family(family: NoteVisualFamily, judgment: Judgment) -> int:
+    match family:
+        case NoteVisualFamily.NORMAL_NOTE:
+            return 0 if judgment == Judgment.PERFECT else 1 if judgment == Judgment.GREAT else 2
+        case NoteVisualFamily.CRITICAL_NOTE:
+            return 3
+        case NoteVisualFamily.SLIDE_NOTE:
+            return 4
+        case NoteVisualFamily.CRITICAL_SLIDE_NOTE:
+            return 5
+        case (
+            NoteVisualFamily.FLICK_NOTE
+            | NoteVisualFamily.DOWN_FLICK_NOTE
+            | NoteVisualFamily.TRACE_FLICK_NOTE
+            | NoteVisualFamily.TRACE_DOWN_FLICK_NOTE
+        ):
+            return 6
+        case (
+            NoteVisualFamily.CRITICAL_FLICK_NOTE
+            | NoteVisualFamily.CRITICAL_DOWN_FLICK_NOTE
+            | NoteVisualFamily.CRITICAL_TRACE_FLICK_NOTE
+            | NoteVisualFamily.CRITICAL_TRACE_DOWN_FLICK_NOTE
+        ):
+            return 7
+        case NoteVisualFamily.TRACE_NOTE:
+            return 8
+        case NoteVisualFamily.CRITICAL_TRACE_NOTE:
+            return 9
+        case NoteVisualFamily.NORMAL_SLIDE_TICK_NOTE:
+            return 10
+        case NoteVisualFamily.CRITICAL_SLIDE_TICK_NOTE:
+            return 11
+        case _:
+            return 12
 
 
-class ParticleStorage(Record):
-    # Bundle tickets are shared by the pages emitted for the same note.
-    tickets: Array[int, Dim[4]]
-
-
-class CriticalLaneChunk(Record):
-    # All 24 bits are exactly representable in f32, including 2**24 - 1.
-    lanes: Array[int, Dim[11]]
-    serial: int
-
-    @property
-    def remaining(self) -> int:
-        # Lanes use bits 0..253. The last word has ten spare bits; eight hold
-        # the remaining count, without adding a slot or losing f32 precision.
-        return self.lanes[10] // 16384 % 256
-
-    @remaining.setter
-    def remaining(self, value: int):
-        self.lanes[10] += (value - self.remaining) * 16384
-
-    @property
-    def overlaps(self) -> bool:
-        return self.lanes[10] // 4194304 % 2 == 1
-
-    @overlaps.setter
-    def overlaps(self, value: bool):
-        self.lanes[10] += (int(value) - int(self.overlaps)) * 4194304
+def note_particle_pool(family: int, component: int) -> int:
+    if component == 2:
+        return FLASH_POOL_START + int(family == 7)
+    if component == 5:
+        lane_family = 2 if family == 6 else 3 if family == 7 else 1 if family in (3, 5) else 0
+        return LANE_POOL_START + lane_family
+    render_component = 1 if component in (1, 3) else 2 if component == 4 else 0
+    return family * 3 + render_component
 
 
 class ParticlePageEntry(Record):
     handle: ParticleHandle
-    lane: float
+    ticket: int
 
 
 class ParticlePage(Record):
-    particle_id: int
-    lane_slot: int  # Slot index + one; zero for counter-managed effects.
-    serial: int
+    pool_id: int
+    serial: int  # Lane generation, or the first live entry index in a ring pool.
     version: int
+    epoch: int
     end_time: float
     entries: VarArray[ParticlePageEntry, Dim[8]]
 
 
-class CachedArrows(Record):
-    particle_id: int  # ID + one; zero means unused.
-    handles: Array[int, Dim[6]]  # Native ID + one; zero is an empty slot.
-    deadlines: Array[float, Dim[6]]
-
-
 @level_memory
 class ParticleHandler:
-    serials: Array[int, Dim[PARTICLE_KIND_COUNT]]
-    critical_lanes: Array[CriticalLaneChunk, Dim[CRITICAL_LANE_SLOTS]]
-    arrows: Array[CachedArrows, Dim[PARTICLE_ARROW_CACHE_SIZE]]
-
-
-def particle_storage(owner: int) -> ParticleStorage:
-    return get_archetype_by_name(archetype_names.NORMAL_TAP_NOTE).at(owner, check=False).particle_storage
-
-
-def _ticket(ref: int) -> int:
-    index = ref - 1
-    return particle_storage(index // PARTICLE_CHUNKS_PER_NOTE).tickets[index % PARTICLE_CHUNKS_PER_NOTE]
-
-
-def _set_ticket(ref: int, value: int):
-    index = ref - 1
-    particle_storage(index // PARTICLE_CHUNKS_PER_NOTE).tickets[index % PARTICLE_CHUNKS_PER_NOTE] = value
+    epoch: int
+    serials: Array[int, Dim[PARTICLE_POOL_COUNT]]
+    aura_limits: Array[int, Dim[PARTICLE_POOL_COUNT]]
+    lanes: Array[Array[int, Dim[LANE_COUNT]], Dim[4]]
+    hold_owners: Array[int, Dim[2 * HOLD_POOL_LIMIT]]
+    hold_deadlines: Array[float, Dim[2 * HOLD_POOL_LIMIT]]
+    hold_epochs: Array[int, Dim[2 * HOLD_POOL_LIMIT]]
+    empty_handles: Array[int, Dim[LANE_COUNT]]
+    empty_deadlines: Array[float, Dim[LANE_COUNT]]
 
 
 def clear_particles():
-    # Skip one complete window on a seek. Tickets stay unique across reuse;
-    # every old page is invalidated even if new effects spawn in the same frame.
-    for particle_id in range(PARTICLE_KIND_COUNT):
-        ParticleHandler.serials[particle_id] += PARTICLE_CHUNKS_PER_KIND
-    for cache in ParticleHandler.arrows:
-        for i in range(PARTICLE_CHUNKS_PER_KIND):
-            if cache.handles[i] > 0 and time() < cache.deadlines[i]:
-                ParticleHandle(cache.handles[i] - 1).destroy()
-            cache.handles[i] = 0
-        cache.particle_id = 0
-    for chunk in ParticleHandler.critical_lanes:
-        chunk.remaining = 0
-        chunk.serial = 0
+    ParticleHandler.epoch += 1
+    for i in range(LANE_COUNT):
+        if ParticleHandler.empty_handles[i] > 0 and time() < ParticleHandler.empty_deadlines[i]:
+            ParticleHandle(ParticleHandler.empty_handles[i] - 1).destroy()
+        ParticleHandler.empty_handles[i] = 0
 
 
-def begin_particle_chunk(
-    particle: Particle,
-    group_id: float,
-    manage_kind: ParticleManageKind,
-    component: int = -1,
-    page_index: int = 0,
-) -> int:
-    if particle == EMPTY_PARTICLE or manage_kind == ParticleManageKind.REST:
-        return 0
-    index = component
-    if component < 0:
-        index = 0
-    elif component >= 4:
-        index = component - 2
-    # Directional/tick effects are single emissions and never use shared tickets.
-    ref = int(group_id) * PARTICLE_CHUNKS_PER_NOTE + index + 1
-    if page_index == 0:
-        _set_ticket(ref, 0)
-    return ref
-
-
-def _critical_lane_base(particle_id: int) -> int:
-    if particle_id == BaseParticles.lane.id:
-        return 0
-    if particle_id == BaseParticles.critical_flick_note_lane_linear.id:
-        return 6
-    if particle_id == BaseParticles.critical_down_flick_note_lane_linear.id:
-        return 12
-    start = BaseParticles.colored_critical_flick_note_lane_linear.start_id
-    if start <= particle_id < start + 8:
-        return (3 + particle_id - start) * 6
-    start = BaseParticles.colored_critical_down_flick_note_lane_linear.start_id
-    assert start <= particle_id < start + 8
-    return (11 + particle_id - start) * 6
-
-
-def _critical_slot(particle_id: int, serial: int) -> int:
-    base = _critical_lane_base(particle_id)
-    for slot in range(base, base + PARTICLE_CHUNKS_PER_KIND):
-        chunk = ParticleHandler.critical_lanes[slot]
-        if chunk.serial == serial and chunk.remaining > 0:
-            return slot
-    return -1
-
-
-def _lane_alive(chunk: CriticalLaneChunk, lane: float) -> bool:
+def emit_empty_lane_particle(particle: Particle, layout: Quad, duration: float, lane: float):
     index = floor(lane) + 127
-    bit = 2 ** (index % PARTICLE_LANE_WORD_BITS)
-    return chunk.lanes[index // PARTICLE_LANE_WORD_BITS] // bit % 2 == 1
-
-
-def prepare_particle_lanes(ref: int, particle: Particle, first: float, last: float, overlaps: bool = True):
-    if _ticket(ref) != 0:
+    if not 0 <= index < LANE_COUNT or particle == EMPTY_PARTICLE:
         return
-    particle_id = particle.id
-    first_index = floor(first) + 127
-    last_index = floor(last) + 127
-    base = _critical_lane_base(particle_id)
-    free = -1
-    oldest = base
-    oldest_serial = ParticleHandler.serials[particle_id] + 1
-    for slot in range(base, base + PARTICLE_CHUNKS_PER_KIND):
-        old = ParticleHandler.critical_lanes[slot]
-        if old.remaining > 0:
-            removed = 0
-            for index in range(first_index, last_index + 1 if overlaps and old.overlaps else first_index):
-                bit = 2 ** (index % PARTICLE_LANE_WORD_BITS)
-                word = index // PARTICLE_LANE_WORD_BITS
-                if old.lanes[word] // bit % 2 == 1:
-                    old.lanes[word] -= bit
-                    removed += 1
-            old.remaining -= removed
-            if old.serial < oldest_serial:
-                oldest = slot
-                oldest_serial = old.serial
-        if old.remaining == 0:
-            free = slot
-    # Fully covered groups are freed before applying the six-group limit.
-    slot = free if free >= 0 else oldest
-    chunk = ParticleHandler.critical_lanes[slot]
-    for word in range(PARTICLE_LANE_WORDS):
-        lo = max(first_index, word * PARTICLE_LANE_WORD_BITS)
-        hi = min(last_index + 1, (word + 1) * PARTICLE_LANE_WORD_BITS)
-        chunk.lanes[word] = (
-            2 ** (hi - word * PARTICLE_LANE_WORD_BITS) - 2 ** (lo - word * PARTICLE_LANE_WORD_BITS) if lo < hi else 0
-        )
-    ParticleHandler.serials[particle_id] += 1
-    chunk.serial = ParticleHandler.serials[particle_id]
-    chunk.remaining = last_index - first_index + 1 if overlaps else 1
-    chunk.overlaps = overlaps
-    _set_ticket(ref, chunk.serial)
+    if ParticleHandler.empty_handles[index] > 0 and time() < ParticleHandler.empty_deadlines[index]:
+        ParticleHandle(ParticleHandler.empty_handles[index] - 1).destroy()
+    ParticleHandler.empty_handles[index] = particle.spawn(layout, duration=duration).id + 1
+    ParticleHandler.empty_deadlines[index] = time() + duration
 
 
-def _is_arrow(particle_id: int) -> bool:
-    return particle_id in (
-        BaseParticles.note_directional_red.id,
-        BaseParticles.note_directional_yellow.id,
-        BaseParticles.flick_note_directional.id,
-        BaseParticles.down_flick_note_directional.id,
-        BaseParticles.critical_note_directional.id,
-        BaseParticles.critical_down_flick_note_directional.id,
-    ) or any(
-        group.start_id <= particle_id < group.start_id + group.size
-        for group in (
-            BaseParticles.colored_flick_note_directional,
-            BaseParticles.colored_down_flick_note_directional,
-            BaseParticles.colored_critical_note_directional,
-            BaseParticles.colored_critical_down_flick_note_directional,
-        )
-    )
+def reserve_hold_particles(owner: int, critical: bool, end_time: float = inf) -> int:
+    first = int(critical) * HOLD_POOL_LIMIT
+    for slot in range(first, first + HOLD_POOL_LIMIT):
+        if (
+            ParticleHandler.hold_owners[slot] == 0
+            or ParticleHandler.hold_epochs[slot] != ParticleHandler.epoch
+            or time() >= ParticleHandler.hold_deadlines[slot]
+        ):
+            ParticleHandler.hold_owners[slot] = owner + 1
+            ParticleHandler.hold_deadlines[slot] = end_time
+            ParticleHandler.hold_epochs[slot] = ParticleHandler.epoch
+            return slot + 1
+    return 0
 
 
-def _emit_cached_arrow(particle: Particle, layout: Quad, duration: float, serial: int) -> bool:
-    # A collision falls back to a private page. Occupied kinds are never evicted
-    # to make cache space; a slot may be reassigned only after all handles expire.
-    cache = ParticleHandler.arrows[particle.id % PARTICLE_ARROW_CACHE_SIZE]
-    if cache.particle_id != particle.id + 1:
-        for i in range(PARTICLE_CHUNKS_PER_KIND):
-            if cache.handles[i] > 0 and time() < cache.deadlines[i]:
-                return False
-        cache.particle_id = particle.id + 1
-        for i in range(PARTICLE_CHUNKS_PER_KIND):
-            cache.handles[i] = 0
-    index = (serial - 1) % PARTICLE_CHUNKS_PER_KIND
-    if cache.handles[index] > 0 and time() < cache.deadlines[index]:
-        ParticleHandle(cache.handles[index] - 1).destroy()
-    cache.handles[index] = particle.spawn(layout, duration=duration).id + 1
-    cache.deadlines[index] = time() + duration
-    return True
+def release_hold_particles(slot: int, owner: int):
+    if slot > 0 and ParticleHandler.hold_owners[slot - 1] == owner + 1:
+        ParticleHandler.hold_owners[slot - 1] = 0
 
 
 def emit_particle(
     particle: Particle,
     layout: Quad,
     duration: float,
-    manage_kind: ParticleManageKind,
-    slot: float,
-    chunk_key: int,
+    pool_id: int,
+    lane: float,
     managed: bool,
     page: ParticlePage | None = None,
+    aura_limit: int = AURA_POOL_LIMIT,
 ):
     if particle == EMPTY_PARTICLE:
         return
@@ -277,46 +166,27 @@ def emit_particle(
         particle.spawn(layout, duration=duration)
         return
     assert page is not None
-    particle_id = particle.id
-    first = len(page.entries) == 0
-    serial = 0 if first else page.serial
-    lane_slot = -1
-    if manage_kind == ParticleManageKind.LANE or (
-        manage_kind == ParticleManageKind.MULTI and particle_id == BaseParticles.lane.id
-    ):
-        if first and manage_kind == ParticleManageKind.MULTI:
-            prepare_particle_lanes(chunk_key, particle, 0, -1, overlaps=False)
-        if first:
-            serial = _ticket(chunk_key)
-        lane_slot = _critical_slot(particle_id, serial) if first else page.lane_slot - 1
-        if lane_slot < 0:
-            return
-        chunk = ParticleHandler.critical_lanes[lane_slot]
-        if chunk.overlaps and not _lane_alive(chunk, slot):
-            return
-    else:
-        if first and manage_kind == ParticleManageKind.MULTI:
-            serial = _ticket(chunk_key)
-        if serial == 0:
-            ParticleHandler.serials[particle_id] += 1
-            serial = ParticleHandler.serials[particle_id]
-            if manage_kind == ParticleManageKind.MULTI:
-                _set_ticket(chunk_key, serial)
-        elif first and ParticleHandler.serials[particle_id] - serial >= PARTICLE_CHUNKS_PER_KIND:
-            return
-    if (
-        manage_kind == ParticleManageKind.REST
-        and _is_arrow(particle_id)
-        and _emit_cached_arrow(particle, layout, duration, serial)
-    ):
-        return
-    if first:
-        page.particle_id = particle_id
-        page.lane_slot = lane_slot + 1
-        page.serial = serial
-        page.version = ParticleHandler.serials[particle_id]
+    if _POOL_LIMITS[pool_id] == AURA_POOL_LIMIT:
+        ParticleHandler.aura_limits[pool_id] = max(ParticleHandler.aura_limits[pool_id], aura_limit)
+    if len(page.entries) == 0:
+        page.pool_id = pool_id
+        page.epoch = ParticleHandler.epoch
         page.end_time = time() + duration
-    page.entries.append(ParticlePageEntry(particle.spawn(layout, duration=duration), slot))
+        page.serial = 0
+        if pool_id >= LANE_POOL_START:
+            ParticleHandler.serials[pool_id] += 1
+            page.serial = ParticleHandler.serials[pool_id]
+    ticket = 0
+    if pool_id >= LANE_POOL_START:
+        ticket = floor(lane) + 127
+        if not 0 <= ticket < LANE_COUNT:
+            return
+        ParticleHandler.lanes[pool_id - LANE_POOL_START][ticket] = page.serial
+    else:
+        ParticleHandler.serials[pool_id] += 1
+        ticket = ParticleHandler.serials[pool_id]
+    page.entries.append(ParticlePageEntry(particle.spawn(layout, duration=duration), ticket))
+    page.version = -1
 
 
 def update_particle_page(page: ParticlePage) -> bool:
@@ -325,36 +195,41 @@ def update_particle_page(page: ParticlePage) -> bool:
     if time() >= page.end_time:
         page.entries.clear()
         return True
-    serial = ParticleHandler.serials[page.particle_id]
-    if page.lane_slot == 0:
-        if serial - page.serial < PARTICLE_CHUNKS_PER_KIND:
-            return False
+    if page.epoch != ParticleHandler.epoch:
         destroy_particle_page(page)
         return True
+    serial = ParticleHandler.serials[page.pool_id]
     if page.version == serial:
         return False
-    chunk = ParticleHandler.critical_lanes[page.lane_slot - 1]
-    if chunk.serial != page.serial or chunk.remaining == 0:
-        destroy_particle_page(page)
-        return True
     page.version = serial
-    if not chunk.overlaps:
-        return False
-    alive = 0
-    for entry in page.entries:
-        if entry.handle.id >= 0:
-            if not _lane_alive(chunk, entry.lane):
+    if page.pool_id < LANE_POOL_START:
+        limit = max(_POOL_LIMITS[page.pool_id], ParticleHandler.aura_limits[page.pool_id])
+        while page.serial < len(page.entries):
+            entry = page.entries[page.serial]
+            if entry.handle.id >= 0:
+                if serial - entry.ticket < limit:
+                    return False
                 entry.handle.destroy()
                 entry.handle.id = -1
-            else:
-                alive += 1
+            page.serial += 1
+        page.entries.clear()
+        return True
+    alive = 0
+    for entry in page.entries:
+        if entry.handle.id < 0:
+            continue
+        if ParticleHandler.lanes[page.pool_id - LANE_POOL_START][entry.ticket] == page.serial:
+            alive += 1
+        else:
+            entry.handle.destroy()
+            entry.handle.id = -1
     if alive == 0:
         page.entries.clear()
     return alive == 0
 
 
 def destroy_particle_page(page: ParticlePage):
-    """Release a page before presentation, or when a Watch seek terminates it."""
+    """Release live handles when a Watch seek terminates their emitter."""
     if time() < page.end_time:
         for entry in page.entries:
             if entry.handle.id >= 0:

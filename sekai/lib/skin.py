@@ -430,20 +430,28 @@ class BaseSkin:
     damage_note_basic: Sprite = sprite("Sekai Damage Note Basic")
 
     guide_green: Sprite = sprite("Sekai Guide Green")
+    guide_green_active: Sprite = sprite("Sekai Guide Green Active")
     guide_green_fallback: StandardSprite.NOTE_CONNECTION_GREEN_SEAMLESS
     guide_yellow: Sprite = sprite("Sekai Guide Yellow")
+    guide_yellow_active: Sprite = sprite("Sekai Guide Yellow Active")
     guide_yellow_fallback: StandardSprite.NOTE_CONNECTION_YELLOW_SEAMLESS
     guide_red: Sprite = sprite("Sekai Guide Red")
+    guide_red_active: Sprite = sprite("Sekai Guide Red Active")
     guide_red_fallback: StandardSprite.NOTE_CONNECTION_RED_SEAMLESS
     guide_purple: Sprite = sprite("Sekai Guide Purple")
+    guide_purple_active: Sprite = sprite("Sekai Guide Purple Active")
     guide_purple_fallback: StandardSprite.NOTE_CONNECTION_PURPLE_SEAMLESS
     guide_cyan: Sprite = sprite("Sekai Guide Cyan")
+    guide_cyan_active: Sprite = sprite("Sekai Guide Cyan Active")
     guide_cyan_fallback: StandardSprite.NOTE_CONNECTION_CYAN_SEAMLESS
     guide_blue: Sprite = sprite("Sekai Guide Blue")
+    guide_blue_active: Sprite = sprite("Sekai Guide Blue Active")
     guide_blue_fallback: StandardSprite.NOTE_CONNECTION_BLUE_SEAMLESS
     guide_neutral: Sprite = sprite("Sekai Guide Neutral")
+    guide_neutral_active: Sprite = sprite("Sekai Guide Neutral Active")
     guide_neutral_fallback: StandardSprite.NOTE_CONNECTION_NEUTRAL_SEAMLESS
     guide_black: Sprite = sprite("Sekai Guide Black")
+    guide_black_active: Sprite = sprite("Sekai Guide Black Active")
     guide_black_fallback: StandardSprite.NOTE_CONNECTION_NEUTRAL_SEAMLESS
 
     damage_slide_connection: Sprite = sprite("Sekai Damage Slide Connection")
@@ -1453,13 +1461,21 @@ class ActiveSkin:
     critical_active_slide_connector: ActiveConnectorSpriteSet
 
     guide_green: Sprite
+    guide_green_active: Sprite
     guide_yellow: Sprite
+    guide_yellow_active: Sprite
     guide_red: Sprite
+    guide_red_active: Sprite
     guide_purple: Sprite
+    guide_purple_active: Sprite
     guide_cyan: Sprite
+    guide_cyan_active: Sprite
     guide_blue: Sprite
+    guide_blue_active: Sprite
     guide_neutral: Sprite
+    guide_neutral_active: Sprite
     guide_black: Sprite
+    guide_black_active: Sprite
 
     damage_slide_connector: Sprite
     damage_slide_connector_active: Sprite
@@ -2036,34 +2052,42 @@ def init_skin():
         ),
     )
 
+    ActiveSkin.guide_green_active = BaseSkin.guide_green_active
     ActiveSkin.guide_green = first_available_sprite(
         BaseSkin.guide_green,
         BaseSkin.guide_green_fallback,
     )
+    ActiveSkin.guide_yellow_active = BaseSkin.guide_yellow_active
     ActiveSkin.guide_yellow = first_available_sprite(
         BaseSkin.guide_yellow,
         BaseSkin.guide_yellow_fallback,
     )
+    ActiveSkin.guide_red_active = BaseSkin.guide_red_active
     ActiveSkin.guide_red = first_available_sprite(
         BaseSkin.guide_red,
         BaseSkin.guide_red_fallback,
     )
+    ActiveSkin.guide_purple_active = BaseSkin.guide_purple_active
     ActiveSkin.guide_purple = first_available_sprite(
         BaseSkin.guide_purple,
         BaseSkin.guide_purple_fallback,
     )
+    ActiveSkin.guide_cyan_active = BaseSkin.guide_cyan_active
     ActiveSkin.guide_cyan = first_available_sprite(
         BaseSkin.guide_cyan,
         BaseSkin.guide_cyan_fallback,
     )
+    ActiveSkin.guide_blue_active = BaseSkin.guide_blue_active
     ActiveSkin.guide_blue = first_available_sprite(
         BaseSkin.guide_blue,
         BaseSkin.guide_blue_fallback,
     )
+    ActiveSkin.guide_neutral_active = BaseSkin.guide_neutral_active
     ActiveSkin.guide_neutral = first_available_sprite(
         BaseSkin.guide_neutral,
         BaseSkin.guide_neutral_fallback,
     )
+    ActiveSkin.guide_black_active = BaseSkin.guide_black_active
     ActiveSkin.guide_black = first_available_sprite(
         BaseSkin.guide_black,
         BaseSkin.guide_black_fallback,

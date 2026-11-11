@@ -10,10 +10,10 @@ from unittest.mock import patch
 from sonolus.script.archetype import EntityRef
 from sonolus.script.bucket import Judgment
 from sonolus.script.debug import simulation_context
-from sonolus.script.particle import Particle
+from sonolus.script.interval import Interval
 from sonolus.script.vec import Vec2
 
-from sekai.lib import initialization, layout, particle_manager
+from sekai.lib import initialization, layout
 from sekai.lib import note as note_lib
 from sekai.lib.ease import EaseType
 from sekai.lib.level_config import EngineRevision
@@ -110,18 +110,6 @@ class MaskedEffectTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_unrelated_particle_groups_do_not_share_a_recycling_chunk(self):
-        with simulation_context():
-            storage = dict.fromkeys((1, 7), +particle_manager.ParticleStorage)
-            with (
-                patch.object(particle_manager, "particle_storage", side_effect=storage.__getitem__),
-            ):
-                first = particle_manager.begin_particle_chunk(Particle(4), 1, particle_manager.ParticleManageKind.MULTI)
-                second = particle_manager.begin_particle_chunk(
-                    Particle(4), 7, particle_manager.ParticleManageKind.MULTI
-                )
-        assert first != second
-
     def test_play_hit_effects_receive_the_visible_note_width(self):
         fake: Any = SimpleNamespace(
             should_play_hit_effects=True,
@@ -141,6 +129,7 @@ class MaskedEffectTests(unittest.TestCase):
             visual_single_line=False,
             visual_lane_particles=True,
             visual_stage_transform=layout.identity_stage_transform,
+            aura_pool_limit=lambda *args: 12,
             stage_params=lambda: +layout.NoteStageParams,
         )
         fake.visual_extents = cast(Any, play_note.BaseNote.visual_extents.fget)(fake)
@@ -192,6 +181,7 @@ class MaskedEffectTests(unittest.TestCase):
             direction=layout.FlickDirection.UP_OMNI,
             judgment=Judgment.PERFECT,
             index=1,
+            aura_pool_limit=lambda *args: 12,
         )
         with (
             patch.object(watch_note, "get_stage_props", return_value=props),
@@ -275,6 +265,7 @@ class MaskedEffectTests(unittest.TestCase):
                         stage=stage,
                         projection=+layout.NoteStageProjection,
                         generation=1,
+                        pool_id=0,
                     )
                     with (
                         patch.object(module, "time", return_value=0.1, create=True),
@@ -337,6 +328,7 @@ class MaskedEffectTests(unittest.TestCase):
                     visual_half_offset=False,
                     visual_lane_particles=True,
                     visual_stage_transform=layout.identity_stage_transform,
+                    aura_pool_limit=lambda *args: 12,
                 )
                 with (
                     patch.object(watch_note, "time", return_value=4),
@@ -402,3 +394,21 @@ class MaskedEffectTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DynamicAuraBudgetTests(unittest.TestCase):
+    def test_static_dynamic_and_attached_stage_widths_in_both_modes(self):
+        for module, cls in ((play_note, play_note.BaseNote), (watch_note, watch_note.WatchBaseNote)):
+            with simulation_context(), patch.object(module.InputGeometryContext, "at", return_value=None):
+                fixed = SimpleNamespace(is_attached=False, stage_ref=SimpleNamespace(index=0))
+                assert cls.aura_pool_limit(fixed, 0) == 12
+                for attached in (False, True):
+                    for width, expected in ((6, 12), (12, 12), (24, 24), (24.5, 25)):
+                        fake = SimpleNamespace(
+                            is_attached=attached,
+                            stage_ref=SimpleNamespace(index=1),
+                            input_geometry=lambda context, width=width: SimpleNamespace(
+                                stage_bounds=Interval(-width / 2, width / 2)
+                            ),
+                        )
+                        assert cls.aura_pool_limit(fake, 0) == expected

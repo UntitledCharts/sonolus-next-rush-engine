@@ -32,6 +32,7 @@ from sekai.lib.connector import (
     get_connector_fractions,
     get_connector_interp_frac,
     get_connector_render_info,
+    get_connector_sfx_kind,
     should_show_connector_hitbox,
     spawn_connector_slot_particles,
     spawn_linear_connector_trail_particle,
@@ -48,6 +49,7 @@ from sekai.lib.layout import (
 )
 from sekai.lib.note import draw_connector_hitbox_overlay, draw_slide_note_head
 from sekai.lib.options import Options
+from sekai.lib.particle_manager import release_hold_particles, reserve_hold_particles
 from sekai.lib.stage import VisualMask, masked_note_extents_by_limits
 from sekai.lib.streams import Streams
 from sekai.lib.timescale import (
@@ -323,6 +325,13 @@ class WatchConnector(WatchArchetype):
             draw_connector(
                 kind=self.kind,
                 render_info=self.render_info,
+                animation_start_time=(
+                    self.active_head.target_time
+                    if self.active_head_ref.index > 0
+                    else segment_head.active_head_ref.get().target_time
+                    if segment_head.active_head_ref.index > 0
+                    else segment_head.target_time
+                ),
                 visual_state=visual_state,
                 ease_type=self.ease_type,
                 head_lane=head_lane,
@@ -480,6 +489,7 @@ class WatchSlideManager(WatchArchetype):
     segment_head_ref: EntityRef[note.WatchBaseNote] = entity_memory()
     segment_cursor_time: float = entity_memory()
 
+    effect_pool_slot: int = entity_memory()
     last_kind: ConnectorKind = entity_memory()
     circular_particle: ParticleHandle = entity_memory()
     linear_particle: ParticleHandle = entity_memory()
@@ -487,6 +497,7 @@ class WatchSlideManager(WatchArchetype):
     next_slot_spawn_time: float = entity_memory()
 
     def initialize(self):
+        self.effect_pool_slot = -1
         self.segment_head_ref @= self.active_head_ref
         self.segment_cursor_time = -1e8
         self.next_trail_spawn_time = -1e8
@@ -497,6 +508,17 @@ class WatchSlideManager(WatchArchetype):
 
     def despawn_time(self) -> float:
         return slide_manager_end_time(self.active_tail)
+
+    def update_sequential(self):
+        if is_skip():
+            release_hold_particles(self.effect_pool_slot, self.active_head.index)
+            self.effect_pool_slot = -1
+        elif self.effect_pool_slot < 0:
+            self.effect_pool_slot = reserve_hold_particles(
+                self.active_head.index,
+                get_connector_sfx_kind(self.active_head.segment_kind) == ConnectorKind.ACTIVE_CRITICAL,
+                self.despawn_time(),
+            )
 
     def update_parallel(self):
         current_time = time()
@@ -534,7 +556,7 @@ class WatchSlideManager(WatchArchetype):
                 | ConnectorKind.ACTIVE_CRITICAL
                 | ConnectorKind.FAKE_ACTIVE_NORMAL
                 | ConnectorKind.FAKE_ACTIVE_CRITICAL
-            ):
+            ) if self.effect_pool_slot > 0:
                 replace = connector_kind != self.last_kind
                 self.last_kind = connector_kind
                 if not skipping and self.visual_size > 0:
