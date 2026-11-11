@@ -11,8 +11,10 @@ from sonolus.script.ui import (
 )
 from sonolus.script.vec import Vec2
 
-from sekai.lib.layout import Layout, UIMargin
-from sekai.lib.options import Options
+from sekai.lib import hud_geometry as hud
+from sekai.lib.layout import Layout, UIMargin, v3_hud_anchor
+from sekai.lib.level_config import LevelConfig
+from sekai.lib.options import Options, Version
 from sekai.lib.skin import ActiveSkin
 
 ui_config = UiConfig(
@@ -102,6 +104,17 @@ def init_ui():
         horizontal_align=HorizontalAlign.CENTER,
         background=True,
     )
+    if LevelConfig.ui_version == Version.v3 and not custom_life_bar:
+        unit = hud.hud_unit(aspect_ratio()) * ui.secondary_metric_config.scale
+        menu_center = v3_hud_anchor(True) + Vec2(hud.MENU_X, hud.MENU_Y) * unit
+        ui.menu.update(
+            anchor=menu_center,
+            pivot=Vec2(0.5, 0.5),
+            dimensions=Vec2(hud.MENU_SIZE, hud.MENU_SIZE) * unit * ui.menu_config.scale,
+            alpha=0,
+            horizontal_align=HorizontalAlign.CENTER,
+            background=False,
+        )
     ui.primary_metric_bar.update(
         anchor=score_tl + custom_score_bar_margin,
         pivot=Vec2(0, 1),

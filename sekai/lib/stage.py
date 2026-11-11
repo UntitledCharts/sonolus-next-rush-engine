@@ -1900,8 +1900,9 @@ def draw_score_bar(
         gauge = get_gauge_progress(score)
         ActiveSkin.score.gauge.normal.draw(ui_layout.score_gauge, z=get_z_alt(LAYER_JUDGMENT).tuple, a=alpha)
 
-        gauge_mask_layout = layout_score_gauge(gauge, ScoreGaugeType.MASK)
-        ActiveSkin.score.gauge.mask.draw(gauge_mask_layout, z=get_z_alt(LAYER_JUDGMENT, 1).tuple, a=alpha)
+        if gauge < 1 or LevelConfig.ui_version == Version.v1:
+            gauge_mask_layout = layout_score_gauge(gauge, ScoreGaugeType.MASK)
+            ActiveSkin.score.gauge.mask.draw(gauge_mask_layout, z=get_z_alt(LAYER_JUDGMENT, 1).tuple, a=alpha)
     else:
         ActiveSkin.score.gauge.cover.draw(ui_layout.score_gauge, z=get_z_alt(LAYER_JUDGMENT).tuple, a=alpha)
     if LevelConfig.ui_version == Version.v3 or rank != ScoreRankType.D:
