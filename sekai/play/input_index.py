@@ -88,7 +88,7 @@ class TapPriorityQuery(Record):
                 target = ref.get()
                 if target.is_trace_flick or target.captured_touch_id != 0:
                     continue
-                if touch.time not in target.unadjusted_input_interval:
+                if not target.unadjusted_input_interval.start < touch.time < target.unadjusted_input_interval.end:
                     continue
                 if target.hitbox.bounds.contains_point(touch.position):
                     if len(self.beats) > 0 and target.beat < self.beats.get_unchecked(len(self.beats) - 1):

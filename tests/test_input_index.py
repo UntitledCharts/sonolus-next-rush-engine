@@ -26,9 +26,8 @@ from sonolus.script.runtime import Touch
 from sonolus.script.values import alloc
 from sonolus.script.vec import Vec2
 
-from sekai.lib.buckets import SLIDE_END_LOCKOUT_DURATION
 from sekai.lib.layout import DynamicLayout, Hitbox, HitboxTarget, segment_closeness_score
-from sekai.lib.note import NoteKind, is_head
+from sekai.lib.note import NoteKind, get_note_window, is_head
 from sekai.play import input_manager as manager
 from sekai.play.input_index import TapPriorityQuery, sort_input_notes
 
@@ -69,57 +68,76 @@ def make_notes(specs):
 
 def reference_allocate(active, touches):
     active.sort(key=lambda ref: ref.get().target_time)
-    assigned = [i >= len(touches) or not touches[i].started for i in range(manager.INPUT_SLOTS)]
-    empty, releases = [], []
-    for _ in range(manager.INPUT_SLOTS):
-        scores = [0.0] * manager.INPUT_SLOTS
-        preferred = [-1] * manager.INPUT_SLOTS
-        for i, touch in enumerate(touches[: manager.INPUT_SLOTS]):
-            if assigned[i]:
-                continue
+    rows = []
+    for touch in touches[: manager.INPUT_SLOTS]:
+        candidates = []
+        if touch.started:
             for j, ref in enumerate(active):
                 target = ref.get()
-                if target.captured_touch_id or touch.time not in target.unadjusted_input_interval:
-                    continue
-                if not target.hitbox.bounds.contains_point(touch.position):
-                    continue
-                if target.is_trace_flick and any(
-                    not other.get().is_trace_flick
-                    and other.get().beat == target.beat
-                    and not other.get().captured_touch_id
-                    and touch.time in other.get().unadjusted_input_interval
-                    and other.get().hitbox.bounds.contains_point(touch.position)
-                    for other in active
+                if (
+                    target.captured_touch_id
+                    or not target.unadjusted_input_interval.start < touch.time < target.unadjusted_input_interval.end
+                    or not target.hitbox.bounds.contains_point(touch.position)
                 ):
                     continue
-                score = (
-                    segment_closeness_score(touch.position, target.hitbox.target)
-                    + (1 - target.target_time) / manager.INPUT_SCORE_TIME_SCALE
-                )
-                if preferred[i] == -1 or score > scores[i]:
-                    scores[i], preferred[i] = score, j
-        winners = [
-            i
-            for i in range(manager.INPUT_SLOTS)
-            if preferred[i] >= 0
-            and not any(
-                preferred[j] == preferred[i] and (scores[j] > scores[i] or (scores[j] == scores[i] and j < i))
-                for j in range(manager.INPUT_SLOTS)
-                if j != i
+                candidates.append(j)
+        rows.append(candidates)
+    records = [
+        (touches[i].id, touches[i].time)
+        for i, row in enumerate(rows)
+        if any(not is_head(active[index].get().kind) for index in row)
+    ]
+    for i in reversed(range(len(rows))):
+        for j in reversed(range(i)):
+            for index in list(reversed(rows[i])):
+                if index not in rows[j]:
+                    continue
+                target = active[index].get()
+                segment = target.hitbox.target
+                axis = (segment.r - segment.l).normalize_or_zero()
+                center = (segment.r + segment.l) / 2
+                d_i = ((touches[i].position - center).dot(axis)) ** 2
+                d_j = ((touches[j].position - center).dot(axis)) ** 2
+                rows[i if d_j <= d_i else j].remove(index)
+    for i, row in enumerate(rows):
+        touch = touches[i]
+        rows[i] = [
+            index
+            for index in row
+            if not active[index].get().is_trace_flick
+            or not any(
+                not other.get().is_trace_flick
+                and not other.get().captured_touch_id
+                and other.get().beat == active[index].get().beat
+                and other.get().unadjusted_input_interval.start < touch.time < other.get().unadjusted_input_interval.end
+                and other.get().hitbox.bounds.contains_point(touch.position)
+                for other in active
             )
         ]
-        if not winners:
-            break
-        for i in winners:
-            target = active[preferred[i]].get()
-            touch = touches[i]
-            empty.append(touch.id)
-            if not is_head(target.kind) and not target.is_trace_flick:
-                releases.append((touch.id, target.target_time + SLIDE_END_LOCKOUT_DURATION))
-            target.captured_touch_id = touch.id
-            target.captured_touch_time = min(touch.time, touch.start_time)
-            assigned[i] = True
-    return empty, releases
+    empty = []
+    for i, candidates in enumerate(rows):
+        touch = touches[i]
+        while len(candidates) > 1:
+            first, last = [active[index].get() for index in (candidates[0], candidates[-1])]
+            if first.target_time == last.target_time:
+                scores = []
+                for target in (first, last):
+                    segment = target.hitbox.target
+                    axis = (segment.r - segment.l).normalize_or_zero()
+                    scores.append(-(((touch.position - (segment.r + segment.l) / 2).dot(axis)) ** 2))
+                discard_first = scores[0] <= scores[1]
+            else:
+                last_high = touch.time - last.target_time in get_note_window(last.kind, False).great
+                first_high = touch.time - first.target_time in get_note_window(first.kind, False).great
+                discard_first = last_high and not first_high
+            candidates.pop(0 if discard_first else -1)
+        if not candidates:
+            continue
+        target = active[candidates[0]].get()
+        empty.append(touch.id)
+        target.captured_touch_id = touch.id
+        target.captured_touch_time = min(touch.time, touch.start_time)
+    return empty, records
 
 
 class InputIndexTests(unittest.TestCase):
@@ -195,7 +213,7 @@ class InputIndexTests(unittest.TestCase):
                         cast(Touch, touch), beat
                     )
 
-    def test_full_allocator_matches_previous_choices_and_lockouts(self):
+    def test_full_allocator_matches_source_candidate_ownership(self):
         rng = random.Random(277)
         with simulation_context():
             for case in range(32):
@@ -238,8 +256,8 @@ class InputIndexTests(unittest.TestCase):
                     patch.object(manager, "disallow_empty", side_effect=lambda t, events=empty: events.append(t.id)),
                     patch.object(
                         manager,
-                        "disallow_release",
-                        side_effect=lambda t, end, events=releases: events.append((t.id, end)),
+                        "record_note_input",
+                        side_effect=lambda t, events=releases: events.append((t.id, t.time)),
                     ),
                 ):
                     manager.preassign_taps()
@@ -250,7 +268,7 @@ class InputIndexTests(unittest.TestCase):
                     (n.captured_touch_id, n.captured_touch_time) for n in expected_registry.values()
                 ], case
 
-    def test_shortlists_match_original_taps_with_partial_inputs_ties_and_preclaimed_notes(self):
+    def test_ownership_matches_source_with_partial_inputs_ties_and_preclaimed_notes(self):
         rng = random.Random(777)
         with simulation_context():
             for case in range(80):
@@ -292,8 +310,8 @@ class InputIndexTests(unittest.TestCase):
                     patch.object(manager, "disallow_empty", side_effect=lambda t, events=empty: events.append(t.id)),
                     patch.object(
                         manager,
-                        "disallow_release",
-                        side_effect=lambda t, end, events=releases: events.append((t.id, end)),
+                        "record_note_input",
+                        side_effect=lambda t, events=releases: events.append((t.id, t.time)),
                     ),
                 ):
                     manager.preassign_taps()
@@ -302,7 +320,7 @@ class InputIndexTests(unittest.TestCase):
                     (n.captured_touch_id, n.captured_touch_time) for n in expected_registry.values()
                 ], case
 
-    def test_shortlisted_releases_match_rounds_with_lockouts_and_ongoing_heads(self):
+    def test_shortlisted_releases_match_rounds_with_lockouts(self):
         rng = random.Random(778)
         with simulation_context():
             for case in range(60):
@@ -348,18 +366,16 @@ class InputIndexTests(unittest.TestCase):
                     row = {}
                     for ni in ordered:
                         target = registry[ni]
-                        if target.captured_touch_id or touch.time not in target.unadjusted_input_interval:
+                        if (
+                            target.captured_touch_id
+                            or not target.unadjusted_input_interval.start
+                            < touch.time
+                            < target.unadjusted_input_interval.end
+                        ):
                             continue
                         if not target.hitbox.bounds.contains_point(touch.position):
                             continue
-                        ignore = target.active_head_ref.index > 0 and not any(
-                            not t.ended
-                            and target.active_head_ref.get().active_connector_info.input_bounds.contains_point(
-                                t.position
-                            )
-                            for t in touches
-                        )
-                        if not ignore and lockouts[touch.id] > target.target_time:
+                        if lockouts[touch.id] > target.target_time:
                             continue
                         row[ni] = (
                             segment_closeness_score(touch.position, target.hitbox.target)
@@ -396,7 +412,9 @@ class InputIndexTests(unittest.TestCase):
                     patch.object(manager, "time", return_value=1),
                     patch.object(manager, "DynamicLayout", SimpleNamespace(w_scale=1)),
                     patch.object(
-                        manager, "is_allowed_release", side_effect=lambda t, end, locks=lockouts: locks[t.id] <= end
+                        manager,
+                        "is_allowed_release",
+                        side_effect=lambda t, target, locks=lockouts: locks[t.id] <= target.target_time,
                     ),
                     patch.object(manager, "disallow_empty", side_effect=lambda t, events=empty: events.append(t.id)),
                 ):
@@ -455,14 +473,14 @@ class IdleInputTests(unittest.TestCase):
                     patch.object(manager, "time", return_value=1),
                     patch.object(manager, "DynamicLayout", SimpleNamespace(w_scale=1)),
                     patch.object(manager, "disallow_empty"),
-                    patch.object(manager, "disallow_release"),
+                    patch.object(manager, "record_note_input"),
                     patch.object(manager, "is_allowed_release", return_value=True),
                 ):
                     for _ in range(3):
                         assign()
                     setattr(touch, flag, True)
                     assign()
-                assert registry[2].captured_touch_id == 1
+                assert registry[32 if assign is manager.preassign_taps else 2].captured_touch_id == 1
                 assert sum(target.captured_touch_id != 0 for target in registry.values()) == 1
                 assert [ref.index for ref in active] == sorted(registry, key=lambda i: registry[i].target_time)
 
@@ -500,7 +518,7 @@ def fixture_time():
 def run_fixture(probe, assign):
     manager.InputState.processed_touches.clear()
     manager.InputState.disallowed_empty_touches.clear()
-    manager.InputState.disallowed_release_touches.clear()
+    manager.InputState.recent_note_input_times.clear()
     FixtureNotes.active_tap_input_notes.clear()
     FixtureNotes.active_release_input_notes.clear()
     DynamicLayout.w_scale = 1
@@ -605,6 +623,35 @@ class CompiledInputIndexTests(unittest.TestCase):
             (2, 128, 2, 64, 2, 0, False, 2, 5),
             (2, 128, 2, 127, 2, 0, True, 2, 130),
         ):
+            if probe_index == 2:
+                with simulation_context():
+                    specs = [
+                        {
+                            "beat": 1 if same_beat else (i * 31) % count if count == 128 else i,
+                            "target_time": 1 if shape >= 2 else 1 + (count - i if shape == 1 else i) / 512,
+                            "trace": i < traces,
+                            "captured": 0,
+                            "x": 0,
+                            "width": 1,
+                            "kind": NoteKind.NORM_TRACE_FLICK if i < traces else NoteKind.NORM_TAP,
+                            "interval": (0, 2),
+                        }
+                        for i in range(count)
+                    ]
+                    active, registry = make_notes(specs)
+                    inputs = [
+                        SimpleNamespace(
+                            id=i + 1,
+                            started=events == 0 or (events == 3 and i == 16),
+                            time=1,
+                            start_time=0.9,
+                            position=Vec2(0, 0),
+                        )
+                        for i in range(touches)
+                    ]
+                    reference_allocate(active, inputs)
+                    expected = sum(index * n.captured_touch_id for index, n in registry.items())
+                    expected_count = sum(n.captured_touch_id != 0 for n in registry.values())
             archetype = payload["archetypes"][probe_index]
             runner = Interpreter()
             runner.blocks = {block: [0.0] * 32768 for block in PlayBlock}

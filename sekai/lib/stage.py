@@ -401,6 +401,7 @@ class VisualMask(Record):
 
 
 class InputGeometry(Record):
+    stage_bounds: Interval
     lane: float
     mask: VisualMask
     y_offset: float
@@ -436,6 +437,7 @@ class InputGeometryContext(Record):
 
         props = get_stage_input_props(stage, self.time)
         result.lane = props.pivot_lane
+        result.stage_bounds = Interval(props.lane - props.width, props.lane + props.width)
         result.mask.left = props.lane - props.width
         result.mask.right = props.lane + props.width
         result.mask.enabled = props.mask_notes

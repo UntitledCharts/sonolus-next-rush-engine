@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import IntEnum
-from math import atan, ceil, cos, floor, log, pi, sin
+from math import atan, ceil, cos, floor, inf, log, pi, sin
 from typing import Protocol, Self, assert_never, cast
 
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
@@ -2608,6 +2608,9 @@ def layout_transform_at_camera(camera: CameraInfo) -> LayoutTransform:
     )
 
 
+DEFAULT_STAGE_BOUNDS = Interval(-6, 6)
+
+
 def compute_hitbox(
     transform: LayoutTransform,
     lane: float,
@@ -2616,6 +2619,8 @@ def compute_hitbox(
     y_offset: float = 0.0,
     *,
     stage_transform: StageScreenTransform,
+    stage_bounds: Interval = DEFAULT_STAGE_BOUNDS,
+    height_limit: float = 3.5 / 1.19,
 ) -> Hitbox:
     tilt = transform.stage_tilt
     travel = approach_at_tilt(1 - y_offset, tilt)
@@ -2637,14 +2642,38 @@ def compute_hitbox(
     # Use the static-stage dimensions for both extents. Dynamic camera and stage transforms
     # move the resulting hitbox without changing the area in which the player can touch.
     up = horizontal.orthogonal()
-    upper_extent = 3.0 * Layout.w_scale
+    upper_extent = height_limit * Layout.w_scale
     static_judgment_y = Layout.t + Layout.h_scale
     lower_extent = max(static_judgment_y - screen().b, 0.0)
     margin = horizontal * (leniency * lane_w)
-    bound_bl = target_l - margin - up * lower_extent
-    bound_br = target_r + margin - up * lower_extent
-    bound_tl = target_l - margin + up * upper_extent
-    bound_tr = target_r + margin + up * upper_extent
+    bound_l = target_l - margin
+    bound_r = target_r + margin
+    if leniency > 0 and stage_bounds.start <= lane - size and lane + size <= stage_bounds.end:
+        first = min(stage_bounds.start + 0.5, stage_bounds.mid)
+        last = max(stage_bounds.end - 0.5, stage_bounds.mid)
+        first_point = stage_transform.apply(
+            Vec2(first * width_factor * lane_w + transform.x_translate, note_y).rotate(rot)
+        )
+        last_point = stage_transform.apply(
+            Vec2(last * width_factor * lane_w + transform.x_translate, note_y).rotate(rot)
+        )
+        outer_left = first_point - horizontal * (1.8 / 1.19 * lane_w)
+        outer_right = last_point + horizontal * (1.8 / 1.19 * lane_w)
+        if lane - size - leniency <= first <= lane + size + leniency or (bound_l - outer_left).dot(horizontal) < 0:
+            bound_l @= outer_left
+        if lane - size - leniency <= last <= lane + size + leniency or (bound_r - outer_right).dot(horizontal) > 0:
+            bound_r @= outer_right
+    if height_limit == inf:
+        upper_extent = 0
+        viewport = screen()
+        for corner in (viewport.bl, viewport.br, viewport.tl, viewport.tr):
+            distance = (corner - bound_l).dot(up)
+            upper_extent = max(upper_extent, distance)
+            lower_extent = max(lower_extent, -distance)
+    bound_bl = bound_l - up * lower_extent
+    bound_br = bound_r - up * lower_extent
+    bound_tl = bound_l + up * upper_extent
+    bound_tr = bound_r + up * upper_extent
     return Hitbox(
         target=HitboxTarget(l=target_l, r=target_r),
         bounds=Quad(bl=bound_bl, br=bound_br, tl=bound_tl, tr=bound_tr),
@@ -2663,6 +2692,8 @@ def compute_hitbox_at_time(
     y_offset: float = 0.0,
     *,
     stage_transform: StageScreenTransform,
+    stage_bounds: Interval = DEFAULT_STAGE_BOUNDS,
+    height_limit: float = 3.5 / 1.19,
 ) -> Hitbox:
     return compute_hitbox(
         camera_layout_transform_at_time(target_time),
@@ -2671,6 +2702,8 @@ def compute_hitbox_at_time(
         leniency,
         y_offset,
         stage_transform=stage_transform,
+        stage_bounds=stage_bounds,
+        height_limit=height_limit,
     )
 
 

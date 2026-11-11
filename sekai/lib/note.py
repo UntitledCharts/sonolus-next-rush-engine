@@ -1715,6 +1715,17 @@ def get_note_window(kind: NoteKind, is_connector_tick: bool) -> SekaiWindow:
     return result
 
 
+def get_note_input_window(kind: NoteKind, is_connector_tick: bool) -> SekaiWindow:
+    result = +SekaiWindow
+    if kind == NoteKind.NORM_TAIL_TRACE_FLICK:
+        result @= SLIDE_END_FLICK_NORMAL_WINDOW
+    elif kind == NoteKind.CRIT_TAIL_TRACE_FLICK:
+        result @= SLIDE_END_FLICK_CRITICAL_WINDOW
+    else:
+        result @= get_note_window(kind, is_connector_tick)
+    return result
+
+
 def get_note_bucket(kind: NoteKind) -> Bucket:
     result = Bucket(-1)
     match kind:
@@ -1789,8 +1800,27 @@ def get_note_bucket(kind: NoteKind) -> Bucket:
 def get_leniency(kind: NoteKind) -> float:
     if kind in {NoteKind.DAMAGE, NoteKind.HIDE_DAMAGE_TICK}:
         return 0.0
+    if kind in {
+        NoteKind.NORM_TAP,
+        NoteKind.CRIT_TAP,
+        NoteKind.NORM_TAIL_TAP,
+        NoteKind.CRIT_TAIL_TAP,
+        NoteKind.NORM_RELEASE,
+        NoteKind.CRIT_RELEASE,
+        NoteKind.NORM_TAIL_RELEASE,
+        NoteKind.CRIT_TAIL_RELEASE,
+        NoteKind.NORM_TRACE,
+        NoteKind.CRIT_TRACE,
+        NoteKind.NORM_TAIL_TRACE,
+        NoteKind.CRIT_TAIL_TRACE,
+    }:
+        return 0.75
     # For notes without input, this value doesn't matter
     return 1.0
+
+
+def hitbox_height_limit(kind: NoteKind, direction: FlickDirection) -> float:
+    return 3.5 / 1.19
 
 
 def has_tap_input(kind: NoteKind) -> bool:
