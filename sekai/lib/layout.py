@@ -2099,42 +2099,73 @@ def layout_fallback_judge_line() -> Quad:
     return perspective_rect(l=-6, r=6, t=1 - nh, b=1 + nh)
 
 
-def layout_note_body_by_edges(l: float, r: float, h: float, travel: float):
-    return perspective_rect(l=l, r=r, t=1 - h, b=1 + h, travel=travel, p=Options.note_perspective)
+def note_body_point(lane: float, span: float, x: float, u: float, v: float, travel: float) -> Vec2:
+    width = tilt_width_factor(travel)
+    offset = (lane / 6 + (span - 0.5) / 12 * (2 * u - 1)) * travel * 0.6 / 1.19
+    visible = 1.0 if span > 0 else 0.0
+    height = v * 1.7222 / (2 * 1.19) * width * DynamicLayout.w_scale * visible
+    return transform_vec(Vec2((lane + (x - v * offset * current_stage_tilt()) * visible) * width, travel)) + Vec2(
+        height * DynamicLayout.rotate_sin, height * DynamicLayout.rotate_cos
+    )
 
 
-def layout_note_body_slices_by_edges(
-    l: float, r: float, h: float, edge_w: float, travel: float
-) -> tuple[Quad, Quad, Quad]:
-    m = (l + r) / 2
-    if r < l:
-        # Make the note 0 width; shouldn't normally happen, but in case, we want to handle it gracefully
-        l = r = m
-    ml = min(l + edge_w, m)
-    mr = max(r - edge_w, m)
-    depth_b, depth_t, wb, wt = perspective_edge_factors(1 - h, 1 + h, travel, Options.note_perspective)
-    left = Quad(
-        bl=transform_vec(Vec2(l * wb, depth_b)),
-        br=transform_vec(Vec2(ml * wb, depth_b)),
-        tl=transform_vec(Vec2(l * wt, depth_t)),
-        tr=transform_vec(Vec2(ml * wt, depth_t)),
+def untransform_note_body_sprite(q: Quad, edge: int = 0) -> Quad:
+    result = Quad(
+        bl=lerp(q.bl, q.tl, 0.6625 / 2.325),
+        tl=lerp(q.tl, q.bl, 0.6625 / 2.325),
+        tr=lerp(q.tr, q.br, 0.6625 / 2.325),
+        br=lerp(q.br, q.tr, 0.6625 / 2.325),
     )
-    right = Quad(
-        bl=transform_vec(Vec2(mr * wb, depth_b)),
-        br=transform_vec(Vec2(r * wb, depth_b)),
-        tl=transform_vec(Vec2(mr * wt, depth_t)),
-        tr=transform_vec(Vec2(r * wt, depth_t)),
+    if edge < 0:
+        result.bl @= lerp(result.br, result.bl, 12 / 31)
+        result.tl @= lerp(result.tr, result.tl, 12 / 31)
+    elif edge > 0:
+        result.br @= lerp(result.bl, result.br, 12 / 31)
+        result.tr @= lerp(result.tl, result.tr, 12 / 31)
+    return result
+
+
+def layout_note_body_by_edges(l: float, r: float, travel: float, slim: bool = False) -> Quad:
+    lane = (l + r) / 2
+    span = max(r - l, 0)
+    half_width = max(((span - 1) * 1.2178 + 2.06) / (2 * 1.19) - 43 / (108 * 1.19), 0)
+    v = (68 if slim else 108) / 186
+    return Quad(
+        bl=note_body_point(lane, span, -half_width, 43 / 354, -v, travel),
+        tl=note_body_point(lane, span, -half_width, 43 / 354, v, travel),
+        tr=note_body_point(lane, span, half_width, 311 / 354, v, travel),
+        br=note_body_point(lane, span, half_width, 311 / 354, -v, travel),
     )
-    middle = Quad(bl=left.br, br=right.bl, tl=left.tr, tr=right.tl)
-    return left, middle, right
+
+
+def layout_note_body_slices_by_edges(l: float, r: float, travel: float) -> tuple[Quad, Quad, Quad]:
+    lane = (l + r) / 2
+    span = max(r - l, 0)
+    half_width = max(((span - 1) * 1.2178 + 2.06) / (2 * 1.19), 0)
+    cap = min(93 / (108 * 1.19), half_width)
+
+    def section(left: float, right: float, u_left: float, u_right: float, edge: int) -> Quad:
+        return untransform_note_body_sprite(
+            Quad(
+                bl=note_body_point(lane, span, left, u_left, -1, travel),
+                tl=note_body_point(lane, span, left, u_left, 1, travel),
+                tr=note_body_point(lane, span, right, u_right, 1, travel),
+                br=note_body_point(lane, span, right, u_right, -1, travel),
+            ),
+            edge,
+        )
+
+    return (
+        section(-half_width, -half_width + cap, 0, 93 / 354, -1),
+        section(-half_width + cap, half_width - cap, 93 / 354, 261 / 354, 0),
+        section(half_width - cap, half_width, 261 / 354, 1, 1),
+    )
 
 
 def layout_regular_note_body(lane: float, size: float, travel: float) -> tuple[Quad, Quad, Quad]:
     return layout_note_body_slices_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
-        h=DynamicLayout.note_h,
-        edge_w=NOTE_EDGE_W,
         travel=travel,
     )
 
@@ -2143,7 +2174,6 @@ def layout_regular_note_body_fallback(lane: float, size: float, travel: float) -
     return layout_note_body_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
-        h=DynamicLayout.note_h,
         travel=travel,
     )
 
@@ -2152,8 +2182,6 @@ def layout_slim_note_body(lane: float, size: float, travel: float) -> tuple[Quad
     return layout_note_body_slices_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
-        h=DynamicLayout.note_h,  # Height is handled by the sprite rather than being changed here
-        edge_w=NOTE_SLIM_EDGE_W,
         travel=travel,
     )
 
@@ -2162,8 +2190,8 @@ def layout_slim_note_body_fallback(lane: float, size: float, travel: float) -> Q
     return layout_note_body_by_edges(
         l=lane - size + Options.note_margin,
         r=lane + size - Options.note_margin,
-        h=DynamicLayout.note_h / 2,  # For fallback, we need to halve the height manually engine-side
         travel=travel,
+        slim=True,
     )
 
 

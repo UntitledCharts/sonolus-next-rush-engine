@@ -252,20 +252,6 @@ title.fr = "Effet d'Introduction de l'Interface"
 title.ru = "Эффект UI интро"
 title.ja = "UIイントロ演出"
 
-[options.note_perspective]
-title.en = "Note Perspective"
-title.vi = "Phối cảnh Note"
-title.ko = "노트 원근감"
-title.fr = "Perspective des Notes"
-title.ru = "Перспектива ноты"
-title.ja = "ノーツの遠近感"
-description.en = "Sets the perspective of the notes. As it approaches 0, the notes are drawn vertically."
-description.vi = "Thiết lập phối cảnh của Note. Càng gần 0, Note càng được vẽ theo chiều dọc."
-description.ko = "노트의 원근감을 설정합니다. 0에 가까울수록 노트를 수직으로 표시합니다."
-description.fr = "Règle la perspective des notes. Plus la valeur se rapproche de 0, plus les notes sont affichées verticalement."
-description.ru = "Ставит перспективу нот. Приближаясь к 0, ноты вырисовываются вертикально."
-description.ja = "ノーツの遠近感を設定します。0に近づくほど、ノーツは垂直に描画されます。"
-
 [options.prevent_empty_lane_sfx]
 title.en = "Prevent Empty Lane Effect Overwrite"
 title.vi = "Ngăn ghi đè hiệu ứng Lane trống"
