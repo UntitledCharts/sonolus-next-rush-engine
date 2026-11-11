@@ -104,7 +104,7 @@ _STYLE_SPRITE_INDEX = {name: index for index, name in enumerate(_STYLE_SPRITE_NA
 
 @skin
 class BaseSkin:
-    render_mode: RenderMode = RenderMode.LIGHTWEIGHT
+    render_mode: RenderMode = RenderMode.STANDARD
 
     cover: StandardSprite.STAGE_COVER
     background: Sprite = sprite("Sekai Black Background")
