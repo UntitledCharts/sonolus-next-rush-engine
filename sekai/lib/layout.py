@@ -2113,35 +2113,23 @@ def layout_fallback_judge_line() -> Quad:
     return perspective_rect(l=-6, r=6, t=1 - nh, b=1 + nh)
 
 
-def note_body_point(lane: float, span: float, x: float, u: float, v: float, travel: float) -> Vec2:
+def layout_note_body_quad(lane: float, span: float, half_width: float, u_inset: float, v: float, travel: float) -> Quad:
     width = tilt_width_factor(travel)
-    offset = (
-        (lane / (NOTE_REFERENCE_LANES / 2) + (span - 0.5) / NOTE_REFERENCE_LANES * (2 * u - 1))
-        * travel
-        * NOTE_PERSPECTIVE_SKEW
-        / NOTE_REFERENCE_LANE_WIDTH
-    )
     visible = 1.0 if span > 0 else 0.0
-    height = v * NOTE_BODY_HEIGHT / (2 * NOTE_REFERENCE_LANE_WIDTH) * width * DynamicLayout.w_scale * visible
-    return transform_vec(Vec2((lane + (x - v * offset * current_stage_tilt()) * visible) * width, travel)) + Vec2(
-        height * DynamicLayout.rotate_sin, height * DynamicLayout.rotate_cos
+    scale = width * DynamicLayout.w_scale * visible
+    right = Vec2(scale * DynamicLayout.rotate_cos, -scale * DynamicLayout.rotate_sin)
+    up = Vec2(scale * DynamicLayout.rotate_sin, scale * DynamicLayout.rotate_cos) * (
+        NOTE_BODY_HEIGHT / (2 * NOTE_REFERENCE_LANE_WIDTH)
     )
-
-
-def untransform_note_body_sprite(q: Quad, edge: int = 0) -> Quad:
-    result = Quad(
-        bl=lerp(q.bl, q.tl, NOTE_VERTICAL_INSET),
-        tl=lerp(q.tl, q.bl, NOTE_VERTICAL_INSET),
-        tr=lerp(q.tr, q.br, NOTE_VERTICAL_INSET),
-        br=lerp(q.br, q.tr, NOTE_VERTICAL_INSET),
-    )
-    if edge < 0:
-        result.bl @= lerp(result.br, result.bl, NOTE_CAP_INVERSE_SCALE)
-        result.tl @= lerp(result.tr, result.tl, NOTE_CAP_INVERSE_SCALE)
-    elif edge > 0:
-        result.br @= lerp(result.bl, result.br, NOTE_CAP_INVERSE_SCALE)
-        result.tr @= lerp(result.tl, result.tr, NOTE_CAP_INVERSE_SCALE)
-    return result
+    skew = travel * (NOTE_PERSPECTIVE_SKEW / NOTE_REFERENCE_LANE_WIDTH) * current_stage_tilt()
+    center_up = up - right * (lane / (NOTE_REFERENCE_LANES / 2) * skew)
+    edge_up = right * ((span - 0.5) / NOTE_REFERENCE_LANES * skew * (1 - 2 * u_inset))
+    left_up = (center_up + edge_up) * v
+    right_up = (center_up - edge_up) * v
+    center = transform_vec(Vec2(lane * width, travel))
+    left = center - right * half_width
+    right_center = center + right * half_width
+    return Quad(bl=left - left_up, tl=left + left_up, tr=right_center + right_up, br=right_center - right_up)
 
 
 def layout_note_body_by_edges(l: float, r: float, travel: float, slim: bool = False) -> Quad:
@@ -2153,16 +2141,7 @@ def layout_note_body_by_edges(l: float, r: float, travel: float, slim: bool = Fa
         0,
     )
     v = (NOTE_TEXTURE_SLIM_HEIGHT if slim else NOTE_TEXTURE_REGULAR_HEIGHT) / NOTE_TEXTURE_HEIGHT
-    return Quad(
-        bl=note_body_point(lane, span, -half_width, NOTE_TEXTURE_PADDING / NOTE_TEXTURE_WIDTH, -v, travel),
-        tl=note_body_point(lane, span, -half_width, NOTE_TEXTURE_PADDING / NOTE_TEXTURE_WIDTH, v, travel),
-        tr=note_body_point(
-            lane, span, half_width, (NOTE_TEXTURE_WIDTH - NOTE_TEXTURE_PADDING) / NOTE_TEXTURE_WIDTH, v, travel
-        ),
-        br=note_body_point(
-            lane, span, half_width, (NOTE_TEXTURE_WIDTH - NOTE_TEXTURE_PADDING) / NOTE_TEXTURE_WIDTH, -v, travel
-        ),
-    )
+    return layout_note_body_quad(lane, span, half_width, NOTE_TEXTURE_PADDING / NOTE_TEXTURE_WIDTH, v, travel)
 
 
 def layout_note_body_slices_by_edges(l: float, r: float, travel: float) -> tuple[Quad, Quad, Quad]:
@@ -2170,30 +2149,26 @@ def layout_note_body_slices_by_edges(l: float, r: float, travel: float) -> tuple
     span = max(r - l, 0)
     half_width = max(((span - 1) * NOTE_SPAN_WIDTH + NOTE_BASE_WIDTH) / (2 * NOTE_REFERENCE_LANE_WIDTH), 0)
     cap = min(NOTE_TEXTURE_CAP_WIDTH / (NOTE_REFERENCE_PIXELS_PER_UNIT * NOTE_REFERENCE_LANE_WIDTH), half_width)
-
-    full = Quad(
-        bl=note_body_point(lane, span, -half_width, 0, -1, travel),
-        tl=note_body_point(lane, span, -half_width, 0, 1, travel),
-        tr=note_body_point(lane, span, half_width, 1, 1, travel),
-        br=note_body_point(lane, span, half_width, 1, -1, travel),
-    )
+    full = layout_note_body_quad(lane, span, half_width, 0, 1 - 2 * NOTE_VERTICAL_INSET, travel)
     cap_fraction = cap / max(2 * half_width, 1e-9)
-
-    def section(start: float, end: float, edge: int) -> Quad:
-        return untransform_note_body_sprite(
-            Quad(
-                bl=lerp(full.bl, full.br, start),
-                tl=lerp(full.tl, full.tr, start),
-                tr=lerp(full.tl, full.tr, end),
-                br=lerp(full.bl, full.br, end),
-            ),
-            edge,
-        )
-
+    inner_lb = lerp(full.bl, full.br, cap_fraction)
+    inner_lt = lerp(full.tl, full.tr, cap_fraction)
+    inner_rb = lerp(full.br, full.bl, cap_fraction)
+    inner_rt = lerp(full.tr, full.tl, cap_fraction)
     return (
-        section(0, cap_fraction, -1),
-        section(cap_fraction, 1 - cap_fraction, 0),
-        section(1 - cap_fraction, 1, 1),
+        Quad(
+            bl=lerp(inner_lb, full.bl, NOTE_CAP_INVERSE_SCALE),
+            tl=lerp(inner_lt, full.tl, NOTE_CAP_INVERSE_SCALE),
+            tr=inner_lt,
+            br=inner_lb,
+        ),
+        Quad(bl=inner_lb, tl=inner_lt, tr=inner_rt, br=inner_rb),
+        Quad(
+            bl=inner_rb,
+            tl=inner_rt,
+            tr=lerp(inner_rt, full.tr, NOTE_CAP_INVERSE_SCALE),
+            br=lerp(inner_rb, full.br, NOTE_CAP_INVERSE_SCALE),
+        ),
     )
 
 
