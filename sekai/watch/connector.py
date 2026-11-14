@@ -638,6 +638,8 @@ class WatchSlideManager(WatchArchetype):
                     transform=head_transform,
                     note_alpha=segment_note_alpha,
                     style=self.active_head.style,
+                    held=True,
+                    order_lane=self.active_head.lane - self.active_head.size,
                 )
             case _:
                 pass

@@ -51,12 +51,13 @@ from sekai.lib.layer import (
     LAYER_NOTE_ARROW_CRITICAL,
     Layer,
     ZIndexes,
-    get_z,
+    get_note_z,
     get_z_alt,
     layers,
 )
 from sekai.lib.layout import (
     IDENTITY_STAGE_SCREEN_TRANSFORM,
+    NOTE_REFERENCE_LANES,
     FlickDirection,
     Hitbox,
     NoteStageParams,
@@ -427,13 +428,18 @@ def draw_note(
     style: NoteStyle = NoteStyle.DEFAULT,
     *,
     sprite_set: NoteSpriteSet | None = None,
+    order_lane: float | None = None,
 ):
     travel = approach(visual_progress)
     if sprite_set is None:
         sprite_set = get_note_sprite_set(kind, direction, style)
-    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha)
-    draw_note_arrow(sprite_set.arrow, kind, lane, size, travel, target_time, direction, transform, note_alpha)
-    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, note_alpha)
+    if order_lane is None:
+        order_lane = lane - size
+    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha, order_lane=order_lane)
+    draw_note_arrow(
+        sprite_set.arrow, kind, lane, size, travel, target_time, direction, transform, note_alpha, order_lane=order_lane
+    )
+    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, note_alpha, order_lane=order_lane)
 
 
 def draw_slide_note_head(
@@ -447,6 +453,8 @@ def draw_slide_note_head(
     transform: StageScreenTransform,
     note_alpha: float,
     style: NoteStyle = NoteStyle.DEFAULT,
+    held: bool = False,
+    order_lane: float | None = None,
 ):
     if hidden_amount() > 0:
         return
@@ -468,8 +476,32 @@ def draw_slide_note_head(
     travel = approach(visual_progress)
     sprite_set = get_note_sprite_set(kind, FlickDirection.UP_OMNI, style)
     etc = get_active_connector_z_offset(connector_kind, False)
-    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha, etc=etc)
-    draw_note_tick(sprite_set.tick, lane, travel, target_time, transform, note_alpha, etc=etc)
+    if order_lane is None:
+        order_lane = lane - size
+    draw_note_body(
+        sprite_set.body,
+        kind,
+        lane,
+        size,
+        travel,
+        target_time,
+        transform,
+        note_alpha,
+        etc=etc,
+        held=held,
+        order_lane=order_lane,
+    )
+    draw_note_tick(
+        sprite_set.tick,
+        lane,
+        travel,
+        target_time,
+        transform,
+        note_alpha,
+        etc=etc,
+        held=held,
+        order_lane=order_lane,
+    )
 
 
 def note_kind_as_normal(kind: NoteKind) -> NoteKind:
@@ -649,9 +681,20 @@ def draw_note_body(
     transform: StageScreenTransform,
     note_alpha: float,
     etc: int = 0,
+    *,
+    held: bool = False,
+    order_lane: float | None = None,
 ):
     a = min(get_alpha(target_time) * note_alpha, 1.0)
-    z = get_z(get_note_body_layer(kind), time=target_time, lane=lane, etc=etc, elevation=transform.elevation)
+    lane_start = (lane - size if order_lane is None else order_lane) + NOTE_REFERENCE_LANES / 2
+    z = get_note_z(
+        get_note_body_layer(kind),
+        target_time,
+        lane_start,
+        etc,
+        elevation=transform.elevation,
+        held=held,
+    )
 
     def place(q):
         return transform.transform_quad(q)
@@ -683,11 +726,23 @@ def draw_note_tick(
     transform: StageScreenTransform,
     note_alpha: float,
     etc: int = 0,
+    *,
+    held: bool = False,
+    order_lane: float | None = None,
 ):
     if sprite.id < 0:
         return
     a = min(get_alpha(target_time) * note_alpha, 1.0)
-    z = get_z(layers.note_tick, time=target_time, lane=lane, etc=etc, elevation=transform.elevation)
+    lane_start = (lane if order_lane is None else order_lane) + NOTE_REFERENCE_LANES / 2
+    z = get_note_z(
+        layers.note_tick,
+        target_time,
+        lane_start,
+        etc,
+        elevation=transform.elevation,
+        held=held,
+        icon=True,
+    )
     layout = transform.transform_billboard(layout_tick(lane, travel), transformed_vec_at(lane, travel))
     sprite.draw(layout, z=z.tuple, a=a)
 
@@ -702,6 +757,8 @@ def draw_note_arrow(
     direction: FlickDirection,
     transform: StageScreenTransform,
     note_alpha: float,
+    *,
+    order_lane: float | None = None,
 ):
     arrow_sprite = sprites.get_sprite(size, direction)
     if not arrow_sprite.is_available:
@@ -718,10 +775,11 @@ def draw_note_arrow(
             assert_never(direction)
     animation_alpha = (1 - ease_in_cubic(animation_progress)) if Options.marker_animation else 1
     a = min(get_alpha(target_time) * animation_alpha * note_alpha, 1.0)
-    z = get_z(
+    lane_start = (lane - size if order_lane is None else order_lane) + NOTE_REFERENCE_LANES / 2
+    z = get_note_z(
         get_flick_layer(kind),
-        time=target_time,
-        lane=lane,
+        target_time,
+        lane_start,
         etc=direction + 6 * (not is_critical(kind)),
         elevation=transform.elevation,
     )

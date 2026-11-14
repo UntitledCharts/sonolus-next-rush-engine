@@ -450,6 +450,7 @@ class WatchBaseNote(WatchArchetype):
                 transform=self.visual_stage_transform().to_screen_transform(),
                 note_alpha=note_alpha,
                 sprite_set=self.sprite_set,
+                order_lane=self.lane - self.size,
             )
         else:
             draw_note(
@@ -462,6 +463,7 @@ class WatchBaseNote(WatchArchetype):
                 transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
                 note_alpha=note_alpha,
                 sprite_set=self.sprite_set,
+                order_lane=self.lane - self.size,
             )
 
     def draw_hitbox(self):

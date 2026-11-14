@@ -45,6 +45,11 @@ LAYER_SKILL_ETC = 23.6
 LAYER_JUDGMENT = 23.8
 LAYER_OVERLAY = 24
 
+NOTE_TIME_DEPTH_SCALE = 0.001
+NOTE_LANE_DEPTH_SCALE = 0.0000001
+NOTE_ICON_DEPTH = -0.0001
+HELD_NOTE_DEPTH = 3.0
+
 
 class Layer(Record):
     layer: float
@@ -80,7 +85,7 @@ class _Layers(Record):
     def slot_effect(self) -> Layer:
         if runtime.is_preview():
             return Layer(5, 0)
-        return Layer(16, -7)
+        return Layer(16, -0.5)
 
     @property
     def beat_line(self) -> Layer:
@@ -142,11 +147,15 @@ class _Layers(Record):
 
     @property
     def note_body(self) -> Layer:
-        return Layer(16, 1)
+        if runtime.is_preview():
+            return Layer(16, 1)
+        return Layer(16, 0)
 
     @property
     def note_tick(self) -> Layer:
-        return Layer(16, 2)
+        if runtime.is_preview():
+            return Layer(16, 2)
+        return Layer(16, 0)
 
     @property
     def note_arrow(self) -> Layer:
@@ -211,6 +220,25 @@ def get_z_alt(layer: Layer | float, order: float = 0, *, elevation: float = 0.0)
     )
 
 
+def get_note_z(
+    layer: Layer | float,
+    target_time: float,
+    lane_start: float,
+    etc: int = 0,
+    *,
+    elevation: float = 0.0,
+    held: bool = False,
+    icon: bool = False,
+) -> ZIndexes:
+    layer = resolve_layer(layer)
+    depth = target_time * NOTE_TIME_DEPTH_SCALE + lane_start * NOTE_LANE_DEPTH_SCALE
+    if held:
+        depth = HELD_NOTE_DEPTH - depth
+    if icon:
+        depth += NOTE_ICON_DEPTH
+    return ZIndexes(layer.layer, elevation + layer.sublayer * 0.01, -depth, etc * 1e-6)
+
+
 def resolve_layer(layer: Layer | float) -> Layer:
     if isinstance(layer, Layer):
         return layer
@@ -264,7 +292,10 @@ def resolve_layer(layer: Layer | float) -> Layer:
     elif layer == LAYER_OVERLAY:
         result @= layers.overlay
     elif layer == LAYER_NOTE_ARROW_CRITICAL:
-        result @= Layer(16, 4.5)
+        if runtime.is_preview():
+            result @= Layer(16, 4.5)
+        else:
+            result @= layers.note_arrow
     elif layer == LAYER_COVER_LINE:
         result @= Layer(16, -7.8)
     elif layer == LAYER_STAGE_LANE:

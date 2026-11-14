@@ -144,9 +144,45 @@ class ElevationCompatibilityTests(unittest.TestCase):
             normal = layer.get_z(layer.LAYER_NOTE_ARROW)
             critical = layer.get_z(layer.LAYER_NOTE_ARROW_CRITICAL)
             raised = layer.get_z(layer.layers.note_body, elevation=1)
-            assert normal.tuple < critical.tuple
+            assert normal.tuple == critical.tuple
+            assert critical.tuple < layer.get_z(layer.layers.slot_glow_effect).tuple
             assert critical.tuple < raised.tuple
             assert layer.get_z(layer.LAYER_COVER).tuple < layer.get_z(layer.layers.note_body).tuple
+
+    def test_note_overlap_uses_time_start_lane_and_held_depth(self):
+        with patch.object(layer.runtime, "is_preview", return_value=False):
+            early_trace = layer.get_note_z(layer.layers.note_slim_body, 9, 6)
+            later_tap = layer.get_note_z(layer.layers.note_body, 10, 5)
+            left_tap = layer.get_note_z(layer.layers.note_body, 10, 4)
+            held_head = layer.get_note_z(layer.layers.note_body, 1, 4, held=True)
+            later_held_head = layer.get_note_z(layer.layers.note_body, 2, 4, held=True)
+            assert later_tap.tuple < early_trace.tuple
+            assert later_tap.tuple < left_tap.tuple
+            assert held_head.tuple < later_held_head.tuple < later_tap.tuple
+            center = layer.get_note_z(layer.layers.note_tick, 10, 5, icon=True)
+            nearby_tap = layer.get_note_z(layer.layers.note_body, 9.95, 5)
+            earlier_tap = layer.get_note_z(layer.layers.note_body, 9.85, 5)
+            assert nearby_tap.tuple < center.tuple < earlier_tap.tuple
+
+    def test_slot_order_preserves_connector_options_and_preview(self):
+        with (
+            patch.object(layer.runtime, "is_preview", return_value=False),
+            patch.object(layer.runtime, "time", return_value=0),
+        ):
+            guide = layer.get_z(layer.layers.guide_connector_bottom)
+            connector = layer.get_z(layer.layers.active_slide_connector_top)
+            slot = layer.get_z(layer.layers.slot_effect)
+            note = layer.get_note_z(layer.layers.note_body, 0, 0)
+            assert guide.tuple < connector.tuple < slot.tuple < note.tuple
+            assert (
+                layer.get_z(layer.layers.slot_glow_effect).tuple
+                < layer.get_z(layer.layers.active_slide_connector_over).tuple
+            )
+        with (
+            patch.object(layer.runtime, "is_preview", return_value=True),
+            patch.object(layer.runtime, "time", return_value=0),
+        ):
+            assert layer.get_z(layer.LAYER_NOTE_ARROW).tuple < layer.get_z(layer.LAYER_NOTE_ARROW_CRITICAL).tuple
 
 
 if __name__ == "__main__":
