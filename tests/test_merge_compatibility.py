@@ -2,6 +2,7 @@
 
 import unittest
 from math import isclose
+from struct import pack, unpack
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -163,6 +164,34 @@ class ElevationCompatibilityTests(unittest.TestCase):
             nearby_tap = layer.get_note_z(layer.layers.note_body, 9.95, 5)
             earlier_tap = layer.get_note_z(layer.layers.note_body, 9.85, 5)
             assert nearby_tap.tuple < center.tuple < earlier_tap.tuple
+
+    def test_note_lane_order_survives_float32_rounding(self):
+        def float32_key(z):
+            return tuple(unpack("<f", pack("<f", value))[0] for value in z.tuple)
+
+        with patch.object(layer.runtime, "is_preview", return_value=False):
+            for target_time in (0, 180, 600, 1000, 2000, 3600):
+                for held in (False, True):
+                    for icon in (False, True):
+                        with self.subTest(time=target_time, held=held, icon=icon):
+                            keys = [
+                                float32_key(
+                                    layer.get_note_z(
+                                        layer.layers.note_body, target_time, lane / 2, held=held, icon=icon
+                                    )
+                                )
+                                for lane in range(25)
+                            ]
+                            assert len(set(keys)) == len(keys)
+                            assert keys == sorted(keys, reverse=not held)
+                            ties = [
+                                float32_key(
+                                    layer.get_note_z(layer.layers.note_body, target_time, 12, etc, held=held, icon=icon)
+                                )
+                                for etc in range(12)
+                            ]
+                            assert len(set(ties)) == len(ties)
+                            assert ties == sorted(ties)
 
     def test_slot_order_preserves_connector_options_and_preview(self):
         with (

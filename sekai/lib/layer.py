@@ -46,7 +46,6 @@ LAYER_JUDGMENT = 23.8
 LAYER_OVERLAY = 24
 
 NOTE_TIME_DEPTH_SCALE = 0.001
-NOTE_LANE_DEPTH_SCALE = 0.0000001
 NOTE_ICON_DEPTH = -0.0001
 HELD_NOTE_DEPTH = 3.0
 
@@ -231,12 +230,14 @@ def get_note_z(
     icon: bool = False,
 ) -> ZIndexes:
     layer = resolve_layer(layer)
-    depth = target_time * NOTE_TIME_DEPTH_SCALE + lane_start * NOTE_LANE_DEPTH_SCALE
+    depth = target_time * NOTE_TIME_DEPTH_SCALE
+    lane_order = -lane_start
     if held:
         depth = HELD_NOTE_DEPTH - depth
+        lane_order = lane_start
     if icon:
         depth += NOTE_ICON_DEPTH
-    return ZIndexes(layer.layer, elevation + layer.sublayer * 0.01, -depth, etc * 1e-6)
+    return ZIndexes(layer.layer, elevation + layer.sublayer * 0.01, -depth, lane_order + etc * 1e-6)
 
 
 def resolve_layer(layer: Layer | float) -> Layer:
