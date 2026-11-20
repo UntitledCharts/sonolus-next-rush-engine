@@ -83,10 +83,39 @@ def next_slot_generation(sprite: Sprite, group_id: float, count: int = 1, pool_i
 
 def is_slot_generation_visible(sprite: Sprite, generation: float, pool_id: int = -1) -> bool:
     entry = SlotEffectHandler.slots[_slot_pool_index(sprite, pool_id)]
+    return entry.epoch == SlotEffectHandler.epoch + 1 and entry.generation - generation < _slot_generation_limit(
+        pool_id
+    )
+
+
+def _slot_generation_limit(pool_id: int) -> float:
     limit = SLOT_EFFECT_LIMIT
     if pool_id >= 0:
         limit = max(limit, SlotEffectHandler.aura_limits[pool_id % 13])
-    return entry.epoch == SlotEffectHandler.epoch + 1 and entry.generation - generation < limit
+    return limit
+
+
+def _first_visible_slot(sprite: Sprite, generation: float, left: int, first: int, last: int, pool_id: int) -> int:
+    if first >= last:
+        return last
+    entry = SlotEffectHandler.slots[_slot_pool_index(sprite, pool_id)]
+    if entry.epoch != SlotEffectHandler.epoch + 1:
+        return last
+    current = entry.generation
+    limit = _slot_generation_limit(pool_id)
+    if current - (generation + first - left) < limit:
+        return first
+    if not current - (generation + (last - 1) - left) < limit:
+        return last
+    first += 1
+    last -= 1
+    while first < last:
+        middle = first + (last - first) // 2
+        if current - (generation + middle - left) < limit:
+            last = middle
+        else:
+            first = middle + 1
+    return first
 
 
 def slot_glow_progress_height(progress: float) -> float:
@@ -157,9 +186,9 @@ def draw_slot_effects_in_range(
     hi = max(hi_b, hi_t)
     first = max(left, floor(lo - shift) - 1)
     last = min(right, ceil(hi - shift) + 1)
+    if generation is not None:
+        first = _first_visible_slot(sprite, generation, left, first, last, pool_id)
     for i in range(first, last):
-        if generation is not None and not is_slot_generation_visible(sprite, generation + i - left, pool_id):
-            continue
         lane = i + 0.5 + shift
         left_edge = lane - 0.485 * scale
         right_edge = lane + 0.485 * scale
@@ -201,9 +230,9 @@ def draw_slot_glow_effects_in_range(
     hi = max(hi, hi / s)
     first = max(left, floor(lo - shift) - 1)
     last = min(right, ceil(hi - shift) + 1)
+    if generation is not None:
+        first = _first_visible_slot(sprite, generation, left, first, last, pool_id)
     for i in range(first, last):
-        if generation is not None and not is_slot_generation_visible(sprite, generation + i - left, pool_id):
-            continue
         lane = i + 0.5 + shift
         left_edge = lane - 0.5
         right_edge = lane + 0.5
