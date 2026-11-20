@@ -111,7 +111,6 @@ class Connector(PlayArchetype):
     render_info: ConnectorRenderInfo = entity_data()
 
     last_visual_state: ConnectorVisualState = entity_memory()
-    damage_input_gap: bool = entity_memory()
     # Temporary linked-list pointers used only during preprocess to sort connectors by their
     # activation / deactivation times for the auto-SFX sweep (see schedule_auto_connector_sfx_events).
     # entity_data (not entity_memory) so they can be written cross-entity during the global auto-SFX sweep.
@@ -257,12 +256,10 @@ class Connector(PlayArchetype):
             for touch in input_manager.processed_touches()
         )
         if touching:
-            if not info.is_active:
+            if not info.is_damage_active(current_time):
                 info.active_start_time = current_time
-            info.is_active = True
-        elif self.damage_input_gap:
-            info.is_active = False
-        self.damage_input_gap = not touching
+            info.last_damage_input_time = current_time
+        info.is_active = info.is_damage_active(current_time)
 
     def update_parallel(self):
         if time() < self.start_time and self.active_head_ref.index <= 0:
@@ -282,9 +279,11 @@ class Connector(PlayArchetype):
             if self.active_head_ref.index > 0:
                 active_head = self.active_head
                 info = self.active_connector_info
-                if info.is_active:
+                damage = self.render_info.base_kind == ConnectorKind.DAMAGE
+                active = info.is_damage_active(current_time) if damage else info.is_active
+                if active:
                     visual_state = ConnectorVisualState.ACTIVE
-                elif self.render_info.base_kind != ConnectorKind.DAMAGE and (
+                elif not damage and (
                     info.head_judgment_frame != 0 or (not active_head.is_scored and adj_time >= active_head.target_time)
                 ):
                     visual_state = ConnectorVisualState.INACTIVE
@@ -614,6 +613,8 @@ class SlideManager(PlayArchetype):
         if get_connector_base_kind(input_kind) == ConnectorKind.DAMAGE:
             if has_input_bounds and not tail_finished:
                 self.accept_hold_input(input_kind, info.input_bounds, frame)
+            if not has_input_bounds:
+                info.is_active = info.is_damage_active(time())
             if not Options.auto_sfx:
                 self.deactivate_sfx_if_needed(t)
             return

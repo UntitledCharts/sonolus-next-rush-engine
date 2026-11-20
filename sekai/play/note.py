@@ -285,6 +285,7 @@ class BaseNote(PlayArchetype):
         self.result.bucket = get_note_bucket(self.kind)
 
         self.best_touch_time = DEFAULT_BEST_TOUCH_TIME
+        self.active_connector_info.last_damage_input_time = DEFAULT_BEST_TOUCH_TIME
         self.best_touch_id = -1
         self.touch_survived_to_target = False
 

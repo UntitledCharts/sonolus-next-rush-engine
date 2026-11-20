@@ -20,6 +20,7 @@ from sonolus.script.timing import beat_to_time
 from sonolus.script.values import alloc
 from sonolus.script.vec import Vec2
 
+from sekai.lib.buckets import SLIDE_TICK_JUDGMENT_WINDOW
 from sekai.lib.ease import (
     EaseType,
     ease,
@@ -2587,6 +2588,10 @@ class ActiveConnectorInfo(Record):
     head_judgment_frame: int
     input_frame: int
     input_kind: ConnectorKind
+    last_damage_input_time: float
+
+    def is_damage_active(self, current_time: float) -> bool:
+        return self.last_damage_input_time >= current_time + SLIDE_TICK_JUDGMENT_WINDOW.perfect.start
 
 
 def inactive_connector_sfx_times() -> ConnectorSfxTimes:
