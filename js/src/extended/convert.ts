@@ -382,6 +382,8 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
     const timescaleGroupsByName = new Map<string, EntityBuilder>()
     const timescaleChangesByIndex = new Map<number, TimescaleChangeInfo[]>()
     const timescaleChangesByName = new Map<string, TimescaleChangeInfo[]>()
+    const unorderedChangeBeats = new Set<TimescaleChangeInfo[]>()
+    const ascendingScaledTimes = new Set<TimescaleChangeInfo[]>()
 
     for (const { idx, e } of ext.getByArch('TimeScaleGroup')) {
         const group = new EntityBuilder('#TIMESCALE_GROUP')
@@ -427,14 +429,21 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         }
         finalEntities.push(...changes)
         changeInfos.sort((a, b) => a.beat - b.beat)
+        let ascending = true
         for (let i = 0; i < changeInfos.length; i++) {
-            changeInfos[i].time = beatToTime(changeInfos[i].beat)
-            changeInfos[i].scaledTime =
+            const change = changeInfos[i]
+            if (Number.isNaN(change.beat)) unorderedChangeBeats.add(changeInfos)
+            change.time = beatToTime(change.beat)
+            change.scaledTime =
                 i === 0
-                    ? changeInfos[i].time
+                    ? change.time
                     : changeInfos[i - 1].scaledTime +
-                      (changeInfos[i].time - changeInfos[i - 1].time) * changeInfos[i - 1].timeScale
+                      (change.time - changeInfos[i - 1].time) * changeInfos[i - 1].timeScale
+            ascending &&=
+                Number.isFinite(change.scaledTime) &&
+                (i === 0 || changeInfos[i - 1].scaledTime <= change.scaledTime)
         }
+        if (ascending) ascendingScaledTimes.add(changeInfos)
         timescaleChangesByIndex.set(idx, changeInfos)
         if (e.name) timescaleChangesByName.set(e.name, changeInfos)
     }
@@ -469,7 +478,19 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         if (changes.length === 0) return scaledTime
         if (scaledTime < changes[0].time) return scaledTime
 
-        for (let i = 0; i < changes.length; i++) {
+        let first = 0
+        if (ascendingScaledTimes.has(changes) && !Number.isNaN(scaledTime)) {
+            let lo = 1
+            let hi = changes.length
+            while (lo < hi) {
+                const mid = (lo + hi) >> 1
+                if (changes[mid].scaledTime < scaledTime) lo = mid + 1
+                else hi = mid
+            }
+            first = lo - 1
+        }
+
+        for (let i = first; i < changes.length; i++) {
             const start = changes[i]
 
             if (i === changes.length - 1) {
@@ -598,12 +619,23 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
         const tailTsgRef = getField(tailOriginal, 'timeScaleGroup')
         const headChanges = getTSGChanges(headTsgRef)
         const tailChanges = getTSGChanges(tailTsgRef)
-        const splitBeats = headChanges
-            .filter((change) => {
-                if (!(headBeat + 1e-6 < change.beat && change.beat < tailBeat - 1e-6)) return false
-                return !nearlyEqual(change.timeScale, getTimeScaleAt(headChanges, change.beat))
-            })
-            .map(({ beat }) => beat)
+        const minBeat = headBeat + 1e-6
+        const maxBeat = tailBeat - 1e-6
+        if (!(minBeat < maxBeat)) return []
+        const ordered = !unorderedChangeBeats.has(headChanges)
+        const first = ordered ? lastIndexLeq(headChanges, minBeat, (change) => change.beat) + 1 : 0
+        const splitBeats: number[] = []
+        for (let i = first; i < headChanges.length; i++) {
+            const change = headChanges[i]
+            if (ordered && change.beat >= maxBeat) break
+            if (
+                minBeat < change.beat &&
+                change.beat < maxBeat &&
+                !nearlyEqual(change.timeScale, getTimeScaleAt(headChanges, change.beat))
+            ) {
+                splitBeats.push(change.beat)
+            }
+        }
 
         if (splitBeats.length === 0) return []
 
@@ -622,7 +654,7 @@ export const extendedToLevelData = (data: LevelData, offset = 0): LevelData | un
             }
         }
 
-        const uniqueSplitBeats = [...splitBeats]
+        const uniqueSplitBeats = splitBeats
             .sort((a, b) => a - b)
             .filter((beat, i, beats) => i === 0 || !nearlyEqual(beat, beats[i - 1]))
 
