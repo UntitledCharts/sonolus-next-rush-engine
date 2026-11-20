@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from math import floor
+from math import floor, inf
 from typing import Any, Protocol, Self, cast
 
 from sonolus.script.archetype import EntityRef, entity_info_at, get_archetype_by_name
@@ -90,11 +90,19 @@ def sort_entities_by_time(
     def get_next(h: SortableEntity) -> EntityRef[Any]:
         return h.next_ref
 
-    return sort_linked_entities(
-        head.ref(),
-        get_value=get_time,
-        get_next_ref=get_next if get_next_ref is None else get_next_ref,
-    )
+    next_ref = get_next if get_next_ref is None else get_next_ref
+    result = head.ref()
+    current = +result
+    previous_time = -inf
+    while current.index > 0:
+        entity = entity_cls.at(current.index)
+        current_time = get_time(entity)
+        if not previous_time <= current_time:
+            result @= sort_linked_entities(result, get_value=get_time, get_next_ref=next_ref)
+            break
+        previous_time = current_time
+        current @= next_ref(entity)
+    return result
 
 
 def prepare_guide_heads(entity_count: int, note_type: Any):
