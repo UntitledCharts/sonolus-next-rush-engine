@@ -3,8 +3,10 @@ from __future__ import annotations
 import itertools
 import math
 import struct
+from bisect import bisect_left
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from operator import attrgetter
 from typing import cast
 
 from sonolus.build.collection import Asset
@@ -65,6 +67,7 @@ _INPUT_TRACKED_SEGMENT_KINDS = _ACTIVE_HOLD_SEGMENT_KINDS | {ConnectorKind.DAMAG
 
 _DAMAGE_TICK_STEP = 0.5
 _BEAT_EPSILON = 1e-6
+_note_beat = attrgetter("beat")
 
 
 def _build_silent_wav(duration_seconds: float = 60.0, sample_rate: int = 8000) -> bytes:
@@ -330,7 +333,7 @@ def build_level(
     first_camera = _build_camera_changes(level_camera_changes, out_entities)
 
     note_entities: list[BaseNote] = []
-    slide_non_attached: dict[int, list[BaseNote]] = {}
+    slide_non_attached: dict[int, tuple[list[BaseNote], bool]] = {}
 
     def emit_note(level_note: LevelNote, force_separator: bool = False) -> BaseNote:
         ts_group = resolve_ts_group(level_note.timescale_group)
@@ -380,20 +383,25 @@ def build_level(
             else:
                 pending_attachments.append((note, ln.attach))
 
+        ordered = not non_attached or not math.isnan(non_attached[0].beat)
         for prev_note, next_note in itertools.pairwise(non_attached):
             prev_note.next_ref = next_note.ref()
-        slide_non_attached[id(slide)] = non_attached
+            ordered = ordered and prev_note.beat <= next_note.beat
+        slide_non_attached[id(slide)] = non_attached, ordered
 
-        separator_indices = sorted(i for i, ln in enumerate(slide.notes) if i in (0, last_index) or ln.is_separator)
+        separator_indices = [i for i, ln in enumerate(slide.notes) if i in (0, last_index) or ln.is_separator]
         separator_index_set = set(separator_indices)
         section_by_span_head = _input_section_bounds(slide.notes, separator_indices)
         boundary_indices = [i for i, ln in enumerate(slide.notes) if i in separator_index_set or ln.attach is None]
+        span_index = 0
         for a, b in itertools.pairwise(boundary_indices):
             seg_kind = slide.notes[a].segment_kind
             if seg_kind == ConnectorKind.NONE:
                 continue
-            seg_head_idx = a if a in separator_index_set else max(s for s in separator_indices if s < a)
-            seg_tail_idx = b if b in separator_index_set else min(s for s in separator_indices if s > b)
+            while separator_indices[span_index + 1] <= a:
+                span_index += 1
+            seg_head_idx = separator_indices[span_index]
+            seg_tail_idx = separator_indices[span_index + 1]
             seg_head = built[seg_head_idx]
             seg_tail = built[seg_tail_idx]
             connector = Connector(
@@ -419,14 +427,8 @@ def build_level(
         _emit_damage_ticks(slide, built, non_attached, separator_indices, emit_note)
 
     for note, slide in pending_attachments:
-        candidates = slide_non_attached[id(slide)]
-        attach_head: BaseNote | None = None
-        attach_tail: BaseNote | None = None
-        for cand in candidates:
-            if cand.beat <= note.beat and (attach_head is None or cand.beat > attach_head.beat):
-                attach_head = cand
-            if cand.beat >= note.beat and (attach_tail is None or cand.beat < attach_tail.beat):
-                attach_tail = cand
+        candidates, ordered = slide_non_attached[id(slide)]
+        attach_head, attach_tail = _find_attachment_neighbors(candidates, note.beat, ordered)
         if attach_head is None or attach_tail is None:
             raise ValueError(f"Attached note at beat {note.beat} is outside the non-attached span of its slide")
         note.attach_head_ref = attach_head.ref()
@@ -561,6 +563,28 @@ def _emit_damage_ticks(
             emit_tick(beat, head_ln, section_head_idx)
         if not next_is_damage and tail_beat > last_step * _DAMAGE_TICK_STEP + _BEAT_EPSILON:
             emit_tick(tail_beat, head_ln, section_head_idx)
+
+
+def _find_attachment_neighbors(
+    candidates: list[BaseNote], beat: float, ordered: bool
+) -> tuple[BaseNote | None, BaseNote | None]:
+    if ordered and not math.isnan(beat):
+        right = bisect_left(candidates, beat, key=_note_beat)
+        tail = candidates[right] if right < len(candidates) else None
+        if tail is not None and tail.beat == beat:
+            return tail, tail
+        if right == 0:
+            return None, tail
+        left = bisect_left(candidates, candidates[right - 1].beat, hi=right, key=_note_beat)
+        return candidates[left], tail
+
+    head = tail = None
+    for candidate in candidates:
+        if candidate.beat <= beat and (head is None or candidate.beat > head.beat):
+            head = candidate
+        if candidate.beat >= beat and (tail is None or candidate.beat < tail.beat):
+            tail = candidate
+    return head, tail
 
 
 def _bracketing_non_attached(non_attached: list[BaseNote], beat: float) -> tuple[BaseNote, BaseNote]:
