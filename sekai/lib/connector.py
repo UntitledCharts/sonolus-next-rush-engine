@@ -75,7 +75,6 @@ CONNECTOR_SLOT_SPAWN_PERIOD = 0.2
 CONNECTOR_TEXTURE_ALPHA = 0.8
 CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY = 5.0
 CONNECTOR_LENIENCY = 1
-CONNECTOR_PARTICLE_ACTIVE_DELAY = 0.05
 CONNECTOR_ZERO_SIZE_FALLBACK = 1e-3
 CONNECTOR_ALPHA_ERROR = 1 / 192
 CONNECTOR_ALPHA_SEGMENT_LENGTH = 2 * (32 / 1080)
@@ -2585,6 +2584,9 @@ class ActiveConnectorInfo(Record):
     is_active: bool
     active_start_time: float
     connector_kind: ConnectorKind
+    head_judgment_frame: int
+    input_frame: int
+    input_kind: ConnectorKind
 
 
 def inactive_connector_sfx_times() -> ConnectorSfxTimes:

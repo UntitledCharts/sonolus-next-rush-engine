@@ -8,7 +8,6 @@ from unittest.mock import Mock, patch
 from sonolus.script.array import Array, Dim
 from sonolus.script.debug import simulation_context
 from sonolus.script.effect import LoopedEffectHandle
-from sonolus.script.interval import Interval
 from sonolus.script.quad import Rect
 from sonolus.script.vec import Vec2
 
@@ -27,7 +26,8 @@ class Hold:
     tail_finished = play.SlideManager.tail_finished
     update_sequential = play.SlideManager.update_sequential
     touch = play.SlideManager.touch
-    update_sfx_state = play.SlideManager.update_sfx_state
+    update_hold_state = play.SlideManager.update_hold_state
+    accept_hold_input = play.SlideManager.accept_hold_input
     activate_sfx_if_needed = play.SlideManager.activate_sfx_if_needed
     deactivate_sfx_if_needed = play.SlideManager.deactivate_sfx_if_needed
 
@@ -39,22 +39,17 @@ class Hold:
             target_time=1,
             kind=NoteKind.NORM_HEAD_TAP,
             is_scored=True,
-            is_trace=False,
-            captured_touch_id=1,
             timescale_group=0,
-            connector_ease=EaseType.LINEAR,
-            input_interval=Interval(1 - 5 / 60, 1 + 5 / 60),
             hitbox=Namespace(bounds=bounds),
-            active_connector_info=Namespace(input_bounds=bounds, connector_kind=kind, is_active=True),
+            active_connector_info=Namespace(
+                input_bounds=bounds, input_kind=kind, input_frame=0, head_judgment_frame=0, is_active=False
+            ),
         )
         self.active_tail = Namespace(
             target_time=5, is_scored=True, is_despawned=False, pending_despawn=False, connector_ease=EaseType.LINEAR
         )
         self.effect_pool_slot = 1
         self.sfx_active = False
-        self.head_ready = False
-        self.head_touched = False
-        self.head_began_frame = -1
         self.write_sfx_times = Mock()
 
 
@@ -78,10 +73,16 @@ class ConnectorChannelOwnershipTests(unittest.TestCase):
             )
         )
 
-    def step(self, hold, now, held):
+    def step(self, hold, now, held, *, head_hit=False):
         self.now = now
         play.input_manager.InputState.frame += 1
-        self.touches.return_value = [Namespace(position=Vec2(0, 0))] if held else []
+        frame = play.input_manager.InputState.frame
+        info = hold.active_head.active_connector_info
+        if head_hit:
+            info.head_judgment_frame = frame
+        if hold.active_head.target_time <= now < hold.active_tail.target_time:
+            info.input_frame = frame
+        self.touches.return_value = [Namespace(id=1, position=Vec2(0, 0), ended=False)] if held else []
         hold.update_sequential()
         if held:
             hold.touch()
@@ -130,16 +131,14 @@ class ConnectorChannelOwnershipTests(unittest.TestCase):
 
     def test_early_tap_and_cached_trace_head_follow_input_began(self):
         tap = Hold(1)
-        self.step(tap, 0.95, True)
+        self.step(tap, 0.95, True, head_hit=True)
         assert lib.connector_sfx_channel(K.ACTIVE_NORMAL).active_time == 0.95
         self.step(tap, 0.96, False)
         trace = Hold(2)
         trace.active_head.kind = NoteKind.NORM_HEAD_TRACE
-        trace.active_head.is_trace = True
-        trace.active_head.captured_touch_id = 0
         self.step(trace, 0.95, True)
         assert not trace.sfx_active
-        self.step(trace, 1.01, False)
+        self.step(trace, 1.01, False, head_hit=True)
         assert trace.sfx_active
         self.step(trace, 1.02, False)
         assert not trace.sfx_active
@@ -147,10 +146,10 @@ class ConnectorChannelOwnershipTests(unittest.TestCase):
     def test_release_uses_current_input_and_tail_waits_for_its_judgment(self):
         hold = Hold(1)
         hold.active_tail.target_time = 2
-        self.step(hold, 2.05, True)
+        self.step(hold, 2.05, True, head_hit=True)
         assert hold.sfx_active
         self.step(hold, 2.06, False)
-        assert hold.active_head.active_connector_info.is_active
+        assert not hold.active_head.active_connector_info.is_active
         assert not hold.sfx_active
         self.step(hold, 2.07, True)
         assert hold.sfx_active
@@ -162,9 +161,8 @@ class ConnectorChannelOwnershipTests(unittest.TestCase):
         for kind, late in ((NoteKind.NORM_HEAD_TAP, 0.13), (NoteKind.NORM_HEAD_TRACE, 0.09)):
             hold = Hold(1)
             hold.active_head.kind = kind
-            hold.active_head.is_trace = kind == NoteKind.NORM_HEAD_TRACE
             hold.active_tail.target_time = 2
-            self.step(hold, 2.05, True)
+            self.step(hold, 2.05, True, head_hit=True)
             assert hold.sfx_active
             self.step(hold, 2 + late, True)
             assert not hold.sfx_active

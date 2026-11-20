@@ -88,9 +88,8 @@ class InputState:
     processed_touches: VarArray[Touch, Dim[32]]
     disallowed_empty_touches: ArraySet[int, Dim[32]]
     recent_note_input_times: ArrayMap[int, float, Dim[32]]
-    last_started_touch_id: int
-    last_started_touch_disallowed: bool
-    previous_touch_disallowed: bool
+    last_empty_frame: int
+    last_empty_lanes: ArrayMap[int, float, Dim[32]]
 
 
 def preprocess_touches():
@@ -120,8 +119,6 @@ def processed_touches() -> VarArray[Touch, Dim[32]]:
 
 def disallow_empty(touch: Touch):
     InputState.disallowed_empty_touches.add(touch.id)
-    if touch.id == InputState.last_started_touch_id or touch.started:
-        InputState.last_started_touch_disallowed = True
 
 
 def record_note_input(touch: Touch):
@@ -132,9 +129,15 @@ def is_allowed_empty(touch: Touch) -> bool:
     return touch.id not in InputState.disallowed_empty_touches
 
 
-def release_all_empty_disallows():
-    InputState.disallowed_empty_touches.clear()
-    InputState.last_started_touch_disallowed = False
+def register_empty_input(touch: Touch, lane: float) -> bool:
+    disallow_empty(touch)
+    if not touch.started and InputState.last_empty_frame < InputState.frame - 1:
+        return False
+    InputState.last_empty_frame = InputState.frame
+    lanes = InputState.last_empty_lanes
+    play_effect = touch.started or (touch.id in lanes and lanes[touch.id] != lane)
+    lanes[touch.id] = lane
+    return play_effect
 
 
 def is_allowed_release(touch: Touch, target) -> bool:
@@ -151,6 +154,7 @@ class InputManager(PlayArchetype):
     @callback(order=-4)
     def update_sequential(self):
         InputState.frame += 1
+        InputState.disallowed_empty_touches.clear()
         preprocess_touches()
         note.NoteMemory.active_tap_input_notes.clear()
         note.NoteMemory.active_release_input_notes.clear()
@@ -163,32 +167,16 @@ class InputManager(PlayArchetype):
 
 
 def update_input_state():
-    old_disallowed_empty_touches = +InputState.disallowed_empty_touches
-    InputState.disallowed_empty_touches.clear()
-    for touch in processed_touches():
-        if touch.started:
-            InputState.previous_touch_disallowed = InputState.last_started_touch_disallowed
-            InputState.last_started_touch_id = touch.id
-            InputState.last_started_touch_disallowed = False
-    for existing_id in old_disallowed_empty_touches:
-        for touch in processed_touches():
-            if touch.id == existing_id:
-                disallow_empty(touch)
-                break
-
     old_recent_note_input_times = +InputState.recent_note_input_times
+    old_empty_lanes = +InputState.last_empty_lanes
     InputState.recent_note_input_times.clear()
-    for existing_id, input_time in old_recent_note_input_times.items():
-        if any(touch.id == existing_id for touch in processed_touches()):
-            InputState.recent_note_input_times[existing_id] = input_time
-
-
-def is_last_started_touch_disallowed() -> bool:
-    return InputState.last_started_touch_disallowed
-
-
-def is_previous_touch_disallowed() -> bool:
-    return InputState.previous_touch_disallowed
+    InputState.last_empty_lanes.clear()
+    for touch in processed_touches():
+        if not touch.started:
+            if touch.id in old_recent_note_input_times:
+                InputState.recent_note_input_times[touch.id] = old_recent_note_input_times[touch.id]
+            if touch.id in old_empty_lanes:
+                InputState.last_empty_lanes[touch.id] = old_empty_lanes[touch.id]
 
 
 def _prepare_release_candidates(active, candidates: InputCandidates) -> bool:

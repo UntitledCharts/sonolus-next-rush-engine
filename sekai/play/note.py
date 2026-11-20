@@ -394,6 +394,8 @@ class BaseNote(PlayArchetype):
             self.slide_end_input = False
         if self.is_scored and self.uses_frame_miss:
             if self.late_miss_pending:
+                if is_head(self.kind):
+                    self.active_connector_info.head_judgment_frame = -input_manager.InputState.frame
                 self.fail_late()
                 return
             after = (
@@ -910,6 +912,7 @@ class BaseNote(PlayArchetype):
                 continue
             if index < 0:
                 continue
+            input_manager.disallow_empty(touch)
             if not is_head(self.kind):
                 input_manager.record_note_input(touch)
             if self.record_flick_motion(touch, index):
@@ -1238,6 +1241,8 @@ class BaseNote(PlayArchetype):
     def post_judge(self):
         if self.is_tail:
             self.slide_end_input = True
+        if is_head(self.kind):
+            self.active_connector_info.head_judgment_frame = input_manager.InputState.frame
         if self.should_play_hit_effects:
             PlayLevelMemory.last_note_sfx_time = time()
 

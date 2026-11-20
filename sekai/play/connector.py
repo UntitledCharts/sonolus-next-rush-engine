@@ -8,14 +8,13 @@ from sonolus.script.array import Array, Dim
 from sonolus.script.effect import LoopedEffectHandle
 from sonolus.script.interval import Interval, lerp
 from sonolus.script.particle import ParticleHandle
+from sonolus.script.quad import Quad
 from sonolus.script.runtime import delta_time, input_offset, offset_adjusted_time, time
-from sonolus.script.timing import beat_to_time
 from sonolus.script.values import alloc
 
 from sekai.debug import DISABLE_NOTES
 from sekai.lib import archetype_names
 from sekai.lib.connector import (
-    CONNECTOR_PARTICLE_ACTIVE_DELAY,
     CONNECTOR_SLOT_SPAWN_PERIOD,
     CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY,
     CONNECTOR_TRAIL_SPAWN_PERIOD,
@@ -60,7 +59,7 @@ from sekai.lib.layout import (
     blend_stage_transform,
     current_layout_transform,
 )
-from sekai.lib.note import NoteKind, draw_connector_hitbox_overlay, draw_slide_note_head, get_note_window, has_tap_input
+from sekai.lib.note import NoteKind, draw_connector_hitbox_overlay, draw_slide_note_head, get_note_window
 from sekai.lib.options import Options
 from sekai.lib.particle_manager import release_hold_particles, reserve_hold_particles
 from sekai.lib.stage import VisualMask, masked_note_extents_by_limits
@@ -81,8 +80,6 @@ from sekai.lib.timescale_consumer import (
     register_note_group_window,
 )
 from sekai.play import input_manager, note
-
-START_LENIENCY_BEATS = 0.5
 
 
 class Connector(PlayArchetype):
@@ -114,8 +111,7 @@ class Connector(PlayArchetype):
     render_info: ConnectorRenderInfo = entity_data()
 
     last_visual_state: ConnectorVisualState = entity_memory()
-    delay: bool = entity_memory()
-    can_consume_empty: bool = entity_memory()
+    damage_input_gap: bool = entity_memory()
     # Temporary linked-list pointers used only during preprocess to sort connectors by their
     # activation / deactivation times for the auto-SFX sweep (see schedule_auto_connector_sfx_events).
     # entity_data (not entity_memory) so they can be written cross-entity during the global auto-SFX sweep.
@@ -162,7 +158,6 @@ class Connector(PlayArchetype):
         if self.segment_head.segment_through_judge_line:
             self.end_time += CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY
         self.last_visual_state = ConnectorVisualState.WAITING
-        self.can_consume_empty = True
         if self.active_head_ref.index > 0:
             head.tick_head_ref = self.active_head_ref
         if self.active_tail_ref.index > 0:
@@ -231,64 +226,43 @@ class Connector(PlayArchetype):
             return
 
         if self.active_head_ref.index > 0:
+            info = self.active_connector_info
+            damage = self.render_info.base_kind == ConnectorKind.DAMAGE
             tail_processed = self.active_tail_ref.index > 0 and self.active_tail.is_despawned
-            if not tail_processed and current_time in self.input_active_interval:
-                self.active_connector_info.input_bounds @= note.compute_slide_input_bounds(
+            if not tail_processed and (
+                self.input_active_interval.start <= current_time < self.input_active_interval.end
+                or (damage and current_time == self.input_active_interval.end)
+            ):
+                info.input_bounds @= note.compute_slide_input_bounds(
                     self.ease_type,
                     self.head,
                     self.tail,
                     offset_adjusted_time(),
                     get_connector_input_leniency(self.kind, base_kind=self.render_info.base_kind),
                 )
-                bounds = self.active_connector_info.input_bounds
-                if is_fake_active_connector(self.kind, base_kind=self.render_info.base_kind):
-                    if not self.active_connector_info.is_active:
-                        self.active_connector_info.active_start_time = current_time
-                    self.active_connector_info.is_active = True
-                    self.delay = False
-                else:
-                    for touch in input_manager.processed_touches():
-                        if not touch.ended and bounds.contains_point(touch.position):
-                            if not self.active_connector_info.is_active:
-                                self.active_connector_info.active_start_time = current_time
-                            self.active_connector_info.is_active = True
-                            self.delay = False
-                            break
-                    else:
-                        if self.delay:
-                            self.active_connector_info.is_active = False
-                            self.can_consume_empty = True
-                        else:
-                            self.delay = True
+                info.input_frame = input_manager.InputState.frame
+                info.input_kind = self.kind
+                if damage:
+                    self.update_damage_input(info, current_time)
             if time() in self.visual_active_interval:
-                self.active_connector_info.visual_connector_index = self.index + 1
-                self.active_connector_info.visual_update_time = time()
-                self.active_connector_info.connector_kind = self.kind
-            if self.active_connector_info.visual_connector_index == self.index + 1 and group_hide_notes(
-                self.segment_head.timescale_group
-            ):
-                self.active_connector_info.connector_kind = ConnectorKind.NONE
+                info.visual_connector_index = self.index + 1
+                info.visual_update_time = time()
+                info.connector_kind = self.kind
+            if info.visual_connector_index == self.index + 1 and group_hide_notes(self.segment_head.timescale_group):
+                info.connector_kind = ConnectorKind.NONE
 
-    @callback(order=1)
-    def touch(self):
-        if self.despawn:
-            return
-        current_time = time()
-        if self.active_head_ref.index > 0 and current_time in self.input_active_interval:
-            bounds = self.active_connector_info.input_bounds
-            for touch in input_manager.processed_touches():
-                if (
-                    not touch.ended
-                    and bounds.contains_point(touch.position)
-                    and input_manager.is_allowed_empty(touch)
-                    and (
-                        self.can_consume_empty
-                        or input_manager.is_last_started_touch_disallowed()
-                        or (touch.started and input_manager.is_previous_touch_disallowed())
-                    )
-                ):
-                    input_manager.disallow_empty(touch)
-                    self.can_consume_empty = False
+    def update_damage_input(self, info: ActiveConnectorInfo, current_time: float):
+        touching = any(
+            not touch.ended and info.input_bounds.contains_point(touch.position)
+            for touch in input_manager.processed_touches()
+        )
+        if touching:
+            if not info.is_active:
+                info.active_start_time = current_time
+            info.is_active = True
+        elif self.damage_input_gap:
+            info.is_active = False
+        self.damage_input_gap = not touching
 
     def update_parallel(self):
         if time() < self.start_time and self.active_head_ref.index <= 0:
@@ -304,26 +278,16 @@ class Connector(PlayArchetype):
             tail = self.tail
             segment_head = self.segment_head
             segment_tail = self.segment_tail
+            visual_state = ConnectorVisualState.WAITING
             if self.active_head_ref.index > 0:
                 active_head = self.active_head
-                if self.render_info.base_kind == ConnectorKind.DAMAGE:
-                    # Damage connectors do not get the initial grace period for staying active.
-                    if self.active_connector_info.is_active:
-                        visual_state = ConnectorVisualState.ACTIVE
-                    else:
-                        visual_state = ConnectorVisualState.WAITING
-                elif current_time < active_head.target_time:
-                    visual_state = ConnectorVisualState.WAITING
-                elif (
-                    adj_time < beat_to_time(active_head.beat + START_LENIENCY_BEATS)
-                    or self.active_connector_info.is_active
-                ):
+                info = self.active_connector_info
+                if info.is_active:
                     visual_state = ConnectorVisualState.ACTIVE
-                    self.can_consume_empty = False
-                else:
+                elif self.render_info.base_kind != ConnectorKind.DAMAGE and (
+                    info.head_judgment_frame != 0 or (not active_head.is_scored and adj_time >= active_head.target_time)
+                ):
                     visual_state = ConnectorVisualState.INACTIVE
-            else:
-                visual_state = ConnectorVisualState.WAITING
             if visual_state != self.last_visual_state:
                 self.last_visual_state = visual_state
                 Streams.connector_visual_states[self.index][adj_time] = visual_state
@@ -591,9 +555,6 @@ class SlideManager(PlayArchetype):
     next_slot_spawn_time: float = entity_memory()
     last_effect_kind: ConnectorKind = entity_memory()
     sfx_active: bool = entity_memory()
-    head_ready: bool = entity_memory()
-    head_touched: bool = entity_memory()
-    head_began_frame: int = entity_memory()
 
     effect_pool_slot: int = entity_memory()
     cleanup_time: float = entity_memory()
@@ -608,7 +569,6 @@ class SlideManager(PlayArchetype):
         Streams.connector_effect_kinds[self.active_head.index][-2] = ConnectorKind.NONE
         self.last_effect_kind = ConnectorKind.NONE
         self.sfx_active = False
-        self.head_began_frame = -1
 
     @property
     def tail_finished(self) -> bool:
@@ -631,78 +591,77 @@ class SlideManager(PlayArchetype):
         if self.tail_finished or (Options.auto_sfx and time() >= self.cleanup_time):
             release_hold_particles(self.effect_pool_slot, self.active_head.index)
             self.effect_pool_slot = 0
-        if Options.auto_sfx:
-            return
-        head = self.active_head
-        t = offset_adjusted_time()
-        if not self.head_ready:
-            if t >= head.target_time and (self.head_touched or not head.is_scored):
-                self.head_ready = True
-                self.head_began_frame = input_manager.InputState.frame
-            elif (
-                has_tap_input(head.kind) and head.captured_touch_id > 0
-            ) or t - delta_time() > head.target_time + 0.125:
-                self.head_ready = True
         if len(input_manager.processed_touches()) == 0:
-            self.update_sfx_state()
+            self.update_hold_state()
 
     @callback(order=2)
     def touch(self):
-        self.update_sfx_state()
+        self.update_hold_state()
 
-    def update_sfx_state(self):
-        if self.tail_finished:
+    def update_hold_state(self):
+        tail_finished = self.tail_finished
+        if tail_finished and self.effect_pool_slot > 0:
             release_hold_particles(self.effect_pool_slot, self.active_head.index)
             self.effect_pool_slot = 0
-        if Options.auto_sfx:
-            return
         head = self.active_head
+        info = head.active_connector_info
         tail = self.active_tail
         t = offset_adjusted_time()
         kind = head.segment_kind
-        if (
-            self.effect_pool_slot == 0
-            or self.tail_finished
-            or tail.target_time <= head.target_time
-            or not is_sfx_connector(kind)
-        ):
-            self.deactivate_sfx_if_needed(t)
+        frame = input_manager.InputState.frame
+        has_input_bounds = info.input_frame == frame
+        input_kind = info.input_kind if has_input_bounds else kind
+        if get_connector_base_kind(input_kind) == ConnectorKind.DAMAGE:
+            if has_input_bounds and not tail_finished:
+                self.accept_hold_input(input_kind, info.input_bounds, frame)
+            if not Options.auto_sfx:
+                self.deactivate_sfx_if_needed(t)
             return
-        if not self.head_ready:
-            if has_tap_input(head.kind) and head.captured_touch_id > 0:
-                self.head_ready = True
+        held = False
+        if not tail_finished and tail.target_time > head.target_time:
+            if has_input_bounds:
+                held = self.accept_hold_input(input_kind, info.input_bounds, frame)
+            elif info.head_judgment_frame > 0 and t < head.target_time:
+                held = self.accept_hold_input(kind, head.hitbox.bounds, frame)
             elif (
-                head.is_trace
-                and head.input_interval.start < time() < head.input_interval.end
-                and any(
-                    head.hitbox.bounds.contains_point(touch.position) for touch in input_manager.processed_touches()
-                )
+                t >= tail.target_time
+                and len(input_manager.processed_touches()) > 0
+                and not is_fake_active_connector(kind)
+                and t - tail.target_time < (get_note_window(head.kind, False).bad.end if head.is_scored else 5 / 60)
             ):
-                self.head_touched = True
-            if not self.head_ready:
-                return
-        info = head.active_connector_info
-        bounds = +info.input_bounds
-        if t < head.target_time:
-            bounds @= note.compute_slide_input_bounds(
-                head.connector_ease, head, head, t, get_connector_input_leniency(kind)
-            )
-        elif t >= tail.target_time:
-            bounds @= note.compute_slide_input_bounds(
-                tail.connector_ease, tail, tail, t, get_connector_input_leniency(kind)
-            )
-        held = self.head_began_frame == input_manager.InputState.frame or is_fake_active_connector(kind)
-        held = held or any(bounds.contains_point(touch.position) for touch in input_manager.processed_touches())
-        if t >= tail.target_time:
-            after = get_note_window(head.kind, False).bad.end if head.is_scored else 5 / 60
-            if t - tail.target_time >= after:
-                held = False
-        if group_hide_notes(head.timescale_group):
-            held = False
-        if held:
-            self.activate_sfx_if_needed(kind, t)
-        else:
-            self.deactivate_sfx_if_needed(t)
+                bounds = note.compute_slide_input_bounds(
+                    tail.connector_ease, tail, tail, t, get_connector_input_leniency(kind)
+                )
+                held = self.accept_hold_input(kind, bounds, frame)
+        if held and not info.is_active:
+            info.active_start_time = time()
+        info.is_active = held
+        if not Options.auto_sfx:
+            if held and is_sfx_connector(kind) and not group_hide_notes(head.timescale_group):
+                self.activate_sfx_if_needed(kind, t)
+            else:
+                self.deactivate_sfx_if_needed(t)
+
+    def accept_hold_input(self, kind: ConnectorKind, bounds: Quad, frame: int) -> bool:
+        if is_fake_active_connector(kind):
+            return True
+        head = self.active_head
+        start_frame = head.active_connector_info.head_judgment_frame
+        if head.is_scored and start_frame == 0 and get_connector_base_kind(kind) != ConnectorKind.DAMAGE:
+            return False
+        touches = input_manager.processed_touches()
+        ended = -1
+        for index in range(len(touches) - 1, -1, -1):
+            touch = touches[index]
+            if bounds.contains_point(touch.position):
+                if not touch.ended:
+                    input_manager.disallow_empty(touch)
+                    return True
+                if ended < 0:
+                    ended = index
+        if ended >= 0:
+            input_manager.disallow_empty(touches[ended])
+        return start_frame == frame
 
     def update_parallel(self):
         current_time = time()
@@ -739,72 +698,65 @@ class SlideManager(PlayArchetype):
                 | ConnectorKind.FAKE_ACTIVE_NORMAL
                 | ConnectorKind.FAKE_ACTIVE_CRITICAL
             ) if info.is_active and self.effect_pool_slot > 0:
-                if current_time < info.active_start_time + CONNECTOR_PARTICLE_ACTIVE_DELAY:
+                replace = info.connector_kind != self.last_kind
+                self.last_kind = info.connector_kind
+                if self.visual_size <= 0:
                     destroy_looped_particle(self.circular_particle)
                     destroy_looped_particle(self.linear_particle)
-                    if self.last_effect_kind != ConnectorKind.NONE:
-                        connector_effect_kind_stream[adj_time] = ConnectorKind.NONE
-                        self.last_effect_kind = ConnectorKind.NONE
                 else:
-                    replace = info.connector_kind != self.last_kind
-                    self.last_kind = info.connector_kind
-                    if self.visual_size <= 0:
-                        destroy_looped_particle(self.circular_particle)
-                        destroy_looped_particle(self.linear_particle)
-                    else:
-                        update_circular_connector_particle(
-                            self.circular_particle,
-                            cast(ActiveConnectorKind, info.connector_kind),
-                            self.visual_lane,
-                            replace,
-                            self.visual_y_offset,
-                            transform=head_transform,
+                    update_circular_connector_particle(
+                        self.circular_particle,
+                        cast(ActiveConnectorKind, info.connector_kind),
+                        self.visual_lane,
+                        replace,
+                        self.visual_y_offset,
+                        transform=head_transform,
+                    )
+                    update_linear_connector_particle(
+                        self.linear_particle,
+                        cast(ActiveConnectorKind, info.connector_kind),
+                        self.visual_lane,
+                        replace,
+                        self.visual_y_offset,
+                        transform=head_transform,
+                    )
+                if self.last_effect_kind != info.connector_kind:
+                    connector_effect_kind_stream[adj_time] = info.connector_kind
+                    self.last_effect_kind = info.connector_kind
+                trail_period = CONNECTOR_TRAIL_SPAWN_PERIOD / Options.effect_animation_speed
+                if self.visual_size > 0 and current_time >= self.next_trail_spawn_time:
+                    self.next_trail_spawn_time = max(
+                        self.next_trail_spawn_time + trail_period,
+                        current_time + trail_period / 2,
+                    )
+                    spawn_linear_connector_trail_particle(
+                        cast(ActiveConnectorKind, info.connector_kind),
+                        self.visual_lane,
+                        self.visual_y_offset,
+                        transform=head_transform,
+                    )
+                if self.visual_size > 0:
+                    slot_period = CONNECTOR_SLOT_SPAWN_PERIOD / Options.effect_animation_speed
+                    if current_time >= self.next_slot_spawn_time:
+                        self.next_slot_spawn_time = max(
+                            self.next_slot_spawn_time + slot_period,
+                            current_time + slot_period / 2,
                         )
-                        update_linear_connector_particle(
-                            self.linear_particle,
+                        spawn_connector_slot_particles(
                             cast(ActiveConnectorKind, info.connector_kind),
-                            self.visual_lane,
-                            replace,
-                            self.visual_y_offset,
-                            transform=head_transform,
-                        )
-                    if self.last_effect_kind != info.connector_kind:
-                        connector_effect_kind_stream[adj_time] = info.connector_kind
-                        self.last_effect_kind = info.connector_kind
-                    trail_period = CONNECTOR_TRAIL_SPAWN_PERIOD / Options.effect_animation_speed
-                    if self.visual_size > 0 and current_time >= self.next_trail_spawn_time:
-                        self.next_trail_spawn_time = max(
-                            self.next_trail_spawn_time + trail_period,
-                            current_time + trail_period / 2,
-                        )
-                        spawn_linear_connector_trail_particle(
-                            cast(ActiveConnectorKind, info.connector_kind),
-                            self.visual_lane,
-                            self.visual_y_offset,
-                            transform=head_transform,
-                        )
-                    if self.visual_size > 0:
-                        slot_period = CONNECTOR_SLOT_SPAWN_PERIOD / Options.effect_animation_speed
-                        if current_time >= self.next_slot_spawn_time:
-                            self.next_slot_spawn_time = max(
-                                self.next_slot_spawn_time + slot_period,
-                                current_time + slot_period / 2,
-                            )
-                            spawn_connector_slot_particles(
-                                cast(ActiveConnectorKind, info.connector_kind),
-                                self.visual_lane,
-                                self.visual_size,
-                                self.visual_y_offset,
-                                transform=head_transform,
-                            )
-                        draw_connector_slot_glow_effect(
-                            cast(ActiveConnectorKind, info.connector_kind),
-                            info.active_start_time,
                             self.visual_lane,
                             self.visual_size,
                             self.visual_y_offset,
                             transform=head_transform,
                         )
+                    draw_connector_slot_glow_effect(
+                        cast(ActiveConnectorKind, info.connector_kind),
+                        info.active_start_time,
+                        self.visual_lane,
+                        self.visual_size,
+                        self.visual_y_offset,
+                        transform=head_transform,
+                    )
             case _:
                 destroy_looped_particle(self.circular_particle)
                 destroy_looped_particle(self.linear_particle)

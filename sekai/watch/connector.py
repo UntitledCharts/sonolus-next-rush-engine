@@ -13,7 +13,6 @@ from sekai.debug import DISABLE_NOTES
 from sekai.lib import archetype_names
 from sekai.lib.connector import (
     CONNECTOR_LENIENCY,
-    CONNECTOR_PARTICLE_ACTIVE_DELAY,
     CONNECTOR_SLOT_SPAWN_PERIOD,
     CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY,
     CONNECTOR_TRAIL_SPAWN_PERIOD,
@@ -543,13 +542,12 @@ class WatchSlideManager(WatchArchetype):
             return
         segment_transform, segment_note_alpha = self.active_segment_transform_and_note_alpha()
         head_transform = segment_transform.to_screen_transform()
-        connector_kind = (
-            Streams.connector_effect_kinds[self.active_head.index].get_previous_inclusive(current_time)
-            if is_replay()
-            else info.connector_kind
-        )
-        if not is_replay() and current_time < self.active_head.target_time + CONNECTOR_PARTICLE_ACTIVE_DELAY:
-            connector_kind = ConnectorKind.NONE
+        active_start_time = self.active_head.target_time
+        connector_kind = info.connector_kind
+        if is_replay():
+            effects = Streams.connector_effect_kinds[self.active_head.index]
+            active_start_time = effects.previous_key_inclusive(current_time)
+            connector_kind = effects[active_start_time]
         match get_connector_base_kind(connector_kind):
             case (
                 ConnectorKind.ACTIVE_NORMAL
@@ -604,7 +602,7 @@ class WatchSlideManager(WatchArchetype):
                             )
                         draw_connector_slot_glow_effect(
                             cast(ActiveConnectorKind, connector_kind),
-                            self.active_head.target_time,
+                            active_start_time,
                             self.visual_lane,
                             self.visual_size,
                             self.visual_y_offset,

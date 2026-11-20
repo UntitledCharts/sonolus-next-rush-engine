@@ -236,7 +236,7 @@ class DynamicStage(PlayArchetype):
             Fever.has_active = True
             Fever.y_offset = self.draw_props.y_offset
 
-    @callback(order=2)
+    @callback(order=3)
     def touch(self):
         t = time()
         if t < self.draw_start_time or t > self.draw_end_time:
@@ -264,7 +264,6 @@ class DynamicStage(PlayArchetype):
         screen_transform = transform.to_screen_transform()
         total_hitbox = screen_transform.transform_quad(layout_lane_area(leftmost - 1.5, rightmost + 1.5))
         empty_lanes = StageMemory.empty_lanes
-        empty_triggered = False
         for touch in input_manager.processed_touches():
             if not total_hitbox.contains_point(touch.position):
                 continue
@@ -276,31 +275,13 @@ class DynamicStage(PlayArchetype):
                 rounded_lane = clamp(p.pivot_lane + round(rel), lo, hi)
             else:
                 rounded_lane = clamp(p.pivot_lane + round(rel - 0.5) + 0.5, lo, hi)
-            if touch.started:
+            if input_manager.register_empty_input(touch, rounded_lane):
                 play_lane_hit_effects(
                     rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6, transform=screen_transform
                 )
-                empty_triggered = True
                 if not empty_lanes.is_full():
                     empty_lanes.append(rounded_lane)
                     StageMemory.empty_lane_stages.append(self.index)
-            else:
-                prev_lane = touch_to_lane(touch.prev_position, screen_transform)
-                prev_rel = prev_lane - p.pivot_lane
-                if half_offset:
-                    prev_rounded_lane = clamp(p.pivot_lane + round(prev_rel), lo, hi)
-                else:
-                    prev_rounded_lane = clamp(p.pivot_lane + round(prev_rel - 0.5) + 0.5, lo, hi)
-                if rounded_lane != prev_rounded_lane:
-                    play_lane_hit_effects(
-                        rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6, transform=screen_transform
-                    )
-                    empty_triggered = True
-                    if not empty_lanes.is_full():
-                        empty_lanes.append(rounded_lane)
-                        StageMemory.empty_lane_stages.append(self.index)
-        if empty_triggered:
-            input_manager.release_all_empty_disallows()
 
     def update_parallel(self):
         t = time()

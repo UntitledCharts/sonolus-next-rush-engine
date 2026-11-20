@@ -47,7 +47,7 @@ class StaticStage(PlayArchetype):
         refresh_layout()
         reset_fever_bounds()
 
-    @callback(order=3)
+    @callback(order=4)
     def touch(self):
         empty_lanes = StageMemory.empty_lanes
         if LevelConfig.dynamic_stages:
@@ -58,7 +58,6 @@ class StaticStage(PlayArchetype):
                 StageMemory.empty_lane_stages.clear()
             return
         empty_lanes.clear()
-        empty_triggered = False
         total_hitbox = layout_lane_area(-7, 7)
         for touch in input_manager.processed_touches():
             if not total_hitbox.contains_point(touch.position):
@@ -67,29 +66,14 @@ class StaticStage(PlayArchetype):
                 continue
             lane = touch_to_lane(touch.position, IDENTITY_STAGE_SCREEN_TRANSFORM)
             rounded_lane = clamp(round(lane - 0.5) + 0.5, -5.5, 5.5)
-            if touch.started:
+            if input_manager.register_empty_input(touch, rounded_lane):
                 play_lane_hit_effects(
                     rounded_lane,
                     sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6,
                     transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
                 )
-                empty_triggered = True
                 if not empty_lanes.is_full():
                     empty_lanes.append(rounded_lane)
-            else:
-                prev_lane = touch_to_lane(touch.prev_position, IDENTITY_STAGE_SCREEN_TRANSFORM)
-                prev_rounded_lane = clamp(round(prev_lane - 0.5) + 0.5, -5.5, 5.5)
-                if rounded_lane != prev_rounded_lane:
-                    play_lane_hit_effects(
-                        rounded_lane,
-                        sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6,
-                        transform=IDENTITY_STAGE_SCREEN_TRANSFORM,
-                    )
-                    empty_triggered = True
-                    if not empty_lanes.is_full():
-                        empty_lanes.append(rounded_lane)
-        if empty_triggered:
-            input_manager.release_all_empty_disallows()
         if len(empty_lanes) > 0:
             Streams.empty_input_lanes[offset_adjusted_time()] = empty_lanes
 
