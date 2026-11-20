@@ -5,6 +5,7 @@ from typing import Any, Protocol, Self, cast
 from sonolus.script.archetype import EntityRef, entity_info_at, get_archetype_by_name
 from sonolus.script.containers import sort_linked_entities
 from sonolus.script.globals import level_data
+from sonolus.script.record import Record
 from sonolus.script.runtime import level_score
 
 from sekai.lib import archetype_names
@@ -34,6 +35,22 @@ def count_entities() -> int:
     while entity_info_at(entity_count).index == entity_count:
         entity_count += 1
     return entity_count
+
+
+class ConnectorSfxOrder(Record):
+    head: int
+    first_start_time: float
+    first_end_time: float
+    sort_starts: bool
+    sort_ends: bool
+
+    def prepend(self, index: int, start_time: float, end_time: float) -> None:
+        if self.head > 0:
+            self.sort_starts = self.sort_starts or not start_time <= self.first_start_time
+            self.sort_ends = self.sort_ends or not end_time <= self.first_end_time
+        self.head = index
+        self.first_start_time = start_time
+        self.first_end_time = end_time
 
 
 def calculate_note_weight(

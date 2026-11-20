@@ -9,6 +9,7 @@ from sonolus.script.archetype import (
     entity_info_at,
     imported,
 )
+from sonolus.script.array import Array, Dim
 from sonolus.script.bucket import Judgment
 from sonolus.script.containers import sort_linked_entities
 from sonolus.script.interval import clamp
@@ -32,6 +33,7 @@ from sekai.lib.connector import (
 from sekai.lib.custom_elements import LifeManager, NeumaierSum, init_fixed_ui_layout
 from sekai.lib.fever import FeverWindows, advance_fever_window, prepare_fever_windows
 from sekai.lib.initialization import (
+    ConnectorSfxOrder,
     LastNote,
     calculate_note_weight,
     count_entities,
@@ -78,6 +80,7 @@ class WatchInitialization(WatchArchetype):
     is_multi: bool = imported()
 
     connector_sfx_scheduled: bool = entity_data()
+    entity_count: int = entity_data()
 
     @callback(order=-3)
     def preprocess(self):
@@ -111,8 +114,8 @@ class WatchInitialization(WatchArchetype):
 
         schedule_empty_input_effects()
 
-        entity_count = count_entities()
-        sorted_linked_list(entity_count)
+        self.entity_count = count_entities()
+        sorted_linked_list(self.entity_count)
         if is_replay() and not Options.auto_sfx:
             if Streams.unified_connector_sfx:
                 schedule_unified_replay_connector_sfx()
@@ -127,7 +130,7 @@ class WatchInitialization(WatchArchetype):
             return
         self.connector_sfx_scheduled = True
         if not is_replay() or Options.auto_sfx:
-            schedule_auto_connector_sfx(count_entities())
+            schedule_auto_connector_sfx(self.entity_count)
 
 
 def sorted_linked_list(entity_count: int):
@@ -298,8 +301,7 @@ def setting_combo(head: int, skill: int) -> None:
 def schedule_auto_connector_sfx(entity_count: int):
     connector_id = WatchConnector._compile_time_id()
 
-    normal_head = 0
-    critical_head = 0
+    orders = +Array[ConnectorSfxOrder, Dim[2]]
     for i in range(entity_count - 1, -1, -1):
         info = entity_info_at(i)
         mro = WatchArchetype._get_mro_id_array(info.archetype_id)
@@ -308,25 +310,25 @@ def schedule_auto_connector_sfx(entity_count: int):
         connector = WatchConnector.at(i)
         if connector.active_head_ref.index <= 0 or connector.head_ref.index != connector.active_head_ref.index:
             continue
-        if connector.active_head.target_time == connector.active_tail.target_time:
+        start_time = connector.active_head.target_time
+        end_time = connector.active_tail.target_time
+        if start_time == end_time:
             # Zero-length slide: its activation and release land on the same instant, which the
             # hold-wins-over-release tie-break would otherwise leave stuck on. It holds for no
             # duration, so skip it entirely.
             continue
         if is_sfx_connector(connector.segment_head.segment_kind):
             critical = get_connector_sfx_kind(connector.segment_head.segment_kind) == ConnectorKind.ACTIVE_CRITICAL
-            connector.sfx_act_next.index = critical_head if critical else normal_head
-            connector.sfx_deact_next.index = connector.sfx_act_next.index
-            if critical:
-                critical_head = i
-            else:
-                normal_head = i
+            order = orders[int(critical)]
+            connector.sfx_act_next.index = order.head
+            connector.sfx_deact_next.index = order.head
+            order.prepend(i, start_time, end_time)
 
-    schedule_auto_connector_sfx_events(normal_head)
-    schedule_auto_connector_sfx_events(critical_head)
+    for order in orders:
+        schedule_auto_connector_sfx_events(order.head, order.sort_starts, order.sort_ends)
 
 
-def schedule_auto_connector_sfx_events(list_head: int):
+def schedule_auto_connector_sfx_events(list_head: int, sort_starts: bool, sort_ends: bool):
     if list_head <= 0:
         return
 
@@ -342,13 +344,16 @@ def schedule_auto_connector_sfx_events(list_head: int):
     def deact_next(c):
         return c.sfx_deact_next
 
-    # O(N log N) merge sorts: one list ordered by activation time, one by deactivation time. Both
-    # start from the same head; the activation sort only rewrites sfx_act_next, leaving the
-    # sfx_deact_next chain (still headed at list_head) intact for the deactivation sort.
-    act_ref = sort_linked_entities(WatchConnector.at(list_head).ref(), get_value=act_time, get_next_ref=act_next).index
-    deact_ref = sort_linked_entities(
-        WatchConnector.at(list_head).ref(), get_value=deact_time, get_next_ref=deact_next
-    ).index
+    act_ref = list_head
+    deact_ref = list_head
+    if sort_starts:
+        act_ref = sort_linked_entities(
+            WatchConnector.at(list_head).ref(), get_value=act_time, get_next_ref=act_next
+        ).index
+    if sort_ends:
+        deact_ref = sort_linked_entities(
+            WatchConnector.at(list_head).ref(), get_value=deact_time, get_next_ref=deact_next
+        ).index
 
     # Two-pointer merge sweep through the activation/deactivation events in time order, reproducing
     # the original hold state machine exactly.
