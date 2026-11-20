@@ -58,6 +58,7 @@ from sekai.lib.layout import (
     current_layout_transform,
     identity_stage_transform,
 )
+from sekai.lib.level_config import LevelConfig
 from sekai.lib.note import (
     NoteEffectKind,
     NoteKind,
@@ -89,6 +90,7 @@ from sekai.lib.options import Options
 from sekai.lib.skin import NoteSpriteSet
 from sekai.lib.stage import (
     DivisionParity,
+    FrameInputGeometryContext,
     InputGeometry,
     InputGeometryContext,
     JudgeLineStyle,
@@ -1255,7 +1257,7 @@ class BaseNote(PlayArchetype):
     def visual_progress(self) -> float:
         return self.progress - self.visual_y_offset
 
-    def _basic_input_geometry(self, context: InputGeometryContext) -> InputGeometry:
+    def _basic_input_geometry(self, context: InputGeometryContext | FrameInputGeometryContext) -> InputGeometry:
         result = +InputGeometry
         if self.stage_ref.index > 0:
             result @= context.stage_geometry(self.stage_ref.get())
@@ -1268,7 +1270,7 @@ class BaseNote(PlayArchetype):
             result.transform @= self._basic_stage_transform_at(context.time)
         return result
 
-    def input_geometry(self, context: InputGeometryContext) -> InputGeometry:
+    def input_geometry(self, context: InputGeometryContext | FrameInputGeometryContext) -> InputGeometry:
         result = +InputGeometry
         if self.is_attached:
             head = self.attach_head_ref.get()
@@ -1751,9 +1753,23 @@ def compute_slide_input_bounds(ease_type: EaseType, head: BaseNote, tail: BaseNo
         t,
     )
     # Account for input offset by querying camera and stage geometry at the input timestamp.
-    context = InputGeometryContext.at(t)
-    head_geometry = head.input_geometry(context)
-    tail_geometry = tail.input_geometry(context)
+    layout = +LayoutTransform
+    head_geometry = +InputGeometry
+    tail_geometry = +InputGeometry
+    if (
+        LevelConfig.dynamic_stages
+        and t == offset_adjusted_time()
+        and FrameInputGeometryContext.should_reuse(input_manager.InputState.frame)
+    ):
+        shared_context = FrameInputGeometryContext.at(t, input_manager.InputState.frame)
+        layout @= shared_context.layout
+        head_geometry @= head.input_geometry(shared_context)
+        tail_geometry @= tail.input_geometry(shared_context)
+    else:
+        context = InputGeometryContext.at(t)
+        layout @= context.layout
+        head_geometry @= head.input_geometry(context)
+        tail_geometry @= tail.input_geometry(context)
     input_lane = lerp(head_geometry.lane, tail_geometry.lane, input_interp_frac)
     input_size = lerp(head.size, tail.size, input_interp_frac)
     input_mask = interpolate_visual_masks(
@@ -1788,7 +1804,7 @@ def compute_slide_input_bounds(ease_type: EaseType, head: BaseNote, tail: BaseNo
             input_interp_frac,
         )
     return compute_hitbox(
-        context.layout,
+        layout,
         input_lane,
         input_size,
         leniency,

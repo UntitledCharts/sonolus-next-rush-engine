@@ -8,6 +8,7 @@ from sonolus.script import runtime
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
 from sonolus.script.array import Array, Dim
 from sonolus.script.containers import VarArray
+from sonolus.script.globals import level_memory
 from sonolus.script.interval import Interval, clamp, interp, lerp, unlerp_clamped
 from sonolus.script.quad import Quad, QuadLike, Rect
 from sonolus.script.record import Record
@@ -435,32 +436,91 @@ class InputGeometryContext(Record):
             if cached.stage_index == stage.index:
                 result @= cached.geometry
                 return result
-
-        props = get_stage_input_props(stage, self.time)
-        result.lane = props.pivot_lane
-        result.stage_bounds = Interval(props.lane - props.width, props.lane + props.width)
-        result.mask.left = props.lane - props.width
-        result.mask.right = props.lane + props.width
-        result.mask.enabled = props.mask_notes
-        if props.mask_notes:
-            result.mask.stage_index = stage.index
-        result.y_offset = props.y_offset
-        result.transform @= compute_stage_transform(
-            self.layout,
-            props.rotate,
-            props.x_lane_translate,
-            props.y_lane_translate,
-            props.lane,
-            props.center_weight,
-            props.elevation,
-            props.rotation_center.start,
-            props.rotation_center.end,
-            props.rotation_center.progress,
-            props.rotation_center_x_offset,
-            props.rotation_center_y_offset,
-        )
+        _sample_stage_input_geometry(result, stage, self.layout, self.time)
         self.stages.append(StageInputGeometry(stage_index=stage.index, geometry=result))
         return result
+
+
+class FrameStageInputGeometry(Record):
+    frame: int
+    time: float
+    stage_index: int
+    geometry: InputGeometry
+
+
+FRAME_INPUT_STAGE_CACHE_SIZE = 8
+
+
+@level_memory
+class FrameInputCache:
+    layout_valid: bool
+    frame: int
+    requests: int
+    reuse: bool
+    time: float
+    layout: LayoutTransform
+    stages: Array[FrameStageInputGeometry, Dim[FRAME_INPUT_STAGE_CACHE_SIZE]]
+
+
+class FrameInputGeometryContext(Record):
+    frame: int
+    time: float
+    layout: LayoutTransform
+
+    @staticmethod
+    def should_reuse(frame: int) -> bool:
+        if FrameInputCache.frame != frame:
+            FrameInputCache.reuse = FrameInputCache.frame + 1 == frame and FrameInputCache.requests > 1
+            FrameInputCache.requests = 0
+            FrameInputCache.frame = frame
+            FrameInputCache.layout_valid = False
+        FrameInputCache.requests += 1
+        return FrameInputCache.reuse
+
+    @staticmethod
+    def at(t: float, frame: int) -> FrameInputGeometryContext:
+        if not FrameInputCache.layout_valid or FrameInputCache.time != t:
+            FrameInputCache.layout @= camera_layout_transform_at_time(t)
+            FrameInputCache.time = t
+            FrameInputCache.layout_valid = True
+        return FrameInputGeometryContext(frame=frame, time=t, layout=FrameInputCache.layout)
+
+    def stage_geometry(self, stage: DynamicStageLike) -> InputGeometry:
+        index = stage.index
+        entry = FrameInputCache.stages[index % FRAME_INPUT_STAGE_CACHE_SIZE]
+        if entry.stage_index != index or entry.frame != self.frame or entry.time != self.time:
+            _sample_stage_input_geometry(entry.geometry, stage, self.layout, self.time)
+            entry.stage_index = index
+            entry.frame = self.frame
+            entry.time = self.time
+        return +entry.geometry
+
+
+def _sample_stage_input_geometry(
+    result: InputGeometry, stage: DynamicStageLike, layout: LayoutTransform, t: float
+) -> None:
+    props = get_stage_input_props(stage, t)
+    result.lane = props.pivot_lane
+    result.stage_bounds = Interval(props.lane - props.width, props.lane + props.width)
+    result.mask.left = props.lane - props.width
+    result.mask.right = props.lane + props.width
+    result.mask.enabled = props.mask_notes
+    result.mask.stage_index = stage.index if props.mask_notes else 0
+    result.y_offset = props.y_offset
+    result.transform @= compute_stage_transform(
+        layout,
+        props.rotate,
+        props.x_lane_translate,
+        props.y_lane_translate,
+        props.lane,
+        props.center_weight,
+        props.elevation,
+        props.rotation_center.start,
+        props.rotation_center.end,
+        props.rotation_center.progress,
+        props.rotation_center_x_offset,
+        props.rotation_center_y_offset,
+    )
 
 
 def interpolate_visual_masks(head: VisualMask, tail: VisualMask, frac: float) -> VisualMask:
