@@ -126,7 +126,7 @@ export const siriusToLeveldata = (sirius: LevelData, offset = 0): LevelData => {
         )
     }
     const notes = new Map<LevelDataEntity, LevelDataEntity>()
-    const starts = new Map<string, LevelDataEntity[]>()
+    const starts = new Map<string, Map<number, LevelDataEntity[]>>()
     const midpoints = new Map<string, LevelDataEntity[]>()
     const simNotes = new Map<number, LevelDataEntity[]>()
     const addSimNote = (source: LevelDataEntity, note: LevelDataEntity): void => {
@@ -137,12 +137,16 @@ export const siriusToLeveldata = (sirius: LevelData, offset = 0): LevelData => {
     }
     for (const source of sirius.entities) {
         let archetype = startArchetypes.get(source.archetype)
-        if (archetype) {
+        if (archetype && !notes.has(source)) {
             const key = geometryKey(source)
-            const atLane = starts.get(key) ?? []
-            atLane.push(source)
+            const beat = getValue(source, 'beat')
+            const atLane = starts.get(key) ?? new Map<number, LevelDataEntity[]>()
+            const atBeat = atLane.get(beat) ?? []
+            atBeat.push(source)
+            atLane.set(beat, atBeat)
             starts.set(key, atLane)
-        } else {
+        }
+        if (!archetype) {
             switch (source.archetype) {
                 case 'Sirius Normal Note':
                     archetype = 'NormalTapNote'
@@ -186,11 +190,40 @@ export const siriusToLeveldata = (sirius: LevelData, offset = 0): LevelData => {
             addSimNote(source, note)
         }
     }
+    for (const atLane of starts.values()) {
+        for (const atBeat of atLane.values()) atBeat.reverse()
+    }
+    const unorderedMidpoints = new Set<LevelDataEntity[]>()
     for (const atLane of midpoints.values()) {
         atLane.sort((a, b) => getValue(a, 'beat') - getValue(b, 'beat'))
+        if (atLane.some((point) => Number.isNaN(getValue(point, 'beat')))) {
+            unorderedMidpoints.add(atLane)
+        }
     }
 
-    const usedStarts = new Set<LevelDataEntity>()
+    function getHoldMidpoints(key: string, startBeat: number, endBeat: number): LevelDataEntity[] {
+        const points = midpoints.get(key)
+        if (!points || !(startBeat < endBeat)) return []
+        if (unorderedMidpoints.has(points)) {
+            return points.filter((note) => {
+                const beat = getValue(note, 'beat')
+                return startBeat < beat && beat < endBeat
+            })
+        }
+        let first = 0
+        let last = points.length
+        while (first < last) {
+            const mid = (first + last) >> 1
+            if (getValue(points[mid], 'beat') <= startBeat) first = mid + 1
+            else last = mid
+        }
+        const result: LevelDataEntity[] = []
+        for (let i = first; i < points.length && getValue(points[i], 'beat') < endBeat; i++) {
+            result.push(points[i])
+        }
+        return result
+    }
+
     const previousHolds = new Map<string, { end: number; critical: boolean }>()
     const ends = sirius.entities
         .filter((entity) => endArchetypes.has(entity.archetype))
@@ -205,12 +238,11 @@ export const siriusToLeveldata = (sirius: LevelData, offset = 0): LevelData => {
             continue
         }
         const key = geometryKey(source)
-        const startSource = starts
-            .get(key)
-            ?.find((note) => !usedStarts.has(note) && getValue(note, 'beat') === startBeat)
-        const points = (midpoints.get(key) ?? []).filter(
-            (note) => getValue(note, 'beat') > startBeat && getValue(note, 'beat') < endBeat,
-        )
+        const startCandidates = Number.isNaN(startBeat)
+            ? undefined
+            : starts.get(key)?.get(startBeat)
+        const startSource = startCandidates?.pop()
+        const points = getHoldMidpoints(key, startBeat, endBeat)
         const previous = previousHolds.get(key)
         const critical = startSource
             ? startSource.archetype.includes('Critical')
@@ -223,7 +255,6 @@ export const siriusToLeveldata = (sirius: LevelData, offset = 0): LevelData => {
         const head = startSource
             ? notes.get(startSource)!
             : createNote('AnchorNote', source, startBeat, false)
-        if (startSource) usedStarts.add(startSource)
         setValue(head, 'segmentKind', critical ? 2 : 1)
 
         // Scratch tails can extend beyond the hold body. Keep an unscored body
