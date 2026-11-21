@@ -35,6 +35,11 @@ from sekai.lib.skin import (
 AP_EFFECT_SPEED = 4.1887903
 
 COMBO_NUMBER_FALLBACK_SCALE = 0.67
+COMBO_NUMBER_X = 6.217
+COMBO_LABEL_Y = 1.513
+COMBO_LABEL_HEIGHT = 77 / hud.REFERENCE_PIXELS_PER_UNIT
+CUSTOM_SCORE_SCALE = 0.4
+CUSTOM_SCORE_DIGIT_ADVANCE = (109 + 2) / hud.REFERENCE_PIXELS_PER_UNIT
 
 
 @level_memory
@@ -59,7 +64,7 @@ def init_fixed_ui_layout():
     combo_scale = ui.combo_config.scale
     judgment_scale = ui.judgment_config.scale
     FixedUiLayout.combo_label = layout_center_ui(
-        Vec2(6.241, 1.513), w=(192 / 108) * combo_scale / 2, h=(77 / 108) * combo_scale / 2
+        Vec2(6.241, COMBO_LABEL_Y), w=(192 / 108) * combo_scale / 2, h=COMBO_LABEL_HEIGHT * combo_scale / 2
     )
     FixedUiLayout.judgment_accuracy = layout_center_ui(
         Vec2(0, -1.17 + 0.58), w=(164 / 108) * 0.8 * judgment_scale / 2, h=(50 / 108) * 0.8 * judgment_scale / 2
@@ -93,8 +98,8 @@ class ComboNumberCache(Record):
         digit_count = len(self.digits)
         total_width = digit_count * FixedUiLayout.combo_w + (digit_count - 1) * FixedUiLayout.combo_gap
         total_width2 = digit_count * FixedUiLayout.combo_w2 + (digit_count - 1) * FixedUiLayout.combo_gap2
-        self.start_x = 6.217 - total_width / 2
-        self.start_x2 = 6.217 - total_width2 / 2
+        self.start_x = COMBO_NUMBER_X - total_width / 2
+        self.start_x2 = COMBO_NUMBER_X - total_width2 / 2
 
 
 @level_memory
@@ -186,7 +191,7 @@ def draw_combo_number(draw_time: float, ap: bool, cache: ComboNumberCache):
 
     ui = runtime_ui()
 
-    screen_center = Vec2(x=6.217, y=0.787 - 0.18)
+    screen_center = Vec2(x=COMBO_NUMBER_X, y=0.787 - 0.18)
 
     s = 0.6 + 0.4 * unlerp_clamped(draw_time, draw_time + 0.112, time())
     s2_start = FixedUiLayout.combo_s2_start
@@ -262,20 +267,13 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
             n_int += 1
     digit_count = n_int + 6
 
-    screen_center = Vec2(x=6.217, y=2.0)
-
-    fallback_scale = COMBO_NUMBER_FALLBACK_SCALE if ActiveSkin.combo_number.is_fallback else 1.0
-    base_h = (150 / 108) * ui.combo_config.scale * 0.4 * fallback_scale
-    base_w = base_h
-
-    s = 1.0
-
+    w = FixedUiLayout.combo_w * CUSTOM_SCORE_SCALE
+    h = FixedUiLayout.combo_h * CUSTOM_SCORE_SCALE
+    digit_gap = FixedUiLayout.combo_gap * CUSTOM_SCORE_SCALE
+    if not ActiveSkin.combo_number.is_fallback:
+        digit_gap = max(digit_gap, CUSTOM_SCORE_DIGIT_ADVANCE * ui.combo_config.scale * CUSTOM_SCORE_SCALE - w)
     a = ui.combo_config.alpha
     a3 = ui.combo_config.alpha * (sin(time() * AP_EFFECT_SPEED) + 1) * 0.5
-
-    h, w = base_h, base_w
-
-    digit_gap = 0.95 * ui.combo_config.scale * 0.4 - w
 
     s_int = 1.0
     s_dot = 0.5
@@ -290,8 +288,11 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
     total_gap_factor = (n_int - 1) * s_int + (s_int + s_dot) + s_int + (s_int + s_dec) / 2 + s_dec + (s_dec + s_pct) / 2
 
     total_width = (total_w_factor * w) + (total_gap_factor * digit_gap)
-
-    start_x = screen_center.x - total_width / 2
+    aspect = aspect_ratio()
+    available_width = 2 * (aspect / hud.hud_unit(aspect) - COMBO_NUMBER_X)
+    scale = available_width / total_width if total_width > available_width else 1.0
+    start_x = COMBO_NUMBER_X - total_width / 2
+    center_y = COMBO_LABEL_Y + (COMBO_LABEL_HEIGHT * ui.combo_config.scale + h * scale) / 2
 
     drawing_combo = ComboNumberLayout(
         core=CoreConfig(
@@ -302,11 +303,11 @@ def draw_score_number(ap: bool, score: float, alpha: float = 1.0):
         ),
         design=ScoreDesignConfig(s_int=s_int, s_dot=s_dot, s_dec=s_dec, s_pct=s_pct),
         common=CommonConfig(
-            center_x=screen_center.x,
-            center_y=screen_center.y,
+            center_x=COMBO_NUMBER_X,
+            center_y=center_y,
         ),
         alpha=AlphaConfig(a=a * alpha, a2=0, a3=a3 * alpha),
-        layout1=LayoutConfig(width=w, gap=digit_gap, scale=s, height=h, start_x=start_x),
+        layout1=LayoutConfig(width=w, gap=digit_gap, scale=scale, height=h, start_x=start_x),
         layout2=LayoutConfig(width=0, gap=0, scale=0, height=0, start_x=0),
     )
     drawing_combo.draw_number(z=0, z1=get_z_alt(LAYER_JUDGMENT).tuple, z2=get_z_alt(LAYER_JUDGMENT, 1).tuple)
@@ -362,7 +363,8 @@ class ComboNumberLayout(Record):
 
         current_x1 = self.layout1.start_x
 
-        baseline_y1 = self.common.center_y + self.layout1.height / 2
+        baseline_y1 = self.common.center_y - self.layout1.height / 2
+        fallback = ActiveSkin.combo_number.is_fallback
 
         n_int = self.core.digit_count - 6 if self.core.is_score else 0
 
@@ -418,8 +420,10 @@ class ComboNumberLayout(Record):
 
                 digit_center_x = current_x1 + layout_w1 / 2
 
-                unscaled_b1 = baseline_y1
-                unscaled_t1 = baseline_y1 - draw_h1
+                baseline_offset = 0.5 if fallback else font_metrics.COMBO_BASELINE_OFFSETS[digit]
+                center_y = baseline_y1 + draw_h1 * baseline_offset
+                unscaled_t1 = center_y - draw_h1 / 2
+                unscaled_b1 = center_y + draw_h1 / 2
 
                 current_x1 += layout_w1 + this_gap1
 
@@ -450,8 +454,8 @@ class ComboNumberLayout(Record):
                 unscaled_t2 = self.common.center_y - self.layout2.height / 2
                 unscaled_b2 = self.common.center_y + self.layout2.height / 2
 
-            if not ActiveSkin.combo_number.is_fallback and digit < 10:
-                for shadow in range(2):
+            if not fallback and digit < 10:
+                for shadow in range(1 if self.core.is_score else 2):
                     width = final_draw_w1 if shadow == 0 else final_draw_w2
                     height = (unscaled_b1 - unscaled_t1) if shadow == 0 else (unscaled_b2 - unscaled_t2)
                     dx = width * font_metrics.COMBO_DX[digit]
@@ -483,7 +487,7 @@ class ComboNumberLayout(Record):
 
             digit_layout2 = self.layout_combo_number(l=l2, r=r2, t=t2, b=b2)
 
-            if not self.core.ap and Options.ap_effect and not ActiveSkin.combo_number.is_fallback:
+            if not self.core.ap and Options.ap_effect and not fallback:
                 ActiveSkin.combo_number.get_sprite(combo=digit, combo_type=ComboType.GLOW).draw(
                     quad=digit_layout, z=z2, a=self.alpha.a3
                 )
