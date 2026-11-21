@@ -656,7 +656,10 @@ class SlideManager(PlayArchetype):
             touch = touches[index]
             if bounds.contains_point(touch.position):
                 if not touch.ended:
-                    input_manager.disallow_empty(touch)
+                    if ended >= 0:
+                        input_manager.disallow_empty(touches[ended])
+                    else:
+                        input_manager.disallow_empty(touch)
                     return True
                 if ended < 0:
                     ended = index

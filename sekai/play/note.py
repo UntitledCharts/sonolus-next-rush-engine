@@ -928,7 +928,9 @@ class BaseNote(PlayArchetype):
         if self.should_do_delayed_trigger():
             return
         has_touch = False
-        for touch in input_manager.processed_touches():
+        touches = input_manager.processed_touches()
+        for i in range(len(touches) - 1, -1, -1):
+            touch = touches[i]
             if (
                 self.kind in (NoteKind.NORM_TAIL_FLICK, NoteKind.CRIT_TAIL_FLICK)
                 and touch.started
@@ -939,7 +941,7 @@ class BaseNote(PlayArchetype):
                 continue
             input_manager.disallow_empty(touch)
             has_touch = True
-            # Keep going so we disallow empty on all touches that are in the hitbox.
+            break
         if not has_touch:
             return
         if offset_adjusted_time() >= self.target_time:
