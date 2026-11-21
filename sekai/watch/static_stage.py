@@ -75,7 +75,9 @@ class WatchScheduledLaneEffect(WatchArchetype):
         if is_skip():
             return
         transform = +IDENTITY_STAGE_SCREEN_TRANSFORM
+        y_offset = 0.0
         if self.stage_ref.index > 0:
             props = get_stage_props(self.stage_ref.get(), self.target_time, right_limit=True)
             transform @= props.stage_transform().to_screen_transform()
-        play_lane_particle(self.lane, transform)
+            y_offset = props.y_offset
+        play_lane_particle(self.lane, transform, y_offset=y_offset)

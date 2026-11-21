@@ -2000,10 +2000,10 @@ def get_score_rank(score):
         return ScoreRankType.D
 
 
-def play_lane_hit_effects(lane: float, sfx: bool = True, *, transform: StageScreenTransform):
+def play_lane_hit_effects(lane: float, sfx: bool = True, *, transform: StageScreenTransform, y_offset: float = 0.0):
     if sfx or not Options.prevent_empty_lane_sfx:
         play_lane_sfx(lane)
-    play_lane_particle(lane, transform)
+    play_lane_particle(lane, transform, y_offset=y_offset)
 
 
 def play_lane_sfx(lane: float):
@@ -2016,7 +2016,7 @@ def schedule_lane_sfx(lane: float, target_time: float):
         Effects.stage.schedule(target_time, SFX_DISTANCE)
 
 
-def play_lane_particle(lane: float, transform: StageScreenTransform):
+def play_lane_particle(lane: float, transform: StageScreenTransform, *, y_offset: float = 0.0):
     if Options.lane_effect_enabled:
-        layout = transform.transform_quad(layout_particle_lane(lane, 0.5, compensate_overshoot=False))
+        layout = transform.transform_quad(layout_particle_lane(lane, 0.5, y_offset, compensate_overshoot=False))
         emit_empty_lane_particle(ActiveParticles.lane, layout, 0.3 / Options.effect_animation_speed, lane)

@@ -5,6 +5,7 @@ from sonolus.script.array import Array, Dim
 from sonolus.script.containers import ArrayMap, ArraySet, VarArray
 from sonolus.script.globals import level_memory
 from sonolus.script.interval import clamp
+from sonolus.script.record import Record
 from sonolus.script.runtime import Touch, screen, time, touches
 from sonolus.script.values import alloc
 
@@ -82,6 +83,11 @@ def select_tap_candidate(
     return result, score
 
 
+class EmptyInputLane(Record):
+    stage_index: int
+    lane_index: int
+
+
 @level_memory
 class InputState:
     frame: int
@@ -89,7 +95,7 @@ class InputState:
     disallowed_empty_touches: ArraySet[int, Dim[32]]
     recent_note_input_times: ArrayMap[int, float, Dim[32]]
     last_empty_frame: int
-    last_empty_lanes: ArrayMap[int, float, Dim[32]]
+    last_empty_lanes: ArrayMap[int, EmptyInputLane, Dim[32]]
 
 
 def preprocess_touches():
@@ -129,15 +135,17 @@ def is_allowed_empty(touch: Touch) -> bool:
     return touch.id not in InputState.disallowed_empty_touches
 
 
-def register_empty_input(touch: Touch, lane: float) -> bool:
-    disallow_empty(touch)
+def register_empty_input(touch: Touch, lane_index: int, stage_index: int = 0) -> bool:
     if not touch.started and InputState.last_empty_frame < InputState.frame - 1:
         return False
     InputState.last_empty_frame = InputState.frame
     lanes = InputState.last_empty_lanes
-    play_effect = touch.started or (touch.id in lanes and lanes[touch.id] != lane)
-    lanes[touch.id] = lane
-    return play_effect
+    changed_lane = lane_index != 0
+    if not touch.started and touch.id in lanes:
+        last_lane = lanes[touch.id]
+        changed_lane = last_lane.stage_index != stage_index or last_lane.lane_index != lane_index
+    lanes[touch.id] = EmptyInputLane(stage_index=stage_index, lane_index=lane_index)
+    return touch.started or changed_lane
 
 
 def is_allowed_release(touch: Touch, target) -> bool:

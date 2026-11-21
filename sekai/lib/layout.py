@@ -41,6 +41,8 @@ NOTE_SLIM_EDGE_W = 0.125
 
 NOTE_REFERENCE_LANES = 12
 NOTE_REFERENCE_LANE_WIDTH = 1.19
+JUDGMENT_SIDE_MARGIN = 1.8 / NOTE_REFERENCE_LANE_WIDTH
+JUDGMENT_HEIGHT = 3.5 / NOTE_REFERENCE_LANE_WIDTH
 NOTE_REFERENCE_PIXELS_PER_UNIT = 108
 NOTE_SPAN_WIDTH = 1.2178
 NOTE_BASE_WIDTH = 2.06
@@ -1415,14 +1417,40 @@ def pre_rotation_vec_at(lane: float, travel: float = 1.0) -> Vec2:
     )
 
 
-def touch_to_lane(pos: Vec2, transform: StageScreenTransform) -> float:
-    unrotated = transform.apply_inverse(pos).rotate(DynamicLayout.rotate)
-    y_raw = (unrotated.y - DynamicLayout.t) / DynamicLayout.h_scale
-    x_raw = (unrotated.x - DynamicLayout.x_translate) / DynamicLayout.w_scale
-    width = tilt_width_factor(y_raw)
-    if -1e-6 < width < 1e-6:
-        width = 1e-6 if width >= 0 else -1e-6
-    return x_raw / width
+class JudgmentLaneInput(Record):
+    first_point: Vec2
+    axis: Vec2
+    lane_width: float
+    last_lane: int
+    side_margin: float
+    height: float
+
+    @staticmethod
+    def at(first: float, last: float, y_offset: float, transform: StageScreenTransform) -> JudgmentLaneInput:
+        travel = approach(1 - y_offset)
+        first_point = transform.apply(transformed_vec_at(first, travel))
+        step = transform.apply(transformed_vec_at(first + 1, travel)) - first_point
+        return JudgmentLaneInput(
+            first_point=first_point,
+            axis=step.normalize_or_zero(),
+            lane_width=step.magnitude,
+            last_lane=round(last - first),
+            side_margin=JUDGMENT_SIDE_MARGIN * DynamicLayout.w_scale,
+            height=JUDGMENT_HEIGHT * Layout.w_scale,
+        )
+
+    def lane_at(self, position: Vec2) -> tuple[int, float]:
+        delta = position - self.first_point
+        along = delta.dot(self.axis)
+        above = delta.dot(self.axis.orthogonal())
+        end = self.last_lane * self.lane_width
+        lane = -1
+        distance_squared = 0.0
+        if self.lane_width > 0 and above <= self.height and -self.side_margin <= along <= end + self.side_margin:
+            lane = clamp(round(along / self.lane_width), 0, self.last_lane)
+            distance_past_edge = along - clamp(along, 0, end)
+            distance_squared = above**2 + distance_past_edge**2
+        return lane, distance_squared
 
 
 def visible_lane_range_at(depth: float, transform: StageScreenTransform) -> tuple[float, float]:
@@ -2784,7 +2812,7 @@ def compute_hitbox(
     *,
     stage_transform: StageScreenTransform,
     stage_bounds: Interval = DEFAULT_STAGE_BOUNDS,
-    height_limit: float = 3.5 / 1.19,
+    height_limit: float = JUDGMENT_HEIGHT,
 ) -> Hitbox:
     tilt = transform.stage_tilt
     travel = approach_at_tilt(1 - y_offset, tilt)
@@ -2821,8 +2849,8 @@ def compute_hitbox(
         last_point = stage_transform.apply(
             Vec2(last * width_factor * lane_w + transform.x_translate, note_y).rotate(rot)
         )
-        outer_left = first_point - horizontal * (1.8 / 1.19 * lane_w)
-        outer_right = last_point + horizontal * (1.8 / 1.19 * lane_w)
+        outer_left = first_point - horizontal * (JUDGMENT_SIDE_MARGIN * lane_w)
+        outer_right = last_point + horizontal * (JUDGMENT_SIDE_MARGIN * lane_w)
         if lane - size - leniency <= first <= lane + size + leniency or (bound_l - outer_left).dot(horizontal) < 0:
             bound_l @= outer_left
         if lane - size - leniency <= last <= lane + size + leniency or (bound_r - outer_right).dot(horizontal) > 0:
@@ -2857,7 +2885,7 @@ def compute_hitbox_at_time(
     *,
     stage_transform: StageScreenTransform,
     stage_bounds: Interval = DEFAULT_STAGE_BOUNDS,
-    height_limit: float = 3.5 / 1.19,
+    height_limit: float = JUDGMENT_HEIGHT,
 ) -> Hitbox:
     return compute_hitbox(
         camera_layout_transform_at_time(target_time),
@@ -2878,10 +2906,6 @@ def segment_closeness_score(p: Vec2, seg: HitboxTarget) -> float:
         return -(p - seg.l).magnitude
     t = clamp((p - seg.l).dot(d) / length_squared, 0.0, 1.0)
     return -(p - (seg.l + d * t)).magnitude
-
-
-def layout_lane_area(l: float, r: float) -> Quad:
-    return perspective_rect(l, r, LANE_T, LANE_B)
 
 
 def iter_slot_lanes(lane: float, size: float, pivot_lane: float = 0.0, half_offset: bool = False):

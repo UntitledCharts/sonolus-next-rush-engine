@@ -21,14 +21,15 @@ from sekai.lib.baseevent import BaseEvent, init_event_list
 from sekai.lib.ease import EaseType
 from sekai.lib.events import Fever, draw_judgment_effect
 from sekai.lib.layout import (
+    IDENTITY_STAGE_SCREEN_TRANSFORM,
+    JudgmentLaneInput,
     StageRotationCenter,
+    StageScreenTransform,
     StageTransform,
     StageTransformAnchor,
     ZoomVerticalAlign,
     identity_stage_transform,
-    layout_lane_area,
     preempt_time,
-    touch_to_lane,
 )
 from sekai.lib.level_config import LevelConfig
 from sekai.lib.note_style import NoteStyle
@@ -48,14 +49,12 @@ from sekai.lib.stage import (
     get_stage_props,
     get_start_time,
     initialize_stage_note_visibility,
-    play_lane_hit_effects,
     stage_y_offset_bounds,
     update_prepared_stage_props,
 )
 from sekai.play import input_manager
-from sekai.play.common import PlayLevelMemory
 from sekai.play.events import SkillActive
-from sekai.play.static_stage import StageMemory
+from sekai.play.static_stage import EmptyInputCandidate, StageMemory
 
 
 class CameraChange(PlayArchetype, BaseEvent):
@@ -255,33 +254,29 @@ class DynamicStage(PlayArchetype):
             rightmost = p.pivot_lane + 0.5 + floor(hi - p.pivot_lane - 0.5)
         if leftmost > rightmost:
             return
-        has_transform = p.has_transform()
-        transform = +StageTransform
-        if has_transform:
-            transform @= self.visual_transform
-        else:
-            transform @= identity_stage_transform()
-        screen_transform = transform.to_screen_transform()
-        total_hitbox = screen_transform.transform_quad(layout_lane_area(leftmost - 1.5, rightmost + 1.5))
-        empty_lanes = StageMemory.empty_lanes
-        for touch in input_manager.processed_touches():
-            if not total_hitbox.contains_point(touch.position):
-                continue
+        bounds = JudgmentLaneInput.at(leftmost, rightmost, p.y_offset, self.empty_lane_transform())
+        frame = input_manager.InputState.frame
+        for i, touch in enumerate(input_manager.processed_touches()):
             if not input_manager.is_allowed_empty(touch):
                 continue
-            lane = touch_to_lane(touch.position, screen_transform)
-            rel = lane - p.pivot_lane
-            if half_offset:
-                rounded_lane = clamp(p.pivot_lane + round(rel), lo, hi)
-            else:
-                rounded_lane = clamp(p.pivot_lane + round(rel - 0.5) + 0.5, lo, hi)
-            if input_manager.register_empty_input(touch, rounded_lane):
-                play_lane_hit_effects(
-                    rounded_lane, sfx=time() > PlayLevelMemory.last_note_sfx_time + 0.6, transform=screen_transform
+            lane_index, distance = bounds.lane_at(touch.position)
+            if lane_index < 0:
+                continue
+            candidate = StageMemory.empty_input_candidates[i]
+            if candidate.frame != frame or distance < candidate.distance_squared:
+                candidate @= EmptyInputCandidate(
+                    frame=frame,
+                    stage_index=self.index,
+                    lane_index=lane_index,
+                    lane=leftmost + lane_index,
+                    distance_squared=distance,
                 )
-                if not empty_lanes.is_full():
-                    empty_lanes.append(rounded_lane)
-                    StageMemory.empty_lane_stages.append(self.index)
+
+    def empty_lane_transform(self) -> StageScreenTransform:
+        result = +IDENTITY_STAGE_SCREEN_TRANSFORM
+        if self.props.has_transform():
+            result @= self.visual_transform.to_screen_transform()
+        return result
 
     def update_parallel(self):
         t = time()
