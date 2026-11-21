@@ -1634,16 +1634,7 @@ def layout_hidden_cover(l: float = -6, r: float = 6) -> Quad:
 
 
 def layout_custom_tag() -> Quad:
-    h = -0.0264 / aspect_ratio() ** 2 + 0.0733
-    w = h * 4.465
-    x = (8.711111 * aspect_ratio() / 2.045 / 5) + (0.5936 / aspect_ratio() ** 2 - 0.4339)
-    y = (-4.9 / 5) + (-0.0885 / aspect_ratio() ** 2 + 0.1498)
-    return Quad(
-        bl=Vec2(x - w, y - h),
-        br=Vec2(x + w, y - h),
-        tl=Vec2(x - w, y + h),
-        tr=Vec2(x + w, y + h),
-    )
+    return v3_hud_rect(hud.AUTO_TAG_X, hud.AUTO_TAG_Y, hud.AUTO_TAG_WIDTH, hud.AUTO_TAG_HEIGHT, right=True, bottom=True)
 
 
 def v3_hud_anchor(right: bool = False) -> Vec2:
@@ -1657,8 +1648,12 @@ def v3_hud_anchor(right: bool = False) -> Vec2:
     return Vec2(x, y)
 
 
-def v3_hud_rect(x: float, y: float, w: float, h: float, scale: float = 1, right: bool = False) -> Quad:
+def v3_hud_rect(
+    x: float, y: float, w: float, h: float, scale: float = 1, right: bool = False, *, bottom: bool = False
+) -> Quad:
     anchor = v3_hud_anchor(right)
+    if bottom:
+        anchor.y = -anchor.y
     unit = hud.hud_unit(aspect_ratio()) * scale
     center = anchor + Vec2(x, y) * unit
     return Quad(
