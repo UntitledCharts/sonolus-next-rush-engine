@@ -181,6 +181,7 @@ class BaseNote(PlayArchetype):
     tick_head_ref: EntityRef[BaseNote] = shared_memory()
     tick_tail_ref: EntityRef[BaseNote] = shared_memory()
     slide_end_input: bool = shared_memory()
+    slide_end_frame: int = shared_memory()
     tick_pending: bool = entity_memory()
     late_miss_pending: bool = entity_memory()
     flick_touch_ids: VarArray[int, Dim[8]] = entity_memory()
@@ -391,14 +392,22 @@ class BaseNote(PlayArchetype):
             if self.tick_pending:
                 self.fail_late(0.125)
             elif offset_adjusted_time() >= self.target_time:
+                if self.kind == NoteKind.HIDE_TICK:
+                    tail = self.connector_tick_tail()
+                    if tail.index > 0 and tail.get().slide_end_input:
+                        self.complete_tick()
+                        return
                 self.tick_pending = True
             return
-        if self.is_tail and time() > self.input_interval.end:
-            self.slide_end_input = False
+        if self.is_trace and self.best_touch_matches_direction and offset_adjusted_time() >= self.target_time:
+            self.complete()
+            return
         if self.is_scored and self.uses_frame_miss:
             if self.late_miss_pending:
                 if is_head(self.kind):
                     self.active_connector_info.head_judgment_frame = -input_manager.InputState.frame
+                if self.is_tail:
+                    self.slide_end_frame = input_manager.InputState.frame
                 self.fail_late()
                 return
             after = (
@@ -408,6 +417,8 @@ class BaseNote(PlayArchetype):
                 else JUDGMENT_LAST_TIME
             )
             if time() > self.target_time + input_offset() + after:
+                if self.is_tail:
+                    self.slide_end_input = False
                 self.late_miss_pending = True
                 return
         if (
@@ -420,11 +431,6 @@ class BaseNote(PlayArchetype):
             and self.finish_flick(offset_adjusted_time())
         ):
             return
-        is_just_reached = offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time()
-        if is_just_reached and self.best_touch_matches_direction and self.is_trace:
-            self.complete()
-            return
-
         if self.kind == NoteKind.HIDE_DAMAGE_TICK and self.is_scored and time() in self.input_interval:
             self.hitbox.bounds @= self.damage_tick_input_bounds(offset_adjusted_time())
 
@@ -526,7 +532,7 @@ class BaseNote(PlayArchetype):
             return
         if self.is_scored and self.is_connector_tick:
             self.update_connector_tick_parallel()
-            if self.despawn or self.tick_pending:
+            if self.kind == NoteKind.HIDE_TICK or self.despawn or self.tick_pending:
                 return
         if self.is_scored and time() > self.input_interval.end:
             if not self.uses_frame_miss:
@@ -536,7 +542,7 @@ class BaseNote(PlayArchetype):
         if time() < self.visual_start_time:
             return
         if not self.is_connector_tick and self.tick_trigger():
-            self.complete_parallel()
+            self.complete_tick()
             return
         if time() > self.input_interval.end:
             self.handle_late_miss()
@@ -615,30 +621,48 @@ class BaseNote(PlayArchetype):
             ) or (tail.index > 0 and (tail.get().is_despawned or tail.get().pending_despawn))
         return False
 
-    def update_connector_tick_parallel(self):
-        head = +EntityRef[BaseNote]
+    def connector_tick_tail(self) -> EntityRef[BaseNote]:
         tail = +EntityRef[BaseNote]
         if self.is_attached:
-            head @= self.attach_head_ref.get().tick_head_ref
             tail @= self.attach_head_ref.get().tick_tail_ref
         else:
-            head @= self.tick_head_ref
             tail @= self.tick_tail_ref
+        return tail
+
+    def update_connector_tick_parallel(self):
+        head = +EntityRef[BaseNote]
+        if self.is_attached:
+            head @= self.attach_head_ref.get().tick_head_ref
+        else:
+            head @= self.tick_head_ref
+        tail = self.connector_tick_tail()
         if tail.index > 0:
             end = tail.get()
-            if end.is_despawned or end.pending_despawn:
-                if self.kind != NoteKind.HIDE_TICK or end.slide_end_input:
-                    self.complete_parallel()
-                else:
-                    self.fail_late(0.125)
-                return
-            if self.tick_pending and self.kind == NoteKind.HIDE_TICK and end.slide_end_input:
-                self.complete_parallel()
+            if self.kind == NoteKind.HIDE_TICK:
+                end_frame = end.slide_end_frame
+                if end_frame == 0 and (
+                    end.is_despawned
+                    or end.pending_despawn
+                    or (not end.is_scored and offset_adjusted_time() >= end.target_time)
+                ):
+                    end_frame = input_manager.InputState.frame
+                if end_frame > 0:
+                    held = False
+                    if head.index > 0:
+                        hold_frame = head.get().active_connector_info.hold_input_frame
+                        held = hold_frame > 0 and end_frame - 1 <= hold_frame <= end_frame
+                    if held or end.slide_end_input:
+                        self.complete_tick()
+                    else:
+                        self.fail_late(0.125)
+                    return
+            elif end.is_despawned or end.pending_despawn:
+                self.complete_tick()
                 return
         if self.tick_pending and head.index > 0:
             info = head.get().active_connector_info
             if info.is_active and is_fake_active_connector(info.connector_kind):
-                self.complete_parallel()
+                self.complete_tick()
 
     def connector_tick_input_bounds(self) -> Quad:
         head = +EntityRef[BaseNote]
@@ -945,13 +969,12 @@ class BaseNote(PlayArchetype):
         if not has_touch:
             return
         if offset_adjusted_time() >= self.target_time:
-            if offset_adjusted_time() - delta_time() <= self.target_time <= offset_adjusted_time():
-                self.complete()
-            else:
-                self.judge(offset_adjusted_time())
+            self.complete()
         else:
             self.best_touch_time = offset_adjusted_time()
             self.best_touch_matches_direction = True
+            if self.is_tail:
+                self.slide_end_input = True
 
     def handle_trace_flick_input(self):
         for touch in input_manager.processed_touches():
@@ -984,6 +1007,10 @@ class BaseNote(PlayArchetype):
         if self.is_connector_tick:
             if not self.tick_pending:
                 return
+            if self.kind == NoteKind.HIDE_TICK:
+                tail = self.connector_tick_tail()
+                if tail.index > 0 and tail.get().slide_end_frame > 0:
+                    return
             head_ref = +self.active_head_ref
             if head_ref.index <= 0 and self.is_attached:
                 head_ref @= self.attach_head_ref.get().tick_head_ref
@@ -1169,6 +1196,8 @@ class BaseNote(PlayArchetype):
         window = self.judgment_window
         judgment = window.judge(actual_time, self.target_time, wrong_way=wrong_way)
         error = window.bad.clamp(actual_time - self.target_time)
+        if self.is_tail and judgment == JudgmentType.BAD:
+            self.slide_end_input = True
         if SkillActive.judgment and judgment in (JudgmentType.GREAT, JudgmentType.GOOD):
             judgment = JudgmentType.PERFECT
         self.apply_judgment(judgment, error)
@@ -1198,7 +1227,7 @@ class BaseNote(PlayArchetype):
         self.should_play_hit_effects = True
         self.post_judge()
 
-    def complete_parallel(self):
+    def complete_tick(self):
         self.apply_judgment(JudgmentType.JUST_PERFECT, 0.0)
         self.despawn = True
         self.should_play_hit_effects = True
@@ -1229,7 +1258,8 @@ class BaseNote(PlayArchetype):
 
     def post_judge(self):
         if self.is_tail:
-            self.slide_end_input = True
+            self.slide_end_input = self.slide_end_input or self.result.judgment != Judgment.MISS
+            self.slide_end_frame = input_manager.InputState.frame
         if is_head(self.kind):
             self.active_connector_info.head_judgment_frame = input_manager.InputState.frame
         if self.should_play_hit_effects:

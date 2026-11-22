@@ -2586,6 +2586,7 @@ class ActiveConnectorInfo(Record):
     active_start_time: float
     connector_kind: ConnectorKind
     head_judgment_frame: int
+    hold_input_frame: int
     input_frame: int
     input_kind: ConnectorKind
     last_damage_input_time: float

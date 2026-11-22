@@ -634,8 +634,10 @@ class SlideManager(PlayArchetype):
                     tail.connector_ease, tail, tail, t, get_connector_input_leniency(kind)
                 )
                 held = self.accept_hold_input(kind, bounds, frame)
-        if held and not info.is_active:
-            info.active_start_time = time()
+        if held:
+            info.hold_input_frame = frame
+            if not info.is_active:
+                info.active_start_time = time()
         info.is_active = held
         if not Options.auto_sfx:
             if held and is_sfx_connector(kind) and not group_hide_notes(head.timescale_group):
@@ -665,6 +667,8 @@ class SlideManager(PlayArchetype):
                     ended = index
         if ended >= 0:
             input_manager.disallow_empty(touches[ended])
+            if get_connector_base_kind(kind) != ConnectorKind.DAMAGE:
+                head.active_connector_info.hold_input_frame = frame
         return start_frame == frame
 
     def update_parallel(self):
