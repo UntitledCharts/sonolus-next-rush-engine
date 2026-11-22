@@ -806,20 +806,25 @@ class JudgmentUiSpriteSet(Record):
     miss: Sprite
     auto: Sprite
 
-    def get_bad(self, judgment: Judgment, windows: SekaiWindow, accuracy: float):
+    def get_judgment_type(self, judgment: Judgment, windows: SekaiWindow, accuracy: float) -> JudgmentType:
         if Options.auto_judgment and is_watch() and not is_replay():
             return JudgmentType.AUTO
+        elif judgment == Judgment.PERFECT:
+            return JudgmentType.JUST_PERFECT if accuracy == 0 else JudgmentType.PERFECT
         elif (
             windows.bad.start < accuracy < windows.bad.end and windows.good != windows.bad and judgment == Judgment.MISS
         ):
             return JudgmentType.BAD
-        else:
-            return judgment
+        elif judgment == Judgment.GREAT:
+            return JudgmentType.GREAT
+        elif judgment == Judgment.GOOD:
+            return JudgmentType.GOOD
+        return JudgmentType.MISS
 
     def get_sprite(self, judgment_type: Judgment, windows: SekaiWindow, accuracy: float):
         result = +Sprite
-        match self.get_bad(judgment_type, windows, accuracy):
-            case JudgmentType.PERFECT:
+        match self.get_judgment_type(judgment_type, windows, accuracy):
+            case JudgmentType.JUST_PERFECT | JudgmentType.PERFECT:
                 result @= self.perfect
             case JudgmentType.GREAT:
                 result @= self.great

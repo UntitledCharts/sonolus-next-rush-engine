@@ -6,9 +6,23 @@ from sonolus.script.record import Record
 from sonolus.script.sprite import Sprite
 from sonolus.script.text import StandardText
 
+from sekai.lib.layout import JudgmentType
 from sekai.lib.skin import BaseSkin
 
 WINDOW_SCALE = 1000  # Windows are in ms
+JUST_PERFECT_HALF = 1 / 120
+
+
+def to_sonolus_judgment(judgment: JudgmentType) -> Judgment:
+    match judgment:
+        case JudgmentType.JUST_PERFECT | JudgmentType.PERFECT | JudgmentType.AUTO:
+            return Judgment.PERFECT
+        case JudgmentType.GREAT:
+            return Judgment.GREAT
+        case JudgmentType.GOOD:
+            return Judgment.GOOD
+        case _:
+            return Judgment.MISS
 
 
 def create_bucket_sprites(
@@ -400,23 +414,29 @@ class SekaiWindow(Record):
             good=round_interval(self.good * WINDOW_SCALE),
         )
 
-    def judge(self, actual: float, target: float) -> Judgment:
+    def judge(self, actual: float, target: float, *, wrong_way: bool = False) -> JudgmentType:
         diff = actual - target
         if diff in self.perfect:
-            return Judgment.PERFECT
+            if wrong_way:
+                return JudgmentType.GREAT
+            if abs(diff) <= JUST_PERFECT_HALF:
+                return JudgmentType.JUST_PERFECT
+            return JudgmentType.PERFECT
         elif diff in self.great:
-            return Judgment.GREAT
+            return JudgmentType.GREAT
         elif diff in self.good:
-            return Judgment.GOOD
+            return JudgmentType.GOOD
+        elif diff in self.bad:
+            return JudgmentType.BAD
         else:
-            return Judgment.MISS
+            return JudgmentType.MISS
 
 
 def frames_to_window(
     perfect: float | tuple[float, float],
     great: float | tuple[float, float] | None,
     good: float | tuple[float, float] | None,
-    bad: float | tuple[float, float] | None,  # Unused
+    bad: float | tuple[float, float] | None,
 ) -> SekaiWindow:
     if great is None:
         great = perfect

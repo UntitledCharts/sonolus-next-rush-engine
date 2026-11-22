@@ -25,7 +25,7 @@ from sonolus.script.timing import beat_to_time
 
 from sekai.debug import DISABLE_NOTES
 from sekai.lib import archetype_names
-from sekai.lib.buckets import WINDOW_SCALE, SekaiWindow
+from sekai.lib.buckets import JUST_PERFECT_HALF, WINDOW_SCALE, SekaiWindow, to_sonolus_judgment
 from sekai.lib.connector import (
     ActiveConnectorInfo,
     ConnectorKind,
@@ -41,6 +41,7 @@ from sekai.lib.layout import (
     ElevationProjectionPreparation,
     FlickDirection,
     Hitbox,
+    JudgmentType,
     Layout,
     LayoutTransform,
     NoteElevationPreparation,
@@ -123,7 +124,6 @@ from sekai.play.events import SkillActive
 
 DEFAULT_BEST_TOUCH_TIME = -1e8
 JUDGMENT_LAST_TIME = 8.5 / 60
-JUST_PERFECT_HALF = 1 / 120
 
 
 class BaseNote(PlayArchetype):
@@ -432,7 +432,7 @@ class BaseNote(PlayArchetype):
             if self.best_touch_matches_direction:
                 self.judge(self.best_touch_time)
             else:
-                self.judge_wrong_way(self.best_touch_time)
+                self.judge(self.best_touch_time, wrong_way=True)
             return
         if self.is_scored and time() in self.input_interval and self.captured_touch_id == 0:
             if has_tap_input(self.kind) or self.is_trace_flick:
@@ -895,7 +895,7 @@ class BaseNote(PlayArchetype):
         if correct:
             self.judge(actual_time)
         else:
-            self.judge_wrong_way(actual_time)
+            self.judge(actual_time, wrong_way=True)
         return True
 
     def handle_flick_input(self):
@@ -1165,45 +1165,32 @@ class BaseNote(PlayArchetype):
         angle_diff = abs((angle + DynamicLayout.rotate + self.visual_stage_rotate - target_angle + pi) % (2 * pi) - pi)
         return angle_diff <= leniency
 
-    def judge(self, actual_time: float):
-        judgment = self.judgment_window.judge(actual_time, self.target_time)
-        error = self.judgment_window.bad.clamp(actual_time - self.target_time)
-        self.result.judgment = judgment if not SkillActive.judgment or judgment == Judgment.MISS else Judgment.PERFECT
-        self.result.accuracy = error
-        if self.result.bucket.id != -1:
-            self.result.bucket_value = error * WINDOW_SCALE
+    def judge(self, actual_time: float, *, wrong_way: bool = False):
+        window = self.judgment_window
+        judgment = window.judge(actual_time, self.target_time, wrong_way=wrong_way)
+        error = window.bad.clamp(actual_time - self.target_time)
+        if SkillActive.judgment and judgment in (JudgmentType.GREAT, JudgmentType.GOOD):
+            judgment = JudgmentType.PERFECT
+        self.apply_judgment(judgment, error)
+        if wrong_way and error in window.perfect:
+            self.result.accuracy = self.perfect_window_end
         if self.is_tail:
             self.pending_despawn = True
         else:
             self.despawn = True
         self.should_play_hit_effects = True
+        self.wrong_way = wrong_way and not SkillActive.judgment and self.result.judgment != Judgment.MISS
         self.post_judge()
 
-    def judge_wrong_way(self, actual_time: float):
-        judgment = self.judgment_window.judge(actual_time, self.target_time)
-        if judgment == Judgment.PERFECT:
-            judgment = Judgment.GREAT
-        error = self.judgment_window.bad.clamp(actual_time - self.target_time)
-        self.result.judgment = judgment if not SkillActive.judgment or judgment == Judgment.MISS else Judgment.PERFECT
-        if error in self.judgment_window.perfect:
-            self.result.accuracy = self.perfect_window_end
-        else:
-            self.result.accuracy = error
+    def apply_judgment(self, judgment: JudgmentType, error: float):
+        accuracy = 0.0 if judgment == JudgmentType.JUST_PERFECT else error
+        self.result.judgment = to_sonolus_judgment(judgment)
+        self.result.accuracy = accuracy
         if self.result.bucket.id != -1:
-            self.result.bucket_value = error * WINDOW_SCALE
-        if self.is_tail:
-            self.pending_despawn = True
-        else:
-            self.despawn = True
-        self.should_play_hit_effects = True
-        self.wrong_way = not SkillActive.judgment and judgment != Judgment.MISS
-        self.post_judge()
+            self.result.bucket_value = accuracy * WINDOW_SCALE
 
     def complete(self):
-        self.result.judgment = Judgment.PERFECT
-        self.result.accuracy = 0
-        if self.result.bucket.id != -1:
-            self.result.bucket_value = 0
+        self.apply_judgment(JudgmentType.JUST_PERFECT, 0.0)
         if self.is_tail:
             self.pending_despawn = True
         else:
@@ -1212,10 +1199,7 @@ class BaseNote(PlayArchetype):
         self.post_judge()
 
     def complete_parallel(self):
-        self.result.judgment = Judgment.PERFECT
-        self.result.accuracy = 0
-        if self.result.bucket.id != -1:
-            self.result.bucket_value = 0
+        self.apply_judgment(JudgmentType.JUST_PERFECT, 0.0)
         self.despawn = True
         self.should_play_hit_effects = True
 

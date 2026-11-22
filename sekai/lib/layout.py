@@ -113,6 +113,7 @@ class JudgmentType(IntEnum):
     GREAT = 2
     GOOD = 3
     BAD = 4
+    JUST_PERFECT = 5
     AUTO = -1
     MISS = 0
 
