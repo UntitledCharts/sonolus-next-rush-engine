@@ -895,7 +895,7 @@ def draw_connector(
         ):
             visual_state = (
                 ConnectorVisualState.ACTIVE
-                if time() > animation_start_time + 0.125
+                if presentation == SegmentPresentation.DEFAULT and time() > animation_start_time + 0.125
                 else ConnectorVisualState.WAITING
             )
         case ConnectorKind.FAKE_DAMAGE:

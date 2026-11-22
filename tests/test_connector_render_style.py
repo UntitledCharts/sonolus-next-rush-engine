@@ -254,7 +254,7 @@ class ConnectorRenderStyleTests(unittest.TestCase):
         for options in ({"disable_fake_notes": True}, {"slide_alpha": 0}):
             self.assert_render_equal(default_probe_values(kind=ConnectorKind.FAKE_ACTIVE_NORMAL), options=options)
 
-    def test_guides_use_the_active_color_after_the_chain_head(self):
+    def test_only_default_guides_use_the_active_color_after_the_chain_head(self):
         values = default_probe_values(kind=ConnectorKind.GUIDE_GREEN, state=ConnectorVisualState.WAITING)
         for presentation in SegmentPresentation:
             runner, node = prepare_probe(self.compiled, 1, values | {"presentation": presentation})
@@ -263,7 +263,9 @@ class ConnectorRenderStyleTests(unittest.TestCase):
                 runner.draws.clear()
                 runner.run(node)
                 visible = [row[0] for row in runner.draws if row[10] > 1e-8]
-                assert (BaseSkin.guide_green_active.id in visible) == active
+                assert (BaseSkin.guide_green_active.id in visible) == (
+                    presentation == SegmentPresentation.DEFAULT and active
+                )
                 assert visible
 
     def test_cached_style_reduces_render_work(self):
