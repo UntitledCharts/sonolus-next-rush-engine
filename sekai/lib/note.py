@@ -435,7 +435,19 @@ def draw_note(
         sprite_set = get_note_sprite_set(kind, direction, style)
     if order_lane is None:
         order_lane = lane - size
-    draw_note_body(sprite_set.body, kind, lane, size, travel, target_time, transform, note_alpha, order_lane=order_lane)
+    body_order = -1 if kind in (NoteKind.NORM_TRACE, NoteKind.CRIT_TRACE) else 0
+    draw_note_body(
+        sprite_set.body,
+        kind,
+        lane,
+        size,
+        travel,
+        target_time,
+        transform,
+        note_alpha,
+        etc=body_order,
+        order_lane=order_lane,
+    )
     draw_note_arrow(
         sprite_set.arrow, kind, lane, size, travel, target_time, direction, transform, note_alpha, order_lane=order_lane
     )
