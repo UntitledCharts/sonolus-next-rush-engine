@@ -847,6 +847,24 @@ def evaluate_trajectory(
     return entity.future_gain * cache.boundary_distance + entity.future_offset
 
 
+def frozen_connector_progress(
+    group: EntityRef, head: TargetPosition, tail: TargetPosition, now: float
+) -> tuple[bool, float, float]:
+    frozen, head_progress, tail_progress = False, 0.0, 0.0
+    if group.index > 0 and not Options.disable_timescale and head.event_ref > 0 and tail.event_ref > 0:
+        entity = _require_group(group.index)
+        event = entity.current_event
+        if not entity.has_scroll and event > 0 and entity.current_constant and entity.current_speed == 0.0:
+            assert entity.time_valid
+            assert prepared_time_matches(entity.last_updated, now)
+            coordinate = entity.coordinate
+            preempt = entity.effective_preempt
+            head_distance = 0.0 if head.event_ref == event else head.coordinate.difference(coordinate)
+            tail_distance = 0.0 if tail.event_ref == event else tail.coordinate.difference(coordinate)
+            frozen, head_progress, tail_progress = True, 1.0 - head_distance / preempt, 1.0 - tail_distance / preempt
+    return frozen, head_progress, tail_progress
+
+
 def register_group_window(group: int | EntityRef, start: float, end: float) -> None:
     index = _group_index(group)
     if index <= 0 or Options.disable_timescale or not (-inf < start <= end < inf):

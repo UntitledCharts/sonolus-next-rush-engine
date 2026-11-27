@@ -22,6 +22,7 @@ from sekai.lib.ease import EaseType
 from sekai.lib.events import Fever, draw_judgment_effect
 from sekai.lib.layout import (
     StageRotationCenter,
+    StageScreenTransform,
     StageTransform,
     StageTransformAnchor,
     ZoomVerticalAlign,
@@ -133,6 +134,7 @@ class WatchDynamicStage(WatchArchetype):
     use_event_cursors: bool = entity_data()
     event_cursors: StageEventCursors = entity_memory()
     visual_transform: StageTransform = shared_memory()
+    visual_screen_transform: StageScreenTransform = shared_memory()
     draw_props: StageProps = entity_memory()
     props: StageSharedProps = shared_memory()
 
@@ -183,6 +185,7 @@ class WatchDynamicStage(WatchArchetype):
             self.props @= self.draw_props.shared()
         if self.draw_props.has_transform():
             self.visual_transform @= self.draw_props.stage_transform()
+            self.visual_screen_transform @= self.visual_transform.to_screen_transform()
         self.fever_boundary()
 
     def fever_boundary(self):

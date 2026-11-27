@@ -42,6 +42,7 @@ from sekai.lib.ease import EaseType, is_in_step_ease, safe_unlerp_clamped
 from sekai.lib.initialization import schedule_connector_sfx_after_notes
 from sekai.lib.layout import (
     ElevationTransformPreparation,
+    StageScreenTransform,
     StageTransform,
     blend_stage_transform,
     current_layout_transform,
@@ -54,6 +55,7 @@ from sekai.lib.streams import Streams
 from sekai.lib.timescale import (
     MIN_START_TIME,
     TrajectoryCache,
+    frozen_connector_progress,
     group_hide_notes,
     register_group_window,
 )
@@ -244,11 +246,29 @@ class WatchConnector(WatchArchetype):
             tail_note_alpha = tail.visual_note_alpha
             if head_note_alpha <= 0 and tail_note_alpha <= 0:
                 return
-            prepare_note_trajectories(tail, self.tail_trajectory_first, self.tail_trajectory_second, time())
+            shared_stage_transform = self.shared_stage_transform
+            frozen = False
+            head_visual_progress = 0.0
+            tail_visual_progress = 0.0
+            if (
+                shared_stage_transform
+                and segment_head.segment_through_judge_line
+                and head.timescale_group.index == tail.timescale_group.index
+            ):
+                frozen, head_visual_progress, tail_visual_progress = frozen_connector_progress(
+                    head.timescale_group, head.target_position, tail.target_position, current_time
+                )
+            if frozen:
+                head_visual_progress -= head.visual_y_offset
+                tail_visual_progress -= tail.visual_y_offset
+            else:
+                prepare_note_trajectories(tail, self.tail_trajectory_first, self.tail_trajectory_second, current_time)
+                tail_visual_progress = note_visual_progress(
+                    tail, self.tail_trajectory_first, self.tail_trajectory_second, current_time
+                )
             head_transform = +StageTransform
             tail_transform = +StageTransform
             tail_transform @= tail.visual_stage_transform()
-            shared_stage_transform = self.shared_stage_transform
             if shared_stage_transform:
                 head_transform @= tail_transform
             else:
@@ -290,12 +310,15 @@ class WatchConnector(WatchArchetype):
                     if not shared_stage_transform:
                         head_transform @= blend_stage_transform(head_transform, tail_transform, head_interp_frac)
             else:
-                prepare_note_trajectories(head, self.head_trajectory_first, self.head_trajectory_second, time())
+                if not frozen:
+                    prepare_note_trajectories(
+                        head, self.head_trajectory_first, self.head_trajectory_second, current_time
+                    )
+                    head_visual_progress = note_visual_progress(
+                        head, self.head_trajectory_first, self.head_trajectory_second, current_time
+                    )
                 head_lane = head.visual_lane
                 head_size = head.size
-                head_visual_progress = note_visual_progress(
-                    head, self.head_trajectory_first, self.head_trajectory_second, time()
-                )
                 head_target_time = head.target_time
                 head_ease_frac = head.head_ease_frac
 
@@ -321,6 +344,18 @@ class WatchConnector(WatchArchetype):
                     elevation_preparation.ready = True
                 return elevation_preparation.at(interp_frac, elevation_frac)
 
+            def screen_transform(transform: StageTransform) -> StageScreenTransform:
+                result = +StageScreenTransform
+                use_stage_transform = False
+                if shared_stage_transform and tail.stage_ref.index > 0 and tail.elevation == 0.0:
+                    stage = tail.stage_ref.get()
+                    if stage.props.has_transform():
+                        result @= stage.visual_screen_transform
+                        use_stage_transform = True
+                if not use_stage_transform:
+                    result @= transform.to_screen_transform()
+                return result
+
             draw_connector(
                 kind=self.kind,
                 render_info=self.render_info,
@@ -340,9 +375,7 @@ class WatchConnector(WatchArchetype):
                 head_ease_frac=head_ease_frac,
                 tail_lane=tail.visual_lane,
                 tail_size=tail.size,
-                tail_visual_progress=note_visual_progress(
-                    tail, self.tail_trajectory_first, self.tail_trajectory_second, time()
-                ),
+                tail_visual_progress=tail_visual_progress,
                 tail_target_time=tail.target_time,
                 tail_ease_frac=tail_ease_frac,
                 segment_head_target_time=segment_head.target_time,
@@ -356,6 +389,7 @@ class WatchConnector(WatchArchetype):
                 head_transform=head_transform,
                 tail_transform=tail_transform,
                 shared_transform=shared_stage_transform,
+                screen_transform=screen_transform,
                 head_note_alpha=head_note_alpha,
                 tail_note_alpha=tail_note_alpha,
                 head_mask=head_mask,

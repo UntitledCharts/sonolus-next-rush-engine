@@ -70,6 +70,7 @@ from sekai.lib.stage import VisualMask
 from sekai.lib.timescale import iter_timescale_changes_in_group_from_time
 
 type ElevationTransform = Callable[[float, float], StageTransform]
+type ConnectorScreenTransform = Callable[[StageTransform], StageScreenTransform]
 
 CONNECTOR_TRAIL_SPAWN_PERIOD = 0.1
 CONNECTOR_SLOT_SPAWN_PERIOD = 0.2
@@ -825,6 +826,7 @@ def draw_connector(
     tail_alpha_frac: float = -1.0,
     render_info: ConnectorRenderInfo | None = None,
     animation_start_time: float | None = None,
+    screen_transform: ConnectorScreenTransform | None = None,
 ):
     if animation_start_time is None:
         animation_start_time = segment_head_target_time
@@ -1002,6 +1004,7 @@ def draw_connector(
                     head_mask=head_mask,
                     tail_mask=tail_mask,
                     shared_transform=shared_transform,
+                    screen_transform=screen_transform,
                     constant_interp_frac=constant_interp_frac,
                     ease_over_elevation=ease_over_elevation,
                     elevation_transform=elevation_transform,
@@ -1065,6 +1068,7 @@ class ConnectorRenderCache(Record):
     camera_rotated: bool
     camera_cos: float
     camera_sin: float
+    cull_offscreen: bool
     edge_valid: bool
     left: Vec2
     right: Vec2
@@ -1348,6 +1352,8 @@ def draw_connector_default_segment(
         else:
             layout @= Quad(bl=render_cache.left, br=render_cache.right, tl=start_left, tr=start_right)
 
+    if render_cache.cull_offscreen and not quad_touches_screen(layout, 0.0):
+        return
     draw_connector_quad(
         layout,
         visual_state,
@@ -2131,6 +2137,7 @@ def draw_connector_default(
     base_kind: BaseConnectorKind | None = None,
     alpha_option: float | None = None,
     quality: float | None = None,
+    screen_transform: ConnectorScreenTransform | None = None,
 ):
     start_visual_progress = clamp(head_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
     end_visual_progress = clamp(tail_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
@@ -2304,8 +2311,14 @@ def draw_connector_default(
         if base_a > 0:
             if has_transform:
                 assert head_transform is not None
-                transform = head_transform.to_screen_transform()
+                transform = (
+                    head_transform.to_screen_transform()
+                    if screen_transform is None
+                    else screen_transform(head_transform)
+                )
                 layout @= transform.transform_quad(layout)
+                if shared_transform and not quad_touches_screen(layout, 0.0):
+                    return
                 segment_z_normal = +z_normal
                 segment_z_active = +z_active
                 segment_z_normal.z2 += transform.elevation
@@ -2371,6 +2384,10 @@ def draw_connector_default(
         assert head_transform is not None
         assert tail_transform is not None
         render_cache.prepare_transform(head_transform, tail_transform, constant_transform)
+        render_cache.cull_offscreen = shared_transform and not elevation_dynamic
+        if screen_transform is not None and constant_transform and not render_cache.translation_only:
+            render_cache.transform @= screen_transform(head_transform)
+            render_cache.transform_valid = True
 
     segment_count = connector_segment_count(geometry_detail, alpha_range, quality, path_length)
     if len(circular_fracs) > 0:
