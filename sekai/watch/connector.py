@@ -57,7 +57,6 @@ from sekai.lib.timescale import (
     TrajectoryCache,
     frozen_connector_progress,
     group_hide_notes,
-    register_group_window,
 )
 from sekai.lib.timescale_consumer import (
     connector_visibility_end,
@@ -66,7 +65,7 @@ from sekai.lib.timescale_consumer import (
     legacy_connector_spawn_time,
     note_visual_progress,
     prepare_note_trajectories,
-    register_note_group_window,
+    register_connector_group_window,
 )
 from sekai.watch import note
 
@@ -173,9 +172,7 @@ class WatchConnector(WatchArchetype):
         head.extend_stage_windows(start_time - 1.0, self.end_time + 1.0)
         tail.extend_stage_windows(start_time - 1.0, self.end_time + 1.0)
 
-        register_note_group_window(head, start_time, self.end_time)
-        register_note_group_window(tail, start_time, self.end_time)
-        register_group_window(self.segment_head.timescale_group, start_time, self.end_time)
+        register_connector_group_window(head, tail, self.segment_head.timescale_group, start_time, self.end_time)
 
         if self.head_ref.index == self.active_head_ref.index:
             manager_end = slide_manager_end_time(self.active_tail)

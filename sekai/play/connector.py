@@ -70,7 +70,6 @@ from sekai.lib.timescale import (
     TrajectoryCache,
     frozen_connector_progress,
     group_hide_notes,
-    register_group_window,
 )
 from sekai.lib.timescale_consumer import (
     connector_visibility_end,
@@ -79,7 +78,7 @@ from sekai.lib.timescale_consumer import (
     legacy_connector_spawn_time,
     note_visual_progress,
     prepare_note_trajectories,
-    register_note_group_window,
+    register_connector_group_window,
 )
 from sekai.play import input_manager, note
 
@@ -196,9 +195,7 @@ class Connector(PlayArchetype):
                 self.active_head, self.active_head.target_time, self.active_tail.target_time
             )
 
-        register_note_group_window(head, spawn_time, self.end_time)
-        register_note_group_window(tail, spawn_time, self.end_time)
-        register_group_window(self.segment_head.timescale_group, spawn_time, self.end_time)
+        register_connector_group_window(head, tail, self.segment_head.timescale_group, spawn_time, self.end_time)
         self.start_time = start_time
         self.scheduled_spawn_time = spawn_time
 

@@ -1,7 +1,7 @@
 from math import inf
 from typing import Any
 
-from sonolus.script.archetype import get_archetype_by_name
+from sonolus.script.archetype import EntityRef, get_archetype_by_name
 from sonolus.script.array import Dim
 from sonolus.script.containers import VarArray
 from sonolus.script.interval import Interval, lerp
@@ -31,6 +31,16 @@ def register_note_group_window(note: Any, start: float, end: float) -> None:
         # Keep anchor groups active for attached notes, even if the anchors never spawn.
         register_group_window(note.attach_head_ref.get().timescale_group, start, end)
         register_group_window(note.attach_tail_ref.get().timescale_group, start, end)
+
+
+def register_connector_group_window(head: Any, tail: Any, group: EntityRef, start: float, end: float) -> None:
+    register_note_group_window(head, start, end)
+    head_group = head.timescale_group.index
+    tail_group = tail.timescale_group.index
+    if tail.is_attached or tail_group != head_group:
+        register_note_group_window(tail, start, end)
+    if group.index not in (head_group, tail_group):
+        register_group_window(group, start, end)
 
 
 def prepare_note_trajectories(note: Any, first: TrajectoryCache, second: TrajectoryCache, now: float) -> None:
