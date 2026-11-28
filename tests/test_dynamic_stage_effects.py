@@ -303,6 +303,7 @@ class MaskedEffectTests(unittest.TestCase):
                 props.width = 1
                 props.lane_alpha = 0.8
                 fake = SimpleNamespace(draw_props=props, props=+StageSharedProps)
+                fake.screen_transform = cls.screen_transform.__get__(fake)
                 fever = SimpleNamespace(min_l=1e8, max_r=-1e8)
                 with patch.object(module, "Fever", fever):
                     cls.fever_boundary(fake)

@@ -57,7 +57,6 @@ from sekai.lib.layout import (
     current_layout_transform,
     current_stage_tilt,
     hidden_amount,
-    identity_stage_transform,
     layout_full_width_stage_cover,
     layout_hidden_cover,
     layout_life_gauge,
@@ -337,17 +336,31 @@ class StageProps(Record):
             rotation_center_y_offset=self.rotation_center_y_offset,
         )
 
-    def draw(self, order: int):
-        if self.lane_alpha <= 0 and self.judge_line_alpha <= 0:
-            return
+    def transform_changed(self, previous: StageSharedProps) -> bool:
+        return (
+            self.rotate != previous.rotate
+            or self.x_lane_translate != previous.x_lane_translate
+            or self.y_lane_translate != previous.y_lane_translate
+            or self.center_weight != previous.center_weight
+            or self.elevation != previous.elevation
+            or self.lane != previous.lane
+            or self.rotation_center.start != previous.rotation_center.start
+            or self.rotation_center.end != previous.rotation_center.end
+            or (
+                self.rotation_center.start != self.rotation_center.end
+                and self.rotation_center.progress != previous.rotation_center.progress
+            )
+            or self.rotation_center_x_offset != previous.rotation_center_x_offset
+            or self.rotation_center_y_offset != previous.rotation_center_y_offset
+        )
+
+    def should_draw(self) -> bool:
+        return not (self.lane_alpha <= 0 and self.judge_line_alpha <= 0)
+
+    def draw(self, order: int, transform: StageScreenTransform):
         ui_alpha = 1.0
         if Options.ui_intro and time() < -1.0:
             ui_alpha = unlerp_clamped(-2.0, -1.0, time())
-        transform = +StageTransform
-        if self.has_transform():
-            transform @= self.stage_transform()
-        else:
-            transform @= identity_stage_transform()
         draw_dynamic_stage(
             lane=self.lane,
             width=self.width,
@@ -365,7 +378,7 @@ class StageProps(Record):
             full_width=self.full_width,
             division_line_alpha=self.division_line_alpha,
             lane_color=self.lane_color,
-            transform=transform.to_screen_transform(),
+            transform=transform,
         )
 
 

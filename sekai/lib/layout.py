@@ -166,6 +166,7 @@ class Layout:
 
 @level_memory
 class DynamicLayout:
+    revision: int
     t: float
     w_scale: float
     h_scale: float
@@ -1051,6 +1052,7 @@ def test_aspect_active() -> bool:
 
 
 def refresh_layout():
+    previous = current_layout_transform()
     camera = +CameraInfo
     if is_play() or is_watch():
         camera @= get_camera_info(right_limit=True)
@@ -1103,6 +1105,8 @@ def refresh_layout():
         DynamicLayout.x_translate = DynamicLayout.x_translate * TEST_ASPECT_SCALE
         set_background(background().scale(Vec2(TEST_ASPECT_SCALE, TEST_ASPECT_SCALE)))
 
+    if current_layout_transform() != previous:
+        DynamicLayout.revision += 1
     DynamicLayout.rotate_sin = sin(DynamicLayout.rotate)
     DynamicLayout.rotate_cos = cos(DynamicLayout.rotate)
 

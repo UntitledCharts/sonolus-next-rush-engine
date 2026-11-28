@@ -71,7 +71,7 @@ class StaticStage(PlayArchetype):
                 if input_manager.register_empty_input(touch, candidate.lane_index, candidate.stage_index):
                     stage = get_archetype_by_name(archetype_names.STAGE).at(candidate.stage_index)
                     play_lane_hit_effects(
-                        candidate.lane, sfx=sfx, transform=stage.empty_lane_transform(), y_offset=stage.props.y_offset
+                        candidate.lane, sfx=sfx, transform=stage.screen_transform(), y_offset=stage.props.y_offset
                     )
                     if not empty_lanes.is_full():
                         empty_lanes.append(candidate.lane)

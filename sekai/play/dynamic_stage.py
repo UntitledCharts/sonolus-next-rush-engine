@@ -22,13 +22,13 @@ from sekai.lib.ease import EaseType
 from sekai.lib.events import Fever, draw_judgment_effect
 from sekai.lib.layout import (
     IDENTITY_STAGE_SCREEN_TRANSFORM,
+    DynamicLayout,
     JudgmentLaneInput,
     StageRotationCenter,
     StageScreenTransform,
     StageTransform,
     StageTransformAnchor,
     ZoomVerticalAlign,
-    identity_stage_transform,
     preempt_time,
 )
 from sekai.lib.level_config import LevelConfig
@@ -151,6 +151,7 @@ class DynamicStage(PlayArchetype):
     event_cursors: StageEventCursors = entity_memory()
     visual_transform: StageTransform = shared_memory()
     visual_screen_transform: StageScreenTransform = shared_memory()
+    transform_revision: int = entity_memory()
     draw_props: StageProps = entity_memory()
     props: StageSharedProps = shared_memory()
 
@@ -193,15 +194,20 @@ class DynamicStage(PlayArchetype):
 
     @callback(order=-2)
     def update_sequential(self):
-        if not self.sampling_plan.is_static:
+        sampling = not self.sampling_plan.is_static
+        if sampling:
             if self.use_event_cursors:
                 update_prepared_stage_props(self.draw_props, self, self.sampling_plan, time(), self.event_cursors)
             else:
                 update_prepared_stage_props(self.draw_props, self, self.sampling_plan, time())
-            self.props @= self.draw_props.shared()
         if self.draw_props.has_transform():
-            self.visual_transform @= self.draw_props.stage_transform()
-            self.visual_screen_transform @= self.visual_transform.to_screen_transform()
+            revision = DynamicLayout.revision + 1
+            if self.transform_revision != revision or (sampling and self.draw_props.transform_changed(self.props)):
+                self.visual_transform @= self.draw_props.stage_transform()
+                self.visual_screen_transform @= self.visual_transform.to_screen_transform()
+                self.transform_revision = revision
+        if sampling:
+            self.props @= self.draw_props.shared()
         if time() >= self.end_time:
             self.despawn = True
             return
@@ -211,12 +217,7 @@ class DynamicStage(PlayArchetype):
         if self.draw_props.lane_alpha > 0:
             l = self.draw_props.lane - self.draw_props.width
             r = self.draw_props.lane + self.draw_props.width
-            stage_transform = +StageTransform
-            if self.draw_props.has_transform():
-                stage_transform @= self.visual_transform
-            else:
-                stage_transform @= identity_stage_transform()
-            transform = stage_transform.to_screen_transform()
+            transform = self.screen_transform()
 
             if l < Fever.min_l:
                 Fever.min_l = l
@@ -256,7 +257,7 @@ class DynamicStage(PlayArchetype):
             rightmost = p.pivot_lane + 0.5 + floor(hi - p.pivot_lane - 0.5)
         if leftmost > rightmost:
             return
-        bounds = JudgmentLaneInput.at(leftmost, rightmost, p.y_offset, self.empty_lane_transform())
+        bounds = JudgmentLaneInput.at(leftmost, rightmost, p.y_offset, self.screen_transform())
         frame = input_manager.InputState.frame
         for i, touch in enumerate(input_manager.processed_touches()):
             if not input_manager.is_allowed_empty(touch):
@@ -274,27 +275,23 @@ class DynamicStage(PlayArchetype):
                     distance_squared=distance,
                 )
 
-    def empty_lane_transform(self) -> StageScreenTransform:
+    def screen_transform(self) -> StageScreenTransform:
         result = +IDENTITY_STAGE_SCREEN_TRANSFORM
         if self.props.has_transform():
-            result @= self.visual_transform.to_screen_transform()
+            result @= self.visual_screen_transform
         return result
 
     def update_parallel(self):
         t = time()
         if t < self.draw_start_time or t > self.draw_end_time:
             return
-        self.draw_props.draw(self.index)
+        if self.draw_props.should_draw():
+            self.draw_props.draw(self.index, self.screen_transform())
         if SkillActive.judgment:
             elapsed = t - SkillActive.start_time
             if elapsed < SkillActive.duration:
                 l = self.draw_props.lane - self.draw_props.width
                 r = self.draw_props.lane + self.draw_props.width
-                stage_transform = +StageTransform
-                if self.draw_props.has_transform():
-                    stage_transform @= self.visual_transform
-                else:
-                    stage_transform @= identity_stage_transform()
                 draw_judgment_effect(
                     elapsed,
                     l,
@@ -302,7 +299,7 @@ class DynamicStage(PlayArchetype):
                     self.draw_props.judge_line_alpha,
                     self.draw_props.y_offset,
                     duration=SkillActive.duration,
-                    transform=stage_transform.to_screen_transform(),
+                    transform=self.screen_transform(),
                 )
 
 

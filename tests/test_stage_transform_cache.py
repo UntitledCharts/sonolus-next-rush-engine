@@ -106,6 +106,8 @@ class StageTransformCacheTests(unittest.TestCase):
                                         sampling_plan=stage_lib.StageSamplingPlan(False, False, False, False, True),
                                         use_event_cursors=False,
                                         visual_transform=+layout.StageTransform,
+                                        visual_screen_transform=+layout.StageScreenTransform,
+                                        transform_revision=0,
                                         end_time=100,
                                         fever_boundary=lambda: None,
                                     )
@@ -113,6 +115,7 @@ class StageTransformCacheTests(unittest.TestCase):
                                     stage.props @= props.shared()
                                     module = __import__(stages.__module__, fromlist=["get_stage_props"])
                                     with (
+                                        patch.object(module, "DynamicLayout", SimpleNamespace(revision=1)),
                                         patch.object(module, "get_stage_props", return_value=props),
                                         patch.object(module, "time", return_value=1, create=True),
                                         patch.object(
