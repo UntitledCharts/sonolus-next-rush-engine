@@ -1576,14 +1576,13 @@ def connector_is_off_screen(
 def clip_connector_progress_to_screen(
     start: float,
     end: float,
+    start_travel: float,
+    end_travel: float,
     head_transform: StageTransform | None,
-    tail_transform: StageTransform | None,
-    transforms_equal: bool | None = None,
-) -> tuple[float, float]:
+    transforms_equal: bool,
+) -> tuple[float, float, float, float]:
     """Trim the vertical span when screen y depends only on connector progress."""
-    can_clip = DynamicLayout.rotate == 0 and (
-        head_transform == tail_transform if transforms_equal is None else transforms_equal
-    )
+    can_clip = DynamicLayout.rotate == 0 and transforms_equal
     y_offset = DynamicLayout.t
     y_scale = DynamicLayout.h_scale
     if head_transform is not None:
@@ -1591,8 +1590,6 @@ def clip_connector_progress_to_screen(
             can_clip = False
         y_offset += head_transform.ty
     if can_clip and abs(y_scale) >= 1e-8:
-        start_travel = approach(start)
-        end_travel = approach(end)
         # Leave a small margin for the numerical inverse at low stage tilt.
         screen_start = (screen().b - 1e-4 - y_offset) / y_scale
         screen_end = (screen().t + 1e-4 - y_offset) / y_scale
@@ -1600,6 +1597,7 @@ def clip_connector_progress_to_screen(
         travel_max = max(screen_start, screen_end)
         if max(start_travel, end_travel) <= travel_min or min(start_travel, end_travel) >= travel_max:
             end = start
+            end_travel = start_travel
         else:
             # Only invert travel values within the connector's span. Values outside
             # the approach curve's domain, such as above the vanishing point, have no inverse.
@@ -1609,15 +1607,19 @@ def clip_connector_progress_to_screen(
             progress_max = max(start, end)
             if clipped_start != start_travel:
                 start = clamp(inverse_approach_tilt(clipped_start), progress_min, progress_max)
+                start_travel = approach(start)
             if clipped_end != end_travel:
                 end = clamp(inverse_approach_tilt(clipped_end), progress_min, progress_max)
-    return start, end
+                end_travel = approach(end)
+    return start, end, start_travel, end_travel
 
 
 CURVE_BINS = 16
 CURVE_BIN_SAMPLES = 16
 CURVE_LEVELS = 5
-CURVE_TABLE_SIZE = sum(CURVE_BINS - 2**level + 1 for level in range(CURVE_LEVELS))
+CURVE_RUN_LENGTHS = tuple(2**level for level in range(CURVE_LEVELS))
+CURVE_ROW_LENGTHS = tuple(CURVE_BINS - run + 1 for run in CURVE_RUN_LENGTHS)
+CURVE_TABLE_SIZE = sum(CURVE_ROW_LENGTHS)
 
 
 def _ease_derivative_bounds() -> Array:
@@ -1651,18 +1653,21 @@ def _ease_derivative_bounds() -> Array:
 
 
 CURVE_DERIVATIVE_BOUNDS = _ease_derivative_bounds()
+CURVE_RUN_BY_SPAN = Array(*(CURVE_RUN_LENGTHS[span.bit_length() - 1] for span in range(1, CURVE_BINS + 1)))
+CURVE_OFFSET_BY_SPAN = Array(*(sum(CURVE_ROW_LENGTHS[: span.bit_length() - 1]) for span in range(1, CURVE_BINS + 1)))
 
 
-def ease_derivative_bound(ease_type: EaseType, order: int, start: float, end: float) -> float:
+def ease_derivative_bounds(ease_type: EaseType, start: float, end: float) -> tuple[float, float]:
     first = cast(int, clamp(floor(start * CURVE_BINS), 0, CURVE_BINS - 1))
     last = cast(int, clamp(ceil(end * CURVE_BINS) - 1, first, CURVE_BINS - 1))
-    run = 1
-    offset = 0
-    while run * 2 <= last - first + 1:
-        offset += CURVE_BINS - run + 1
-        run *= 2
-    base = (ease_type * 2 + order - 1) * CURVE_TABLE_SIZE + offset
-    return max(CURVE_DERIVATIVE_BOUNDS[base + first], CURVE_DERIVATIVE_BOUNDS[base + last - run + 1])
+    span_index = last - first
+    base = ease_type * 2 * CURVE_TABLE_SIZE + CURVE_OFFSET_BY_SPAN[span_index]
+    left = base + first
+    right = base + last - CURVE_RUN_BY_SPAN[span_index] + 1
+    return (
+        max(CURVE_DERIVATIVE_BOUNDS[left], CURVE_DERIVATIVE_BOUNDS[right]),
+        max(CURVE_DERIVATIVE_BOUNDS[left + CURVE_TABLE_SIZE], CURVE_DERIVATIVE_BOUNDS[right + CURVE_TABLE_SIZE]),
+    )
 
 
 def connector_curve_detail(
@@ -1692,9 +1697,8 @@ def connector_curve_detail(
     lane_change = max(abs(left_change), abs(right_change)) / abs(tail_eased - head_eased)
     approach_rate = abs(log(end_width / start_width))
     width = max(start_width, end_width) * DynamicLayout.w_scale
-    bend = span * ease_derivative_bound(ease_type, 2, start, end) + approach_rate * ease_derivative_bound(
-        ease_type, 1, start, end
-    )
+    slope, curvature = ease_derivative_bounds(ease_type, start, end)
+    bend = span * curvature + approach_rate * slope
     return sqrt(width * lane_change * span * bend / (8 * CONNECTOR_CURVE_ERROR))
 
 
@@ -2143,14 +2147,18 @@ def draw_connector_default(
     end_visual_progress = clamp(tail_visual_progress, DynamicLayout.progress_start, DynamicLayout.progress_cutoff)
     elevation_dynamic = ease_over_elevation and not shared_transform
     transforms_equal = not elevation_dynamic and (shared_transform or head_transform == tail_transform)
-    if not elevation_dynamic:
-        start_visual_progress, end_visual_progress = clip_connector_progress_to_screen(
-            start_visual_progress, end_visual_progress, head_transform, tail_transform, transforms_equal
-        )
     if start_visual_progress == end_visual_progress and (
         transforms_equal or head_visual_progress != tail_visual_progress
     ):
         return
+    start_travel = approach(start_visual_progress)
+    end_travel = approach(end_visual_progress)
+    if not elevation_dynamic:
+        start_visual_progress, end_visual_progress, start_travel, end_travel = clip_connector_progress_to_screen(
+            start_visual_progress, end_visual_progress, start_travel, end_travel, head_transform, transforms_equal
+        )
+        if transforms_equal and start_visual_progress == end_visual_progress:
+            return
     start_frac = safe_unlerp_clamped(head_visual_progress, tail_visual_progress, start_visual_progress, 0.0)
     end_frac = safe_unlerp_clamped(head_visual_progress, tail_visual_progress, end_visual_progress, 1.0)
     start_ease_frac = lerp(head_ease_frac, tail_ease_frac, start_frac)
@@ -2166,8 +2174,6 @@ def draw_connector_default(
         end_interp_frac = get_connector_interp_frac_from_eased_endpoints(
             ease_type, head_eased, tail_eased, end_ease_frac, end_frac
         )
-    start_travel = approach(start_visual_progress)
-    end_travel = approach(end_visual_progress)
     start_lane = lerp(head_lane, tail_lane, start_interp_frac)
     end_lane = lerp(head_lane, tail_lane, end_interp_frac)
     start_size = lerp(head_size, tail_size, start_interp_frac)
