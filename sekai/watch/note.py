@@ -108,10 +108,8 @@ from sekai.lib.timescale import (
 )
 from sekai.lib.timescale_consumer import (
     note_progress,
-    note_visibility_end,
-    note_visibility_start,
-    note_visual_spawn_time,
     prepare_note_trajectories,
+    prepare_note_visual_times,
     register_note_group_window,
 )
 from sekai.play.note import derive_note_archetypes
@@ -253,13 +251,7 @@ class WatchBaseNote(WatchArchetype):
             self.size = size
 
         end_time = max(self.target_time, self.despawn_time())
-        natural_start_time = note_visual_spawn_time(self, end_time)
-        if not self.is_scored:
-            self.visual_end_time = min(self.target_time, note_visibility_end(self))
-            end_time = self.visual_end_time
-        self.visual_start_time = note_visibility_start(self, natural_start_time)
-        if not self.is_scored and self.visual_start_time >= self.visual_end_time:
-            self.visual_start_time = inf
+        natural_start_time, end_time = prepare_note_visual_times(self, end_time, self.kind == NoteKind.ANCHOR)
         start_time = self.visual_start_time
 
         if self.is_scored:

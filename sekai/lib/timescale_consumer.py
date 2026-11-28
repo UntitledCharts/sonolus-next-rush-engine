@@ -1,9 +1,10 @@
-from math import inf
+from math import floor, inf
 from typing import Any
 
 from sonolus.script.archetype import EntityRef, get_archetype_by_name
-from sonolus.script.array import Dim
+from sonolus.script.array import Array, Dim
 from sonolus.script.containers import VarArray
+from sonolus.script.globals import level_data
 from sonolus.script.interval import Interval, lerp
 from sonolus.script.record import Record
 
@@ -290,6 +291,59 @@ def note_visual_spawn_time(note: Any, latest: float) -> float:
     sources = +VarArray[VisibilitySource, Dim[4]]
     append_note_visibility_sources(note, sources)
     return get_sources_visual_spawn_time(sources, latest)
+
+
+@level_data
+class AnchorVisibility:
+    notes: Array[int, Dim[128]]
+
+
+def _prepare_note_visual_times(note: Any, latest: float) -> tuple[float, float]:
+    natural_start = note_visual_spawn_time(note, latest)
+    if not note.is_scored:
+        note.visual_end_time = min(note.target_time, note_visibility_end(note))
+        latest = note.visual_end_time
+    note.visual_start_time = note_visibility_start(note, natural_start)
+    if not note.is_scored and note.visual_start_time >= note.visual_end_time:
+        note.visual_start_time = inf
+    return natural_start, latest
+
+
+def prepare_note_visual_times(note: Any, latest: float, is_anchor: bool) -> tuple[float, float]:
+    target_time = note.target_time
+    group = note.timescale_group.index
+    reused = False
+    natural_start, end = inf, latest
+    if (
+        is_anchor
+        and not note.is_scored
+        and not note.is_attached
+        and not Options.disable_timescale
+        and group > 0
+        and latest == target_time
+        and MIN_START_TIME <= target_time < inf
+    ):
+        stage = note.stage_ref.index
+        capacity = len(AnchorVisibility.notes)
+        time_bucket = floor(abs(target_time) % capacity * 1000)
+        slot = (time_bucket + 31 * group + stage) % capacity
+        cached_index = AnchorVisibility.notes[slot]
+        if cached_index > 0 and cached_index != note.index:
+            cached = type(note).at(cached_index, check=False)
+            if (
+                cached.timescale_group.index == group
+                and cached.stage_ref.index == stage
+                and cached.target_time == target_time
+            ):
+                note.visual_start_time = cached.scheduled_spawn_time
+                note.visual_end_time = min(target_time, note_visibility_end(note))
+                natural_start, end = cached.spawn_eligibility_time, note.visual_end_time
+                reused = True
+        if not reused:
+            AnchorVisibility.notes[slot] = note.index
+    if not reused:
+        natural_start, end = _prepare_note_visual_times(note, latest)
+    return natural_start, end
 
 
 def segment_visual_spawn_time(head: Any, tail: Any, latest: float) -> float:
