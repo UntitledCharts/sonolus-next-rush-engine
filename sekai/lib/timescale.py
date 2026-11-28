@@ -142,6 +142,7 @@ class TimescaleGroupLike(Protocol):
     current_speed: float
     current_constant: bool
     coordinate: TimePosition
+    coordinate_from_end: bool
     time_valid: bool
     last_updated: float
     future_gain: float
@@ -752,6 +753,16 @@ def prepare_group(group: int | EntityRef, now: float) -> None:
     entity = _require_group(index)
     if entity.time_valid and entity.last_updated == now:
         return
+    if (
+        entity.time_valid
+        and entity.current_speed == 0.0
+        and not entity.has_scroll
+        and is_in_step_ease(entity.ease)
+        and entity.event_start <= now < entity.event_end
+        and (now - entity.event_start > entity.event_end - now) == entity.coordinate_from_end
+    ):
+        entity.last_updated = now
+        return
     ref = _locate(entity, now, entity.current_event, use_visibility_index=True)
     entity.current_event, entity.current_run = ref, _run(ref)
     entity.last_updated, entity.time_valid = now, True
@@ -771,6 +782,7 @@ def prepare_group(group: int | EntityRef, now: float) -> None:
         future = _marker(entity.current_run).run_end
     elif future > 0:
         entity.event_end = _marker(future).event_start
+    entity.coordinate_from_end = now - entity.event_start > entity.event_end - now
     scroll = entity.style == TransitionStyle.SCROLL
     if scroll:
         entity.current_speed = _scroll_speed(entity.current_speed)

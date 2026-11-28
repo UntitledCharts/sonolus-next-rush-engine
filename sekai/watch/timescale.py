@@ -79,6 +79,7 @@ class WatchTimescaleGroup(WatchArchetype):
     current_speed: float = shared_memory()
     current_constant: bool = shared_memory()
     coordinate: TimePosition = shared_memory()
+    coordinate_from_end: bool = shared_memory()
     time_valid: bool = shared_memory()
     last_updated: float = shared_memory()
     future_gain: float = shared_memory()
