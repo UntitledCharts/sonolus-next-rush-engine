@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from typing import Any, ClassVar
 from unittest.mock import patch
 
+from sonolus.script.interval import Interval
+
 from sekai.lib import layout
 from sekai.lib import stage as stage_lib
 from sekai.lib.ease import EaseType
@@ -105,6 +107,7 @@ def make_stage(index, easing, *, masking=True) -> Any:
         props=+stage_lib.StageSharedProps,
         draw_props=+stage_lib.StageProps,
         sampling_plan=stage_lib.StageSamplingPlan(True, True, True, False, False),
+        sampling_span=+Interval,
         use_event_cursors=False,
         visual_transform=+layout.StageTransform,
         fever_boundary=lambda: None,
@@ -254,6 +257,7 @@ class WatchStageCacheTests(unittest.TestCase):
             props=+stage_lib.StageSharedProps,
             draw_props=+stage_lib.StageProps,
             sampling_plan=stage_lib.StageSamplingPlan(True, True, True, False, False),
+            sampling_span=+Interval,
             use_event_cursors=False,
             visual_transform=+layout.StageTransform,
             fever_boundary=lambda: None,

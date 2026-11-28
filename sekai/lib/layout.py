@@ -180,6 +180,9 @@ class DynamicLayout:
     scaled_note_h: float
     progress_start: float
     progress_cutoff: float
+    progress_tilt: float
+    progress_start_depth: float
+    progress_alternative_curve: bool
     width_offset: float
     lane_t: float
     safe_lane_t: float
@@ -836,7 +839,7 @@ def init_layout():
         background_zoom = 1.0
     Layout.initial_background = bg.scale_centered(Vec2(background_zoom, background_zoom))
 
-    refresh_layout()
+    refresh_layout(reset_progress_bounds=True)
 
     visibility = _compute_conservative_progress_bounds()
     Layout.spawn_progress_start = visibility.start
@@ -1051,7 +1054,7 @@ def test_aspect_active() -> bool:
     return Options.test_aspect_ratio and (is_watch() or (is_play() and Options.allow_debug_options_in_play_mode))
 
 
-def refresh_layout():
+def refresh_layout(reset_progress_bounds: bool = False):
     previous = current_layout_transform()
     camera = +CameraInfo
     if is_play() or is_watch():
@@ -1112,11 +1115,19 @@ def refresh_layout():
 
     DynamicLayout.scaled_note_h = DynamicLayout.note_h * DynamicLayout.h_scale
 
-    if stage_cover_amount():
-        DynamicLayout.progress_start = inverse_approach_tilt(Layout.cover_depth)
-    else:
-        DynamicLayout.progress_start = inverse_approach_tilt(Layout.cover_depth - vanish_ext)
-    DynamicLayout.progress_cutoff = inverse_approach_tilt(Layout.cutoff_depth)
+    start_depth = Layout.cover_depth if stage_cover_amount() else Layout.cover_depth - vanish_ext
+    alternative_curve = Options.alternative_approach_curve
+    if (
+        reset_progress_bounds
+        or tilt != DynamicLayout.progress_tilt
+        or start_depth != DynamicLayout.progress_start_depth
+        or alternative_curve != DynamicLayout.progress_alternative_curve
+    ):
+        DynamicLayout.progress_start = inverse_approach_at_tilt(start_depth, tilt)
+        DynamicLayout.progress_cutoff = inverse_approach_at_tilt(Layout.cutoff_depth, tilt)
+        DynamicLayout.progress_tilt = tilt
+        DynamicLayout.progress_start_depth = start_depth
+        DynamicLayout.progress_alternative_curve = alternative_curve
 
 
 def camera_zoom_target_at(lane: float, size: float, target_lane: float, target_y: float, tilt: float) -> Vec2:

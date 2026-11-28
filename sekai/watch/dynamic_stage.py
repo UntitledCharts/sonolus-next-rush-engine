@@ -134,6 +134,7 @@ class WatchDynamicStage(WatchArchetype):
 
     use_event_cursors: bool = entity_data()
     event_cursors: StageEventCursors = entity_memory()
+    sampling_span: Interval = entity_memory()
     visual_transform: StageTransform = shared_memory()
     visual_screen_transform: StageScreenTransform = shared_memory()
     transform_revision: int = entity_memory()
@@ -179,12 +180,14 @@ class WatchDynamicStage(WatchArchetype):
 
     @callback(order=-2)
     def update_sequential(self):
-        sampling = not self.sampling_plan.is_static
+        now = time()
+        sampling = not self.sampling_plan.is_static and not (self.sampling_span.start <= now < self.sampling_span.end)
         if sampling:
+            span = self.sampling_span
             if self.use_event_cursors:
-                update_prepared_stage_props(self.draw_props, self, self.sampling_plan, time(), self.event_cursors)
+                update_prepared_stage_props(self.draw_props, self, self.sampling_plan, now, self.event_cursors, span)
             else:
-                update_prepared_stage_props(self.draw_props, self, self.sampling_plan, time())
+                update_prepared_stage_props(self.draw_props, self, self.sampling_plan, now, hold=span)
         if self.draw_props.has_transform():
             revision = DynamicLayout.revision + 1
             if self.transform_revision != revision or (sampling and self.draw_props.transform_changed(self.props)):

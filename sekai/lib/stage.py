@@ -877,23 +877,34 @@ class StageEventCursors(Record):
     transform: int
 
 
-def _query_stage_events(first_ref, t, right_limit, cursors: StageEventCursors | None, channel: int):
+def _query_stage_events(
+    first_ref, t, right_limit, cursors: StageEventCursors | None, channel: int, hold: Interval | None = None
+):
     if cursors is None:
-        return query_event_list(first_ref, t, lambda event: event.time, strict=not right_limit)
-    cursor = (
-        cursors.mask
-        if channel == 0
-        else (cursors.pivot if channel == 1 else cursors.style if channel == 2 else cursors.transform)
-    )
-    a, b = query_event_list_from(first_ref, t, lambda event: event.time, cursor, strict=not right_limit)
-    if channel == 0:
-        cursors.mask = a.index
-    elif channel == 1:
-        cursors.pivot = a.index
-    elif channel == 2:
-        cursors.style = a.index
+        a, b = query_event_list(first_ref, t, lambda event: event.time, strict=not right_limit)
     else:
-        cursors.transform = a.index
+        cursor = (
+            cursors.mask
+            if channel == 0
+            else (cursors.pivot if channel == 1 else cursors.style if channel == 2 else cursors.transform)
+        )
+        a, b = query_event_list_from(first_ref, t, lambda event: event.time, cursor, strict=not right_limit)
+        if channel == 0:
+            cursors.mask = a.index
+        elif channel == 1:
+            cursors.pivot = a.index
+        elif channel == 2:
+            cursors.style = a.index
+        else:
+            cursors.transform = a.index
+    if hold is not None and hold.start < hold.end:
+        if a.index > 0:
+            event = a.get()
+            hold.start = max(hold.start, event.time)
+            if b.index > 0 and not is_in_step_ease(event.ease):
+                hold.end = hold.start
+        if b.index > 0:
+            hold.end = min(hold.end, b.get().time)
     return a, b
 
 
@@ -931,19 +942,24 @@ def update_prepared_stage_props(
     plan: StageSamplingPlan,
     t: float,
     cursors: StageEventCursors | None = None,
+    hold: Interval | None = None,
 ):
     """Resample animated tracks in an initialized stage-owned record.
 
     Absent and singleton tracks retain their initial intrinsic values.
     """
+    if hold is not None:
+        hold @= Interval(-inf, inf)
     if plan.mask_dynamic:
-        update_stage_mask_props(result, stage.first_mask_change_ref, t, right_limit=True, cursors=cursors)
+        update_stage_mask_props(result, stage.first_mask_change_ref, t, right_limit=True, cursors=cursors, hold=hold)
     if plan.pivot_dynamic:
-        update_stage_pivot_props(result, stage.first_pivot_change_ref, t, right_limit=True, cursors=cursors)
+        update_stage_pivot_props(result, stage.first_pivot_change_ref, t, right_limit=True, cursors=cursors, hold=hold)
     if plan.style_dynamic:
-        update_stage_style_props(result, stage.first_style_change_ref, t, right_limit=True, cursors=cursors)
+        update_stage_style_props(result, stage.first_style_change_ref, t, right_limit=True, cursors=cursors, hold=hold)
     if plan.transform_dynamic:
-        update_stage_transform_props(result, stage.first_transform_change_ref, t, right_limit=True, cursors=cursors)
+        update_stage_transform_props(
+            result, stage.first_transform_change_ref, t, right_limit=True, cursors=cursors, hold=hold
+        )
 
 
 def update_stage_mask_props(
@@ -953,8 +969,9 @@ def update_stage_mask_props(
     right_limit: bool = False,
     exact: bool = False,
     cursors: StageEventCursors | None = None,
+    hold: Interval | None = None,
 ):
-    mask_a_ref, mask_b_ref = _query_stage_events(first_mask_change_ref, t, right_limit, cursors, 0)
+    mask_a_ref, mask_b_ref = _query_stage_events(first_mask_change_ref, t, right_limit, cursors, 0, hold)
     if mask_a_ref.index > 0:
         mask_a = get_event_as(mask_a_ref, _stage_mask_change_archetype())
         result.lane = mask_a.lane
@@ -981,13 +998,14 @@ def update_stage_style_props(
     right_limit: bool = False,
     exact: bool = False,
     cursors: StageEventCursors | None = None,
+    hold: Interval | None = None,
 ):
     result.lane_color.progress = 0.0
     result.judge_line_color.progress = 0.0
     result.judge_line_style.progress = 0.0
     result.left_border_style.progress = 0.0
     result.right_border_style.progress = 0.0
-    style_a_ref, style_b_ref = _query_stage_events(first_style_change_ref, t, right_limit, cursors, 2)
+    style_a_ref, style_b_ref = _query_stage_events(first_style_change_ref, t, right_limit, cursors, 2, hold)
     if style_a_ref.index > 0:
         style_a = get_event_as(style_a_ref, _stage_style_change_archetype())
         result.lane_color.start = style_a.lane_color
@@ -1055,8 +1073,9 @@ def update_stage_transform_props(
     right_limit: bool = False,
     exact: bool = False,
     cursors: StageEventCursors | None = None,
+    hold: Interval | None = None,
 ):
-    transform_a_ref, transform_b_ref = _query_stage_events(first_transform_change_ref, t, right_limit, cursors, 3)
+    transform_a_ref, transform_b_ref = _query_stage_events(first_transform_change_ref, t, right_limit, cursors, 3, hold)
     if transform_a_ref.index > 0:
         transform_a = get_event_as(transform_a_ref, _stage_transform_change_archetype())
         result.rotate = transform_a.rotate
@@ -1118,9 +1137,10 @@ def update_stage_pivot_props(
     right_limit: bool = False,
     exact: bool = False,
     cursors: StageEventCursors | None = None,
+    hold: Interval | None = None,
 ):
     result.division.progress = 0.0
-    pivot_a_ref, pivot_b_ref = _query_stage_events(first_pivot_change_ref, t, right_limit, cursors, 1)
+    pivot_a_ref, pivot_b_ref = _query_stage_events(first_pivot_change_ref, t, right_limit, cursors, 1, hold)
     if pivot_a_ref.index > 0:
         pivot_a = get_event_as(pivot_a_ref, _stage_pivot_change_archetype())
         result.pivot_lane = pivot_a.lane
