@@ -1612,6 +1612,7 @@ def clip_connector_progress_to_screen(
     end_travel: float,
     head_transform: StageTransform | None,
     transforms_equal: bool,
+    approach_cache: ApproachCache,
 ) -> tuple[float, float, float, float]:
     """Trim the vertical span when screen y depends only on connector progress."""
     can_clip = DynamicLayout.rotate == 0 and transforms_equal
@@ -1639,10 +1640,10 @@ def clip_connector_progress_to_screen(
             progress_max = max(start, end)
             if clipped_start != start_travel:
                 start = clamp(inverse_approach_tilt(clipped_start), progress_min, progress_max)
-                start_travel = approach(start)
+                start_travel = approach_cache.at(start)
             if clipped_end != end_travel:
                 end = clamp(inverse_approach_tilt(clipped_end), progress_min, progress_max)
-                end_travel = approach(end)
+                end_travel = approach_cache.at(end)
     return start, end, start_travel, end_travel
 
 
@@ -2183,11 +2184,19 @@ def draw_connector_default(
         transforms_equal or head_visual_progress != tail_visual_progress
     ):
         return
-    start_travel = approach(start_visual_progress)
-    end_travel = approach(end_visual_progress)
+    approach_cache = +ApproachCache
+    approach_cache.prepare()
+    start_travel = approach_cache.at(start_visual_progress)
+    end_travel = approach_cache.at(end_visual_progress)
     if not elevation_dynamic:
         start_visual_progress, end_visual_progress, start_travel, end_travel = clip_connector_progress_to_screen(
-            start_visual_progress, end_visual_progress, start_travel, end_travel, head_transform, transforms_equal
+            start_visual_progress,
+            end_visual_progress,
+            start_travel,
+            end_travel,
+            head_transform,
+            transforms_equal,
+            approach_cache,
         )
         if transforms_equal and start_visual_progress == end_visual_progress:
             return
@@ -2406,8 +2415,6 @@ def draw_connector_default(
                 )
         return
 
-    approach_cache = +ApproachCache
-    approach_cache.prepare()
     path_length = inf
     alpha_range = abs(end_alpha - start_alpha) * alpha_option
     if min(start_alpha, end_alpha) * alpha_option >= 1:
@@ -2506,7 +2513,9 @@ def draw_connector_default(
                     ease_type, head_eased, tail_eased, next_ease_frac, next_frac
                 )
             next_visual_progress = lerp(start_visual_progress, end_visual_progress, segment_frac)
-            next_travel = approach_cache.at(next_visual_progress)
+            next_travel = (
+                end_travel if next_visual_progress == end_visual_progress else approach_cache.at(next_visual_progress)
+            )
             next_lane = lerp(head_lane, tail_lane, next_interp_frac)
             next_size = lerp(head_size, tail_size, next_interp_frac)
             next_alpha = lerp(head_alpha, tail_alpha, next_frac)
