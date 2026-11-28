@@ -78,6 +78,7 @@ CONNECTOR_TEXTURE_ALPHA = 0.8
 CONNECTOR_THROUGH_JUDGE_LINE_DESPAWN_DELAY = 5.0
 CONNECTOR_LENIENCY = 1
 CONNECTOR_ZERO_SIZE_FALLBACK = 1e-3
+CONNECTOR_BOUND_ROUNDING_MARGIN = 2**-16
 CONNECTOR_ALPHA_ERROR = 1 / 192
 CONNECTOR_ALPHA_SEGMENT_LENGTH = 2 * (32 / 1080)
 CONNECTOR_MIN_SEGMENT_LENGTH = 2 * (4 / 1080)
@@ -1573,6 +1574,37 @@ def connector_is_off_screen(
     return max(start_y, end_y) < screen().b or min(start_y, end_y) > screen().t
 
 
+def linear_guide_is_horizontally_off_screen(
+    head_lane: float,
+    head_size: float,
+    tail_lane: float,
+    tail_size: float,
+    start_travel: float,
+    end_travel: float,
+    transform: StageTransform | None,
+    has_transform: bool,
+) -> bool:
+    if DynamicLayout.rotate != 0 or DynamicLayout.w_scale <= 0:
+        return False
+    stage_x = 0.0
+    if has_transform and transform is not None:
+        if transform.sr != 0 or transform.projection != IDENTITY_STAGE_SCREEN_TRANSFORM:
+            return False
+        stage_x = transform.tx
+    start_width = tilt_width_factor(start_travel)
+    end_width = tilt_width_factor(end_travel)
+    if min(start_width, end_width) <= 0:
+        return False
+    left = min(head_lane - head_size, tail_lane - tail_size) - CONNECTOR_ZERO_SIZE_FALLBACK
+    right = max(head_lane + head_size, tail_lane + tail_size) + CONNECTOR_ZERO_SIZE_FALLBACK
+    left_x = min(left * start_width, left * end_width) * DynamicLayout.w_scale + DynamicLayout.x_translate + stage_x
+    right_x = max(right * start_width, right * end_width) * DynamicLayout.w_scale + DynamicLayout.x_translate + stage_x
+    magnitude = max(abs(left), abs(right)) * max(1.0, start_width, end_width) * DynamicLayout.w_scale
+    margin = max(1.0, magnitude + abs(DynamicLayout.x_translate) + abs(stage_x)) * CONNECTOR_BOUND_ROUNDING_MARGIN
+    viewport = screen()
+    return right_x + margin < viewport.l or left_x - margin > viewport.r
+
+
 def clip_connector_progress_to_screen(
     start: float,
     end: float,
@@ -2216,6 +2248,28 @@ def draw_connector_default(
             and (transforms_equal or stage_transform_is_identity(tail_transform))
         )
     )
+    if (
+        shared_transform
+        and ease_type == EaseType.LINEAR
+        and is_guide_connector(kind)
+        and not ease_over_elevation
+        and not mask_enabled
+        and min(head_size, tail_size) > 0
+        and 0 <= head_ease_frac <= 1
+        and 0 <= tail_ease_frac <= 1
+        and constant_interp_frac <= 1
+        and linear_guide_is_horizontally_off_screen(
+            head_lane,
+            head_size,
+            tail_lane,
+            tail_size,
+            start_travel,
+            end_travel,
+            head_transform,
+            has_transform,
+        )
+    ):
+        return
     constant_transform = has_transform and transforms_equal
     heterogeneous_endpoints = (has_transform and not constant_transform) or (mask_enabled and not same_mask_stage)
     geometry_detail = 20.0
